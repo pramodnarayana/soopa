@@ -330,49 +330,82 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
 
     try:
         async with provider.session() as session:
-            # 1. IP Domain: connection_stream_state
+            # 1. IP Domain: connection_entities (unified subscription + sync watermark table)
             if target in ("all", "ip"):
-                table_check = await session.execute(
-                    text("SELECT to_regclass('ip.connection_stream_state')")
+                await session.execute(
+                    text("""
+                    CREATE TABLE IF NOT EXISTS ip.connection_entities (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        connection_id VARCHAR(64) NOT NULL REFERENCES ip.connections(id) ON DELETE CASCADE,
+                        stream_name VARCHAR(128) NOT NULL,
+                        sync_mode VARCHAR(32) NOT NULL DEFAULT 'INCREMENTAL',
+                        schedule VARCHAR(32) NOT NULL DEFAULT 'manual',
+                        sync_from VARCHAR(32) NOT NULL DEFAULT 'all',
+                        sync_from_at TIMESTAMPTZ,
+                        is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                        primary_key JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        fields_schema JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        cursor_field VARCHAR(128),
+                        cursor_value TEXT,
+                        records_synced_count BIGINT NOT NULL DEFAULT 0,
+                        last_synced_at TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_ip_connection_entities_tenant_conn_stream
+                            UNIQUE (tenant_id, connection_id, stream_name)
+                    );
+                    """)
                 )
-                plural_check = await session.execute(
-                    text("SELECT to_regclass('ip.connection_stream_states')")
+                await session.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_ip_connection_entities_conn ON ip.connection_entities (tenant_id, connection_id);"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_ip_connection_entities_due_schedule ON ip.connection_entities (schedule) WHERE is_enabled = true AND schedule != 'manual';"
+                    )
                 )
 
-                if table_check.scalar() is None:
-                    if plural_check.scalar() is not None:
-                        logger.info(
-                            "renaming_table",
-                            old_name="ip.connection_stream_states",
-                            new_name="ip.connection_stream_state",
-                        )
-                        await session.execute(
-                            text(
-                                "ALTER TABLE ip.connection_stream_states RENAME TO connection_stream_state"
+                # Migrate any legacy stream_state rows before dropping obsolete tables
+                await session.execute(
+                    text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.tables
+                            WHERE table_schema = 'ip' AND table_name = 'connection_stream_state'
+                        ) THEN
+                            INSERT INTO ip.connection_entities (
+                                id, tenant_id, connection_id, stream_name,
+                                cursor_field, cursor_value, records_synced_count,
+                                last_synced_at, created_at, updated_at
                             )
-                        )
-                    else:
-                        logger.info("creating_table", table_name="ip.connection_stream_state")
-                        await session.execute(
-                            text("""
-                            CREATE TABLE IF NOT EXISTS ip.connection_stream_state (
-                                id VARCHAR(64) NOT NULL PRIMARY KEY,
-                                tenant_id VARCHAR(64) NOT NULL,
-                                connection_id VARCHAR(64) NOT NULL REFERENCES ip.connections(id) ON DELETE CASCADE,
-                                stream_name VARCHAR(128) NOT NULL,
-                                cursor_field VARCHAR(128),
-                                cursor_value TEXT,
-                                records_synced_count BIGINT NOT NULL DEFAULT 0,
-                                last_synced_at TIMESTAMPTZ NOT NULL,
-                                CONSTRAINT uq_ip_stream_state_tenant_conn_stream UNIQUE (tenant_id, connection_id, stream_name)
-                            );
-                            """)
-                        )
-                        await session.execute(
-                            text(
-                                "CREATE INDEX IF NOT EXISTS idx_ip_stream_state_conn ON ip.connection_stream_state (tenant_id, connection_id);"
-                            )
-                        )
+                            SELECT
+                                s.id, s.tenant_id, s.connection_id, s.stream_name,
+                                s.cursor_field, s.cursor_value, s.records_synced_count,
+                                s.last_synced_at, COALESCE(s.last_synced_at, NOW()), COALESCE(s.last_synced_at, NOW())
+                            FROM ip.connection_stream_state s
+                            INNER JOIN ip.connections c ON c.id = s.connection_id
+                            ON CONFLICT (tenant_id, connection_id, stream_name) DO NOTHING;
+                            DROP TABLE ip.connection_stream_state CASCADE;
+                        END IF;
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.tables
+                            WHERE table_schema = 'ip' AND table_name = 'connection_stream_states'
+                        ) THEN
+                            DROP TABLE ip.connection_stream_states CASCADE;
+                        END IF;
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.tables
+                            WHERE table_schema = 'ip' AND table_name = 'connection_catalogs'
+                        ) THEN
+                            DROP TABLE ip.connection_catalogs CASCADE;
+                        END IF;
+                    END $$;
+                    """)
+                )
 
                 # Reconcile NO_AUTH connections to ACTIVE status and enforce DB CheckConstraint
                 conn_res = await session.execute(
@@ -413,73 +446,6 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                     )
                 )
 
-                await session.execute(
-                    text("""
-                    DO $$
-                    BEGIN
-                        IF EXISTS (
-                            SELECT 1 FROM information_schema.tables
-                            WHERE table_schema = 'ip' AND table_name = 'connection_catalogs'
-                        ) AND NOT EXISTS (
-                            SELECT 1 FROM information_schema.columns
-                            WHERE table_schema = 'ip'
-                              AND table_name = 'connection_catalogs'
-                              AND column_name = 'tenant_id'
-                        ) THEN
-                            ALTER TABLE ip.connection_catalogs ADD COLUMN tenant_id VARCHAR(64);
-                            UPDATE ip.connection_catalogs c
-                            SET tenant_id = conn.tenant_id
-                            FROM ip.connections conn
-                            WHERE c.connection_id = conn.id;
-                            DELETE FROM ip.connection_catalogs WHERE tenant_id IS NULL;
-                            ALTER TABLE ip.connection_catalogs ALTER COLUMN tenant_id SET NOT NULL;
-                            ALTER TABLE ip.connection_catalogs
-                                DROP CONSTRAINT IF EXISTS uq_ip_catalog_connection_version;
-                            ALTER TABLE ip.connection_catalogs
-                                ADD CONSTRAINT uq_ip_catalog_connection_version
-                                UNIQUE (tenant_id, connection_id, catalog_version);
-                        END IF;
-                    END $$;
-                    """)
-                )
-                await session.execute(
-                    text("""
-                    DELETE FROM ip.connection_catalogs c
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM ip.connections conn WHERE conn.id = c.connection_id
-                    );
-                    """)
-                )
-                await session.execute(
-                    text("""
-                    DO $$
-                    BEGIN
-                        IF NOT EXISTS (
-                            SELECT 1
-                            FROM pg_constraint c
-                            JOIN pg_class rel ON rel.oid = c.conrelid
-                            JOIN pg_namespace n ON n.oid = rel.relnamespace
-                            WHERE n.nspname = 'ip'
-                              AND rel.relname = 'connection_catalogs'
-                              AND c.contype = 'f'
-                        ) THEN
-                            ALTER TABLE ip.connection_catalogs
-                                ADD CONSTRAINT fk_ip_connection_catalogs_connection_id
-                                FOREIGN KEY (connection_id)
-                                REFERENCES ip.connections(id)
-                                ON DELETE CASCADE;
-                        END IF;
-                    END $$;
-                    """)
-                )
-                await session.execute(
-                    text("DROP INDEX IF EXISTS ip.ix_ip_connection_catalogs_connection_id;")
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_ip_connection_catalogs_tenant_conn ON ip.connection_catalogs (tenant_id, connection_id);"
-                    )
-                )
                 await session.execute(text("DROP TABLE IF EXISTS ip.simulator_sandboxes CASCADE;"))
                 await session.execute(
                     text("""

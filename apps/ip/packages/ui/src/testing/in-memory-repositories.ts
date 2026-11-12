@@ -7,13 +7,18 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
-  SimulatePushInput,
-  SimulatePushResult,
   UpdateConnectionInput,
 } from '../domain/connection';
+import type {
+  AddConnectionEntityInput,
+  ConnectionEntity,
+  UpdateConnectionEntityInput,
+} from '../domain/connection-entity';
 import {
   ConnectionHandshakeStatus,
   ConnectionStatus,
+  EntitySyncFrom,
+  EntitySyncSchedule,
   type JsonRecord,
   PipelineLayer,
   ReplayDispatchStatus,
@@ -22,6 +27,7 @@ import {
   SyncRunKind,
   SyncRunStatus,
   TraceStatus,
+  TransformationMode,
   UNIVERSAL_SIMULATOR_APP_ID,
 } from '../domain/enums';
 import type {
@@ -34,6 +40,8 @@ import type {
 import {
   type CreateSimulatorEntityInput,
   SIMULATOR_STREAM_LIMITS,
+  type SimulatePushInput,
+  type SimulatePushResult,
   type SimulatorEntity,
   SimulatorVelocityMode,
   type UpdateSimulatorEntityInput,
@@ -47,7 +55,7 @@ import type {
   TriggerStitchEventInput,
   TriggerStitchEventResult,
 } from '../domain/stitch';
-import type { StreamState, SyncRun, TriggerSyncRunInput } from '../domain/sync-run';
+import type { SyncRun, TriggerSyncRunInput } from '../domain/sync-run';
 import type {
   BulkReplayResult,
   GlobalEntityMapEntry,
@@ -68,6 +76,7 @@ import type {
   TransformationPreviewResult,
 } from '../domain/transformation';
 import type { CatalogRepositoryPort } from '../ports/catalog-repository.port';
+import type { ConnectionEntityRepositoryPort } from '../ports/connection-entity-repository.port';
 import type { ConnectionRepositoryPort } from '../ports/connection-repository.port';
 import type {
   GetCompletenessParams,
@@ -91,6 +100,7 @@ import type { IpNavigationPort, IpRepositoriesBundle } from '../provider/IpRepos
 import {
   SEED_CATALOG_APPS,
   SEED_CONNECTION,
+  SEED_CONNECTION_ENTITY,
   SEED_DAILY_TOU_ROLLUPS,
   SEED_DISCOVERED_CATALOG,
   SEED_INTERVAL_COMPLETENESS,
@@ -102,7 +112,6 @@ import {
   SEED_STITCH,
   SEED_STITCH_DEFINITION,
   SEED_STITCH_RUN,
-  SEED_STREAM_STATE,
   SEED_SYNC_RUN,
   SEED_TRACE,
   SEED_TRACE_LINEAGE,
@@ -122,6 +131,14 @@ function conflictProblem(message: string): ApiProblem {
   return {
     code: ApiErrorCode.CONFLICT,
     status: 409,
+    message,
+  };
+}
+
+function validationProblem(message: string): ApiProblem {
+  return {
+    code: ApiErrorCode.VALIDATION_ERROR,
+    status: 400,
     message,
   };
 }
@@ -257,6 +274,34 @@ export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
     }
     this.entities.splice(idx, 1);
     return ok(undefined);
+  }
+
+  public async simulatePush(
+    tenantId: string,
+    connectionId: string,
+    input: SimulatePushInput,
+  ): Promise<Result<SimulatePushResult, ApiProblem>> {
+    const found = this.entities.find(
+      (e) =>
+        e.tenantId === tenantId &&
+        e.connectionId === connectionId &&
+        e.entityName === input.streamName,
+    );
+    if (!found) {
+      return err(notFoundProblem(`Simulator entity ${input.streamName} not found`));
+    }
+    const count = Math.max(1, input.count ?? 1);
+    return ok({
+      connectionId,
+      streamName: input.streamName,
+      recordsPushed: count,
+      recordIds: Array.from({ length: count }, (_, i) => `SIM-${String(i + 1).padStart(6, '0')}`),
+      traceIds: Array.from(
+        { length: count },
+        (_, i) => `trc_sim_${String(i + 1).padStart(3, '0')}`,
+      ),
+      status: 'ACCEPTED',
+    });
   }
 }
 
@@ -521,41 +566,208 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
     this.items.splice(idx, 1);
     return ok(undefined);
   }
+}
 
-  public async simulatePush(
+export class InMemoryConnectionEntityRepository implements ConnectionEntityRepositoryPort {
+  public readonly items: ConnectionEntity[];
+  private readonly connections?: InMemoryConnectionRepository;
+  private readonly transformations?: InMemoryTransformationRepository;
+  private nextEntityIndex = 1;
+
+  constructor(
+    initial: readonly ConnectionEntity[] = [SEED_CONNECTION_ENTITY],
+    connections?: InMemoryConnectionRepository,
+    transformations?: InMemoryTransformationRepository,
+  ) {
+    this.items = [...initial];
+    this.connections = connections;
+    this.transformations = transformations;
+  }
+
+  public async listEntities(
     tenantId: string,
     connectionId: string,
-    input: SimulatePushInput,
-  ): Promise<Result<SimulatePushResult, ApiProblem>> {
-    const existing = this.items.find((c) => c.tenantId === tenantId && c.id === connectionId);
-    if (!existing) {
-      return err(notFoundProblem(`Connection ${connectionId} not found`));
+  ): Promise<Result<readonly ConnectionEntity[], ApiProblem>> {
+    if (this.connections) {
+      const connRes = await this.connections.getConnection(tenantId, connectionId);
+      if (!connRes.ok) {
+        return err(connRes.error);
+      }
     }
-    const count = Math.max(1, input.count ?? 1);
-    return ok({
-      connectionId,
-      streamName: input.streamName,
-      recordsPushed: count,
-      recordIds: Array.from({ length: count }, (_, i) => `SIM-${String(i + 1).padStart(6, '0')}`),
-      traceIds: Array.from(
-        { length: count },
-        (_, i) => `trc_sim_${String(i + 1).padStart(3, '0')}`,
+    return ok(
+      this.items.filter(
+        (entity) => entity.tenantId === tenantId && entity.connectionId === connectionId,
       ),
-      status: 'ACCEPTED',
-    });
+    );
+  }
+
+  public async addEntity(
+    tenantId: string,
+    connectionId: string,
+    input: AddConnectionEntityInput,
+  ): Promise<Result<ConnectionEntity, ApiProblem>> {
+    if (this.connections) {
+      const connRes = await this.connections.getConnection(tenantId, connectionId);
+      if (!connRes.ok) {
+        return err(connRes.error);
+      }
+    }
+    const cleanStream = input.streamName.trim();
+    if (!cleanStream) {
+      return err(validationProblem('stream_name cannot be empty.'));
+    }
+    const syncFrom = input.syncFrom ?? EntitySyncFrom.ALL;
+    const syncFromAt = syncFrom === EntitySyncFrom.CUSTOM ? (input.syncFromAt ?? null) : null;
+    if (syncFrom === EntitySyncFrom.CUSTOM && !syncFromAt) {
+      return err(validationProblem("sync_from_at is required when sync_from is 'custom'."));
+    }
+
+    const existingIdx = this.items.findIndex(
+      (entity) =>
+        entity.tenantId === tenantId &&
+        entity.connectionId === connectionId &&
+        entity.streamName === cleanStream,
+    );
+    const existing = this.items[existingIdx];
+    let saved: ConnectionEntity;
+    if (existingIdx >= 0 && existing) {
+      saved = {
+        ...existing,
+        primaryKey:
+          input.primaryKey && input.primaryKey.length > 0 ? input.primaryKey : existing.primaryKey,
+        fields: input.fields && input.fields.length > 0 ? input.fields : existing.fields,
+        cursorField: input.cursorField !== undefined ? input.cursorField : existing.cursorField,
+        syncMode: input.syncMode ?? existing.syncMode,
+        updatedAt: '2026-11-12T10:00:00Z',
+      };
+      this.items[existingIdx] = saved;
+    } else {
+      const idx = this.nextEntityIndex++;
+      saved = {
+        entityId: `ip_cent_${String(idx).padStart(24, '0')}`,
+        tenantId,
+        connectionId,
+        streamName: cleanStream,
+        syncMode: input.syncMode ?? SyncRunKind.INCREMENTAL,
+        schedule: input.schedule ?? EntitySyncSchedule.MANUAL,
+        syncFrom,
+        syncFromAt,
+        isEnabled: input.isEnabled ?? true,
+        primaryKey: input.primaryKey ?? [],
+        fields: input.fields ?? [],
+        cursorField: input.cursorField ?? null,
+        cursorValue: null,
+        recordsSyncedCount: 0,
+        lastSyncedAt: null,
+        createdAt: '2026-11-12T10:00:00Z',
+        updatedAt: '2026-11-12T10:00:00Z',
+      };
+      this.items.push(saved);
+    }
+
+    if (input.defaultTransformationId && this.transformations) {
+      const existingBinding = await this.transformations.getStreamTransformation(
+        tenantId,
+        connectionId,
+        cleanStream,
+      );
+      if (!existingBinding.ok) {
+        await this.transformations.bindStreamTransformation(tenantId, connectionId, cleanStream, {
+          transformationId: input.defaultTransformationId,
+          transformationVersion: input.defaultTransformationVersion ?? 1,
+          mode: TransformationMode.ACTIVE,
+        });
+      }
+    }
+
+    return ok(saved);
+  }
+
+  public async updateEntity(
+    tenantId: string,
+    connectionId: string,
+    streamName: string,
+    input: UpdateConnectionEntityInput,
+  ): Promise<Result<ConnectionEntity, ApiProblem>> {
+    const idx = this.items.findIndex(
+      (entity) =>
+        entity.tenantId === tenantId &&
+        entity.connectionId === connectionId &&
+        entity.streamName === streamName,
+    );
+    const existing = this.items[idx];
+    if (idx < 0 || !existing) {
+      return err(notFoundProblem(`ConnectionEntity ${streamName} not found`));
+    }
+    const nextSyncFrom = input.syncFrom ?? existing.syncFrom;
+    const nextSyncFromAt =
+      nextSyncFrom === EntitySyncFrom.CUSTOM ? (input.syncFromAt ?? existing.syncFromAt) : null;
+    if (nextSyncFrom === EntitySyncFrom.CUSTOM && !nextSyncFromAt) {
+      return err(validationProblem("sync_from_at is required when sync_from is 'custom'."));
+    }
+    const updated: ConnectionEntity = {
+      ...existing,
+      syncMode: input.syncMode ?? existing.syncMode,
+      schedule: input.schedule ?? existing.schedule,
+      syncFrom: nextSyncFrom,
+      syncFromAt: nextSyncFromAt,
+      isEnabled: input.isEnabled ?? existing.isEnabled,
+      updatedAt: '2026-11-12T10:05:00Z',
+    };
+    this.items[idx] = updated;
+    return ok(updated);
+  }
+
+  public async removeEntity(
+    tenantId: string,
+    connectionId: string,
+    streamName: string,
+  ): Promise<Result<void, ApiProblem>> {
+    const idx = this.items.findIndex(
+      (entity) =>
+        entity.tenantId === tenantId &&
+        entity.connectionId === connectionId &&
+        entity.streamName === streamName,
+    );
+    if (idx < 0) {
+      return err(notFoundProblem(`ConnectionEntity ${streamName} not found`));
+    }
+    this.items.splice(idx, 1);
+    return ok(undefined);
+  }
+
+  public async resetCheckpoint(
+    tenantId: string,
+    connectionId: string,
+    streamName: string,
+  ): Promise<Result<ConnectionEntity, ApiProblem>> {
+    const idx = this.items.findIndex(
+      (entity) =>
+        entity.tenantId === tenantId &&
+        entity.connectionId === connectionId &&
+        entity.streamName === streamName,
+    );
+    const existing = this.items[idx];
+    if (idx < 0 || !existing) {
+      return err(notFoundProblem(`ConnectionEntity ${streamName} not found`));
+    }
+    const reset: ConnectionEntity = {
+      ...existing,
+      cursorValue: null,
+      recordsSyncedCount: 0,
+      lastSyncedAt: null,
+      updatedAt: '2026-11-12T10:10:00Z',
+    };
+    this.items[idx] = reset;
+    return ok(reset);
   }
 }
 
 export class InMemorySyncRunRepository implements SyncRunRepositoryPort {
   public readonly runs: SyncRun[];
-  public readonly states: StreamState[];
 
-  constructor(
-    runs: readonly SyncRun[] = [SEED_SYNC_RUN],
-    states: readonly StreamState[] = [SEED_STREAM_STATE],
-  ) {
+  constructor(runs: readonly SyncRun[] = [SEED_SYNC_RUN]) {
     this.runs = [...runs];
-    this.states = [...states];
   }
 
   public async listSyncRuns(
@@ -609,37 +821,6 @@ export class InMemorySyncRunRepository implements SyncRunRepositoryPort {
     };
     this.runs.unshift(created);
     return ok(created);
-  }
-
-  public async listStreamStates(
-    tenantId: string,
-    connectionId: string,
-  ): Promise<Result<readonly StreamState[], ApiProblem>> {
-    return ok(
-      this.states.filter((s) => s.tenantId === tenantId && s.connectionId === connectionId),
-    );
-  }
-
-  public async resetStreamCheckpoint(
-    tenantId: string,
-    connectionId: string,
-    streamName: string,
-  ): Promise<Result<StreamState, ApiProblem>> {
-    const idx = this.states.findIndex(
-      (s) =>
-        s.tenantId === tenantId && s.connectionId === connectionId && s.streamName === streamName,
-    );
-    const existing = this.states[idx];
-    if (idx < 0 || !existing) {
-      return err(notFoundProblem(`StreamState ${streamName} not found`));
-    }
-    const reset: StreamState = {
-      ...existing,
-      cursorValue: null,
-      recordsSyncedCount: 0,
-    };
-    this.states[idx] = reset;
-    return ok(reset);
   }
 }
 
@@ -1270,6 +1451,7 @@ export interface InMemoryIpWorkspaceHarness {
   readonly repositories: IpRepositoriesBundle;
   readonly catalog: InMemoryCatalogRepository;
   readonly connections: InMemoryConnectionRepository;
+  readonly entities: InMemoryConnectionEntityRepository;
   readonly syncRuns: InMemorySyncRunRepository;
   readonly transformations: InMemoryTransformationRepository;
   readonly stitches: InMemoryStitchRepository;
@@ -1288,8 +1470,13 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
     [SEED_DISCOVERED_CATALOG],
     simulator,
   );
-  const syncRuns = new InMemorySyncRunRepository();
   const transformations = new InMemoryTransformationRepository();
+  const entities = new InMemoryConnectionEntityRepository(
+    [SEED_CONNECTION_ENTITY],
+    connections,
+    transformations,
+  );
+  const syncRuns = new InMemorySyncRunRepository();
   const stitches = new InMemoryStitchRepository();
   const traces = new InMemoryTraceRepository();
   const records = new InMemoryRecordRepository();
@@ -1300,6 +1487,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
     repositories: {
       catalog,
       connections,
+      entities,
       syncRuns,
       transformations,
       stitches,
@@ -1310,6 +1498,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
     },
     catalog,
     connections,
+    entities,
     syncRuns,
     transformations,
     stitches,

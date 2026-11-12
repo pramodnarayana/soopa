@@ -23,7 +23,9 @@ from ip.engine.domain.exceptions import (
 )
 from ip.engine.domain.replication.enums import IngestionMode
 from ip.engine.domain.replication.inbound_record import InboundRecord
-from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
+from ip.engine.ports.outbound.connection_entity_repository_port import (
+    ConnectionEntityRepositoryPort,
+)
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
@@ -45,7 +47,6 @@ from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecor
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
 )
-from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStoragePort,
@@ -152,11 +153,7 @@ class FakeControlPlaneUnitOfWork(IpControlPlaneUnitOfWorkPort):
         self.committed = False
 
     @property
-    def catalogs(self) -> CatalogRepositoryPort:
-        raise NotImplementedError
-
-    @property
-    def stream_states(self) -> StreamStateRepositoryPort:
+    def entities(self) -> ConnectionEntityRepositoryPort:
         raise NotImplementedError
 
     @property

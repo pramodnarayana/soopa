@@ -58,6 +58,30 @@ export interface UpdateSimulatorEntityInput {
   readonly chaosPolicy?: JsonRecord | null;
 }
 
+export const SimulatedPushDeliveryStyle = {
+  FULL_PAYLOAD: 'FULL_PAYLOAD',
+  THIN_PING: 'THIN_PING',
+} as const;
+
+export type SimulatedPushDeliveryStyleValue =
+  (typeof SimulatedPushDeliveryStyle)[keyof typeof SimulatedPushDeliveryStyle];
+
+export interface SimulatePushInput {
+  readonly streamName: string;
+  readonly count?: number;
+  readonly deliveryStyle?: SimulatedPushDeliveryStyleValue;
+  readonly correlationId?: string | null;
+}
+
+export interface SimulatePushResult {
+  readonly connectionId: string;
+  readonly streamName: string;
+  readonly recordsPushed: number;
+  readonly recordIds: readonly string[];
+  readonly traceIds: readonly string[];
+  readonly status: string;
+}
+
 export function clampSimulatorRecordsPerPull(rawInput: string | number): number {
   const parsed =
     typeof rawInput === 'number' ? Math.trunc(rawInput) : Number.parseInt(rawInput, 10);

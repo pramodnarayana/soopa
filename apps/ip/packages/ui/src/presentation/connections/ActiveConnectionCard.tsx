@@ -1,16 +1,20 @@
 import { Button, StatusBadge, StatusTone } from '@soopa/ui';
-import { ArrowUpRight, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Check, Copy, Trash2 } from 'lucide-react';
 import type React from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import type { CatalogAppSummary } from '../../domain/catalog';
-import type { Connection } from '../../domain/connection';
+import { buildIngressWebhookUrl, type Connection } from '../../domain/connection';
 import { mapConnectionStatusTone } from '../shared/status-mapping';
+
+const COPY_FEEDBACK_RESET_MS = 2000;
 
 export interface ActiveConnectionCardProps {
   readonly connection: Connection;
   readonly catalogApp?: CatalogAppSummary;
   readonly appIcon: React.ReactNode;
   readonly baseUrl?: string;
-  readonly tenantId: string;
+  readonly tenantSlug: string;
   readonly onOpenDetail: (connectionId: string) => void;
   readonly onRequestDelete: (connection: Connection) => void;
 }
@@ -32,9 +36,45 @@ export function ActiveConnectionCard({
   connection,
   catalogApp,
   appIcon,
+  baseUrl,
+  tenantSlug,
   onOpenDetail,
   onRequestDelete,
 }: ActiveConnectionCardProps): React.JSX.Element {
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimerRef.current !== null) {
+        clearTimeout(copyResetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyWebhook = async (): Promise<void> => {
+    try {
+      const webhookUrl = buildIngressWebhookUrl(
+        baseUrl,
+        tenantSlug,
+        connection.appId,
+        connection.id,
+      );
+      await navigator.clipboard.writeText(webhookUrl);
+      setCopiedWebhook(true);
+      toast.success('Webhook URL copied to clipboard.');
+      if (copyResetTimerRef.current !== null) {
+        clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = setTimeout(() => {
+        copyResetTimerRef.current = null;
+        setCopiedWebhook(false);
+      }, COPY_FEEDBACK_RESET_MS);
+    } catch {
+      toast.error('Unable to copy webhook URL to clipboard.');
+    }
+  };
+
   return (
     <article
       onKeyDown={(e) => {
@@ -72,6 +112,26 @@ export function ActiveConnectionCard({
         <StatusBadge label={connection.authType} tone={StatusTone.NEUTRAL} />
 
         <div className="relative z-10 flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!tenantSlug.trim()}
+            onClick={() => void handleCopyWebhook()}
+            className="h-8 gap-1.5 text-xs font-medium"
+          >
+            {copiedWebhook ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5" />
+                <span>Copy Webhook</span>
+              </>
+            )}
+          </Button>
           <Button
             type="button"
             variant="outline"

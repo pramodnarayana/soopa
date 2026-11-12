@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.control_plane import (
+    ConnectionEntityRecord,
     ConnectionRecord,
-    ConnectionStreamStateRecord,
     SyncRunRecord,
 )
 from ip.engine.domain.connection.connection import Connection
@@ -183,8 +183,8 @@ class SqlAlchemyConnectionRepository(GlobalSqlAlchemyRepository, ConnectionRepos
         """Drains aggregate domain events into Outbox and permanently deletes the connection record and its child references."""
         self._drain_events(connection, default_tenant_id=connection.tenant_id)
         await self._session.execute(
-            delete(ConnectionStreamStateRecord).where(
-                ConnectionStreamStateRecord.connection_id == connection.id
+            delete(ConnectionEntityRecord).where(
+                ConnectionEntityRecord.connection_id == connection.id
             )
         )
         await self._session.execute(
@@ -196,8 +196,8 @@ class SqlAlchemyConnectionRepository(GlobalSqlAlchemyRepository, ConnectionRepos
 
     async def delete_by_id(self, connection_id: str) -> None:
         await self._session.execute(
-            delete(ConnectionStreamStateRecord).where(
-                ConnectionStreamStateRecord.connection_id == connection_id
+            delete(ConnectionEntityRecord).where(
+                ConnectionEntityRecord.connection_id == connection_id
             )
         )
         await self._session.execute(

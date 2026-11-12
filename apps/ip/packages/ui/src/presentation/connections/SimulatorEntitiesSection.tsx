@@ -1,10 +1,11 @@
 import { type ApiProblem, Button, DataTable, StatusBadge, StatusTone } from '@soopa/ui';
 import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Radio, Trash2 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   useDeleteSimulatorEntityMutation,
+  useSimulatePushMutation,
   useSimulatorEntitiesQuery,
 } from '../../application/use-simulator-queries';
 import type { SimulatorEntity } from '../../domain/simulator';
@@ -23,12 +24,31 @@ export function SimulatorEntitiesSection({
   const [editingEntity, setEditingEntity] = useState<SimulatorEntity | null>(null);
   const entitiesView = useSimulatorEntitiesQuery(connectionId);
   const deleteEntityMutation = useDeleteSimulatorEntityMutation(connectionId);
+  const simulatePushMutation = useSimulatePushMutation(connectionId);
 
   useEffect(() => {
     if (entitiesView.problem) {
       onProblem(entitiesView.problem);
     }
   }, [entitiesView.problem, onProblem]);
+
+  const handleSimulatePush = useCallback(
+    async (entity: SimulatorEntity): Promise<void> => {
+      onProblem(null);
+      const res = await simulatePushMutation.mutateAsync({
+        streamName: entity.entityName,
+        count: 1,
+      });
+      if (!res.ok) {
+        onProblem(res.error);
+        return;
+      }
+      toast.success(
+        `Simulated push for "${entity.entityName}" (${res.value.recordsPushed} record ingested into L1).`,
+      );
+    },
+    [simulatePushMutation, onProblem],
+  );
 
   const handleDeleteEntity = useCallback(
     async (entity: SimulatorEntity): Promise<void> => {
@@ -105,6 +125,20 @@ export function SimulatorEntitiesSection({
               type="button"
               variant="outline"
               size="sm"
+              disabled={
+                simulatePushMutation.isPending &&
+                simulatePushMutation.variables?.streamName === row.original.entityName
+              }
+              onClick={() => void handleSimulatePush(row.original)}
+              className="h-7 gap-1 px-2 text-xs"
+            >
+              <Radio className="h-3 w-3 text-primary" />
+              <span>Simulate Push</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={() => {
                 setEditingEntity(row.original);
                 setModalOpen(true);
@@ -131,7 +165,14 @@ export function SimulatorEntitiesSection({
         ),
       },
     ],
-    [deleteEntityMutation.isPending, deleteEntityMutation.variables, handleDeleteEntity],
+    [
+      simulatePushMutation.isPending,
+      simulatePushMutation.variables?.streamName,
+      handleSimulatePush,
+      deleteEntityMutation.isPending,
+      deleteEntityMutation.variables,
+      handleDeleteEntity,
+    ],
   );
 
   const table = useReactTable({

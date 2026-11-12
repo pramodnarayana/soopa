@@ -24,18 +24,4 @@ export const SyncRunWireSchema = z.object({
 
 export const SyncRunListWireSchema = z.array(SyncRunWireSchema);
 
-export const StreamStateWireSchema = z.object({
-  state_id: z.string(),
-  tenant_id: z.string(),
-  connection_id: z.string(),
-  stream_name: z.string(),
-  cursor_field: z.string().nullable().optional().default(null),
-  cursor_value: z.string().nullable().optional().default(null),
-  records_synced_count: z.number(),
-  last_synced_at: z.string(),
-});
-
-export const StreamStateListWireSchema = z.array(StreamStateWireSchema);
-
 export type SyncRunWire = z.infer<typeof SyncRunWireSchema>;
-export type StreamStateWire = z.infer<typeof StreamStateWireSchema>;

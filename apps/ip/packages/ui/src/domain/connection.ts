@@ -44,6 +44,8 @@ export interface StreamSchema {
   readonly primaryKey: readonly string[];
   readonly cursorField: string | null;
   readonly supportedSyncModes: readonly string[];
+  readonly defaultTransformationId?: string | null;
+  readonly defaultTransformationVersion?: number;
 }
 
 export interface DiscoveredCatalog {
@@ -82,36 +84,27 @@ export interface UpdateConnectionInput {
   readonly updatedPublicConfig?: JsonRecord | null;
 }
 
-export interface SimulatePushInput {
-  readonly streamName: string;
-  readonly count?: number;
-  readonly deliveryStyle?: 'FULL_PAYLOAD' | 'THIN_PING';
-  readonly correlationId?: string | null;
-}
-
-export interface SimulatePushResult {
-  readonly connectionId: string;
-  readonly streamName: string;
-  readonly recordsPushed: number;
-  readonly recordIds: readonly string[];
-  readonly traceIds: readonly string[];
-  readonly status: string;
-}
-
 export function buildIngressWebhookUrl(
   baseUrl: string | undefined,
-  tenantId: string,
+  tenantSlug: string,
+  appId: string,
   connectionId: string,
-  streamName: string,
 ): string {
+  const trimmedTenantSlug = tenantSlug.trim();
+  const trimmedAppId = appId.trim();
+  const trimmedConnectionId = connectionId.trim();
+  if (!trimmedTenantSlug || !trimmedAppId || !trimmedConnectionId) {
+    throw new Error(
+      'buildIngressWebhookUrl requires non-empty tenantSlug, appId, and connectionId.',
+    );
+  }
   const rawBase = (baseUrl ?? '').trim().replace(/\/+$/, '');
   const origin =
     rawBase ||
     (typeof window !== 'undefined' && window.location?.origin
       ? window.location.origin
       : 'http://localhost:8000');
-  const path = `${origin}/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/ingress/${encodeURIComponent(connectionId)}`;
-  return `${path}?stream=${encodeURIComponent(streamName.trim())}`;
+  return `${origin}/api/v1/webhooks/${encodeURIComponent(trimmedTenantSlug)}/${encodeURIComponent(trimmedAppId)}/${encodeURIComponent(trimmedConnectionId)}`;
 }
 
 export function isDeactivatedConnection(connection: Pick<Connection, 'status'>): boolean {

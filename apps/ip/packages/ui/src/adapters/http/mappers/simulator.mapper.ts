@@ -1,11 +1,14 @@
 import {
   type CreateSimulatorEntityInput,
   SIMULATOR_STREAM_LIMITS,
+  SimulatedPushDeliveryStyle,
+  type SimulatePushInput,
+  type SimulatePushResult,
   type SimulatorEntity,
   SimulatorVelocityMode,
   type UpdateSimulatorEntityInput,
 } from '../../../domain/simulator';
-import type { SimulatorEntityWire } from '../schemas/simulator.schema';
+import type { SimulatePushWire, SimulatorEntityWire } from '../schemas/simulator.schema';
 
 export function mapSimulatorEntityFromWire(wire: SimulatorEntityWire): SimulatorEntity {
   return {
@@ -72,4 +75,24 @@ export function mapUpdateSimulatorEntityToWire(
     payload.chaos_policy = input.chaosPolicy;
   }
   return payload;
+}
+
+export function mapSimulatePushToWire(input: SimulatePushInput): Record<string, unknown> {
+  return {
+    stream_name: input.streamName,
+    count: input.count ?? 1,
+    delivery_style: input.deliveryStyle ?? SimulatedPushDeliveryStyle.FULL_PAYLOAD,
+    correlation_id: input.correlationId ?? null,
+  };
+}
+
+export function mapSimulatePushFromWire(wire: SimulatePushWire): SimulatePushResult {
+  return {
+    connectionId: wire.connection_id,
+    streamName: wire.stream_name,
+    recordsPushed: wire.records_pushed,
+    recordIds: wire.record_ids,
+    traceIds: wire.trace_ids,
+    status: wire.status,
+  };
 }

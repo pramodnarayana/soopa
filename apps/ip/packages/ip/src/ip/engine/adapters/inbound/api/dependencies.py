@@ -149,6 +149,59 @@ async def require_tenant_member(
     )
 
 
+async def resolve_tenant_id_by_slug(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_ip_global_session)],
+    tenant_slug: Annotated[str, Path(...)],
+) -> str:
+    """Resolves `{tenant_slug}` to canonical `tenant_id` for slug-addressed ingress routes."""
+    provider = _get_api_provider(request)
+    resolved_id = await provider.resolve_tenant_id_by_slug(session, tenant_slug)
+    if session.in_transaction():
+        await session.commit()
+
+    try:
+        identity: IdentityContext | None = request.state.identity
+    except AttributeError:
+        identity = None
+
+    if (
+        identity is not None
+        and not identity.is_platform_admin
+        and (
+            resolved_id is None
+            or (
+                resolved_id not in identity.authorized_tenants and identity.tenant_id != resolved_id
+            )
+        )
+    ):
+        logger.error(
+            "ip_tenant_slug_authorization_failed",
+            requested_tenant_slug=tenant_slug,
+            context_tenant_id=identity.tenant_id,
+            authorized_tenants=sorted(identity.authorized_tenants),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"User does not belong to tenant '{tenant_slug}'.",
+        )
+
+    if resolved_id is None:
+        logger.error("ip_tenant_slug_not_found", requested_tenant_slug=tenant_slug)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tenant '{tenant_slug}' was not found.",
+        )
+
+    canonical_tenant_id = (
+        str(identity.tenant_mapping.get(resolved_id, resolved_id))
+        if identity is not None
+        else resolved_id
+    )
+    request.state.ucp_tenant_id = canonical_tenant_id
+    return canonical_tenant_id
+
+
 def require_ip_permission(
     permission: IpPermission,
 ) -> Callable[[IdentityContext, str], Awaitable[IdentityContext]]:
@@ -377,4 +430,5 @@ __all__ = [
     "require_ip_permission",
     "require_raw_records_read",
     "require_tenant_member",
+    "resolve_tenant_id_by_slug",
 ]

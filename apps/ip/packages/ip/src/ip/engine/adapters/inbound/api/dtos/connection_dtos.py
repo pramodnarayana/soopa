@@ -99,6 +99,8 @@ class StreamSchemaHttpResponse(BaseModel):
     primary_key: list[str]
     cursor_field: str | None = None
     supported_sync_modes: list[str]
+    default_transformation_id: str | None = None
+    default_transformation_version: int = 1
 
 
 class DiscoveredCatalogHttpResponse(BaseModel):

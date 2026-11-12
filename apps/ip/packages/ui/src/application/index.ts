@@ -2,6 +2,7 @@ export * from './mutation-telemetry';
 export * from './query-keys';
 export * from './result-query-state';
 export * from './use-catalog-queries';
+export * from './use-connection-entity-queries';
 export * from './use-connection-queries';
 export * from './use-interval-queries';
 export * from './use-record-queries';

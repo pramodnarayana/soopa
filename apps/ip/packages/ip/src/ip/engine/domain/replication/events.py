@@ -141,10 +141,10 @@ class ReplicaRecordChangedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
-class StreamStateCheckpointedEvent(DomainEvent):
-    """Domain event emitted when an incremental sync stream advances its cursor checkpoint."""
+class ConnectionEntityCheckpointedEvent(DomainEvent):
+    """Domain event emitted when a subscribed connection entity advances its sync checkpoint."""
 
-    state_id: str
+    entity_id: str
     tenant_id: str
     connection_id: str
     stream_name: str
@@ -153,7 +153,7 @@ class StreamStateCheckpointedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return IpEventType.STREAM_STATE_CHECKPOINTED
+        return IpEventType.CONNECTION_ENTITY_CHECKPOINTED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id

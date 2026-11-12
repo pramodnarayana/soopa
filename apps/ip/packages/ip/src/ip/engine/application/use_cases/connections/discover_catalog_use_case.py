@@ -1,8 +1,9 @@
-"""Use case to introspect an external system and discover its schema catalog."""
+"""Use case to statelessly introspect an external system and discover its live schema catalog."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import UTC, datetime
 
 import structlog
 from security.ports.cipher_port import CipherPort
@@ -12,16 +13,17 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
     ResolvedConnectionCredentialsDTO,
     TokenManagerService,
 )
-from ip.engine.domain.connection.catalog import ConnectionCatalog
-from ip.engine.domain.connection.stream_schema import StreamField, StreamSchema
+from ip.engine.domain.connection.stream_schema import (
+    StreamField,
+    StreamSchema,
+    compute_discovered_streams_hash,
+)
 from ip.engine.domain.exceptions import (
     ConnectionNotFoundError,
     ConnectorNotFoundError,
     InvalidConnectionConfigError,
     Result,
 )
-from ip.engine.domain.normalization.enums import TransformationMode
-from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.domain.replication.enums import SyncMode
 from ip.engine.ports.outbound.connector_port import (
     ConnectorMetadataPort,
@@ -35,7 +37,7 @@ logger = structlog.get_logger(__name__)
 
 
 class DiscoverCatalogUseCase:
-    """Introspects source systems, discovers streams/fields, and stores catalog versions inside a Control Plane UoW."""
+    """Statelessly introspects source systems on demand and returns live discovered streams and fields."""
 
     def __init__(
         self,
@@ -98,6 +100,23 @@ class DiscoverCatalogUseCase:
         connection_id: str,
         tenant_id: str,
     ) -> DiscoveredCatalogDTO:
+        if not connection_id.strip():
+            return DiscoveredCatalogDTO.from_error(
+                connection_id,
+                InvalidConnectionConfigError(
+                    field_name="connection_id",
+                    message="connection_id cannot be empty.",
+                ),
+            )
+        if not tenant_id.strip():
+            return DiscoveredCatalogDTO.from_error(
+                connection_id,
+                InvalidConnectionConfigError(
+                    field_name="tenant_id",
+                    message="tenant_id cannot be empty.",
+                ),
+            )
+
         creds_res = await self._resolve_credentials(connection_id, tenant_id)
         if creds_res.is_err or creds_res.value is None:
             return creds_res.error or DiscoveredCatalogDTO.from_error(
@@ -105,151 +124,100 @@ class DiscoverCatalogUseCase:
             )
         resolved = creds_res.value
 
-        async with self._uow:
-            connector = self._connectors.get(resolved.app_id)
-            if not connector:
-                conn_err = ConnectorNotFoundError(
-                    app_id=resolved.app_id,
-                    message=f"Connector '{resolved.app_id}' is not registered.",
-                    details={"app_id": resolved.app_id},
-                )
-                logger.error(
-                    "catalog_discovery_connector_not_found",
-                    connection_id=connection_id,
-                    app_id=resolved.app_id,
-                    error_code=conn_err.code.value,
-                )
-                await self._uow.rollback()
-                return DiscoveredCatalogDTO.from_error(connection_id, conn_err)
-
-            catalog_dto = await connector.discover(
-                connection_id=resolved.connection_id,
-                public_config=resolved.public_config,
-                credentials=resolved.credentials,
-                tenant_id=resolved.tenant_id,
+        connector = self._connectors.get(resolved.app_id)
+        if not connector:
+            conn_err = ConnectorNotFoundError(
+                app_id=resolved.app_id,
+                message=f"Connector '{resolved.app_id}' is not registered.",
+                details={"app_id": resolved.app_id},
             )
-            if not catalog_dto.success:
-                await self._uow.rollback()
-                return catalog_dto
-
-            domain_streams: list[StreamSchema] = []
-            for s in catalog_dto.streams:
-                parsed_sync_modes = self._parse_stream_sync_modes(s, connection_id)
-                if not parsed_sync_modes:
-                    continue
-
-                domain_streams.append(
-                    StreamSchema(
-                        name=s.name,
-                        fields=[
-                            StreamField(
-                                name=f.name,
-                                data_type=f.data_type,
-                                nullable=f.nullable,
-                                description=f.description,
-                            )
-                            for f in s.fields
-                        ],
-                        primary_key=list(s.primary_key),
-                        cursor_field=s.cursor_field,
-                        supported_sync_modes=parsed_sync_modes,
-                    )
-                )
-
-            active_catalog = await self._uow.catalogs.get_active_by_connection_id(
-                resolved.tenant_id, connection_id
+            logger.error(
+                "catalog_discovery_connector_not_found",
+                connection_id=connection_id,
+                app_id=resolved.app_id,
+                error_code=conn_err.code.value,
             )
-            next_version = (active_catalog.catalog_version + 1) if active_catalog else 1
+            return DiscoveredCatalogDTO.from_error(connection_id, conn_err)
 
-            catalog_res = ConnectionCatalog.try_create(
-                tenant_id=resolved.tenant_id,
-                connection_id=resolved.connection_id,
-                catalog_version=next_version,
-                streams=domain_streams,
-            )
-            if catalog_res.error is not None or catalog_res.value is None:
-                cfg_err = catalog_res.error or InvalidConnectionConfigError(
-                    field_name="connection_id",
-                    message="Invalid connection_id for catalog creation.",
-                )
-                await self._uow.rollback()
-                return DiscoveredCatalogDTO.from_error(connection_id, cfg_err)
+        catalog_dto = await connector.discover(
+            connection_id=resolved.connection_id,
+            public_config=resolved.public_config,
+            credentials=resolved.credentials,
+            tenant_id=resolved.tenant_id,
+        )
+        if not catalog_dto.success:
+            return catalog_dto
 
-            catalog_entity = catalog_res.value
-            await self._uow.catalogs.save(catalog_entity)
+        domain_streams: list[StreamSchema] = []
+        for s in catalog_dto.streams:
+            parsed_sync_modes = self._parse_stream_sync_modes(s, connection_id)
+            if not parsed_sync_modes:
+                continue
 
-            # Auto-bind default canonical transformations if declared on retained streams and not yet bound
-            retained_stream_names = {ds.name for ds in domain_streams}
-            for s in catalog_dto.streams:
-                if s.name in retained_stream_names and s.default_transformation_id:
-                    existing_trans = await self._uow.transformations.get_by_stream(
-                        tenant_id=resolved.tenant_id,
-                        connection_id=resolved.connection_id,
-                        stream=s.name,
-                    )
-                    if existing_trans is None:
-                        new_trans = Transformation.create(
-                            tenant_id=resolved.tenant_id,
-                            connection_id=resolved.connection_id,
-                            stream=s.name,
-                            transformation_id=s.default_transformation_id,
-                            transformation_version=s.default_transformation_version,
-                            mode=TransformationMode.ACTIVE,
-                        )
-                        await self._uow.transformations.save(new_trans)
-                        logger.info(
-                            "stream_default_transformation_auto_bound",
-                            tenant_id=resolved.tenant_id,
-                            connection_id=resolved.connection_id,
-                            stream=s.name,
-                            transformation_id=s.default_transformation_id,
-                            transformation_version=s.default_transformation_version,
-                        )
-
-            await self._uow.commit()
-
-            dto_stream_lookup = {s.name: s for s in catalog_dto.streams}
-            response_streams = [
-                StreamSchemaDTO(
-                    name=ds.name,
+            domain_streams.append(
+                StreamSchema(
+                    name=s.name,
                     fields=[
-                        StreamFieldDTO(
+                        StreamField(
                             name=f.name,
                             data_type=f.data_type,
                             nullable=f.nullable,
                             description=f.description,
                         )
-                        for f in ds.fields
+                        for f in s.fields
                     ],
-                    primary_key=list(ds.primary_key),
-                    cursor_field=ds.cursor_field,
-                    supported_sync_modes=[m.value for m in ds.supported_sync_modes],
-                    default_transformation_id=(
-                        dto_stream_lookup[ds.name].default_transformation_id
-                        if ds.name in dto_stream_lookup
-                        else None
-                    ),
-                    default_transformation_version=(
-                        dto_stream_lookup[ds.name].default_transformation_version
-                        if ds.name in dto_stream_lookup
-                        else 1
-                    ),
+                    primary_key=list(s.primary_key),
+                    cursor_field=s.cursor_field,
+                    supported_sync_modes=parsed_sync_modes,
                 )
-                for ds in domain_streams
-            ]
-
-            logger.info(
-                "catalog_discovered",
-                connection_id=resolved.connection_id,
-                catalog_id=catalog_entity.id,
-                catalog_version=next_version,
-                stream_count=len(domain_streams),
             )
 
-            return DiscoveredCatalogDTO(
-                connection_id=catalog_entity.connection_id,
-                catalog_version=catalog_entity.catalog_version,
-                catalog_hash=catalog_entity.catalog_hash,
-                streams=response_streams,
-                discovered_at=catalog_entity.discovered_at,
+        dto_stream_lookup = {s.name: s for s in catalog_dto.streams}
+        response_streams = [
+            StreamSchemaDTO(
+                name=ds.name,
+                fields=[
+                    StreamFieldDTO(
+                        name=f.name,
+                        data_type=f.data_type,
+                        nullable=f.nullable,
+                        description=f.description,
+                    )
+                    for f in ds.fields
+                ],
+                primary_key=list(ds.primary_key),
+                cursor_field=ds.cursor_field,
+                supported_sync_modes=[m.value for m in ds.supported_sync_modes],
+                default_transformation_id=(
+                    dto_stream_lookup[ds.name].default_transformation_id
+                    if ds.name in dto_stream_lookup
+                    else None
+                ),
+                default_transformation_version=(
+                    dto_stream_lookup[ds.name].default_transformation_version
+                    if ds.name in dto_stream_lookup
+                    else 1
+                ),
             )
+            for ds in domain_streams
+        ]
+
+        catalog_hash = compute_discovered_streams_hash(domain_streams)
+        discovered_at = catalog_dto.discovered_at or datetime.now(UTC).isoformat()
+
+        logger.info(
+            "catalog_discovered",
+            tenant_id=resolved.tenant_id,
+            connection_id=resolved.connection_id,
+            catalog_hash=catalog_hash,
+            stream_count=len(domain_streams),
+        )
+
+        return DiscoveredCatalogDTO(
+            connection_id=resolved.connection_id,
+            catalog_version=1,
+            catalog_hash=catalog_hash,
+            streams=response_streams,
+            discovered_at=discovered_at,
+            success=True,
+        )

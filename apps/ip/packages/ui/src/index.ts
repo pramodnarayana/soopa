@@ -8,11 +8,9 @@ export {
   type ActiveConnectionCardProps,
 } from './presentation/connections/ActiveConnectionCard';
 export {
-  ConnectionCatalogTab,
   ConnectionEntitiesSyncTab,
   type ConnectionEntitiesSyncTabProps,
   ConnectionOverviewTab,
-  ConnectionStreamsSyncTab,
 } from './presentation/connections/ConnectionDetailTabs';
 export {
   CreateSimulatorEntityModal,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import structlog
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -22,6 +24,12 @@ _TENANT_EXEMPT_PATHS: frozenset[str] = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class _RouteTenantParams:
+    tenant_id: str | None = None
+    tenant_slug: str | None = None
+
+
 class TenantContextMiddleware(BaseHTTPMiddleware):
     """
     ASGI Middleware: Resolves the active Tenant ID for the request and validates
@@ -42,15 +50,14 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         self.public_paths = public_paths
         self.tenant_exempt_paths = tenant_exempt_paths or frozenset()
 
-    def _extract_tenant_id_from_route(self, router: ASGIApp, scope: Scope) -> str | None:
+    def _extract_route_tenant_params(self, router: ASGIApp, scope: Scope) -> _RouteTenantParams:
         """
         Recursively traverses the FastAPI/Starlette routing tree to resolve the route
-        for the current request and extract the `tenant_id` path parameter.
-        This provides a robust, enterprise-grade fallback for dynamic endpoints
+        for the current request and extract `tenant_id` or `tenant_slug` path parameters
         without hardcoding URL path string manipulation.
         """
         if not isinstance(router, Router):
-            return None
+            return _RouteTenantParams()
 
         for route in router.routes:
             match, child_scope = route.matches(scope)
@@ -58,14 +65,21 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
                 if isinstance(route, Mount):
                     merged_scope: Scope = dict(scope)
                     merged_scope.update(child_scope)
-                    return self._extract_tenant_id_from_route(route.app, merged_scope)
+                    return self._extract_route_tenant_params(route.app, merged_scope)
                 path_params = child_scope.get("path_params")
                 if isinstance(path_params, dict):
                     raw_tid = path_params.get("tenant_id")
-                    if isinstance(raw_tid, str):
-                        return raw_tid
-                return None
-        return None
+                    raw_slug = path_params.get("tenant_slug")
+                    return _RouteTenantParams(
+                        tenant_id=raw_tid if isinstance(raw_tid, str) else None,
+                        tenant_slug=raw_slug if isinstance(raw_slug, str) else None,
+                    )
+                return _RouteTenantParams()
+        return _RouteTenantParams()
+
+    def _extract_tenant_id_from_route(self, router: ASGIApp, scope: Scope) -> str | None:
+        """Extracts the `tenant_id` path parameter from the matched Starlette route."""
+        return self._extract_route_tenant_params(router, scope).tenant_id
 
     @staticmethod
     def _resolve_identity(request: Request) -> IdentityContext | None:
@@ -98,12 +112,12 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         # Path parameter (extracted dynamically from the routing tree).
         # IdentityContext (identity.tenant_id) is the primary fallback for M2M API requests.
 
-        path_tenant_id = self._extract_tenant_id_from_route(request.app.router, request.scope)
+        route_params = self._extract_route_tenant_params(request.app.router, request.scope)
 
         active_tenant_id = (
             request.headers.get("x-tenant-id")
             or request.query_params.get("tenant_id")
-            or path_tenant_id
+            or route_params.tenant_id
             or identity.tenant_id
         )
 
@@ -115,7 +129,7 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         is_exempt = normalized_path in self.tenant_exempt_paths
 
         if not active_tenant_id:
-            if is_exempt:
+            if is_exempt or route_params.tenant_slug is not None:
                 return await call_next(request)
             logger.error(
                 "tenant_context_missing_tenant_id",

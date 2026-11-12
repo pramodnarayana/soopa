@@ -28,4 +28,14 @@ export const SimulatorEntityWireSchema = z.object({
 
 export const SimulatorEntityListWireSchema = z.array(SimulatorEntityWireSchema);
 
+export const SimulatePushWireSchema = z.object({
+  connection_id: z.string(),
+  stream_name: z.string(),
+  records_pushed: z.number(),
+  record_ids: z.array(z.string()).default([]),
+  trace_ids: z.array(z.string()).default([]),
+  status: z.string().default('ACCEPTED'),
+});
+
 export type SimulatorEntityWire = z.infer<typeof SimulatorEntityWireSchema>;
+export type SimulatePushWire = z.infer<typeof SimulatePushWireSchema>;

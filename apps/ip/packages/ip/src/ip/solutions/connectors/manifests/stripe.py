@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.connection.catalog import ConnectorProperty, ConnectorPropertySchema
 from ip.engine.domain.connection.enums import (
     PaginationType,
     PropertyType,
@@ -12,6 +11,7 @@ from ip.engine.domain.connection.http_spec import (
     HttpActionSpec,
     PaginationConfig,
 )
+from ip.engine.domain.connection.property_schema import ConnectorProperty, ConnectorPropertySchema
 
 STRIPE_PROPERTY_SCHEMA = ConnectorPropertySchema(
     app_id="stripe",

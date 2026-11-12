@@ -9,12 +9,14 @@ import {
   ipQueryKeys,
   logResultOutcome,
   projectResultQuery,
+  useAddConnectionEntityMutation,
   useBindStreamTransformationMutation,
   useBulkReplayMutation,
   useCatalogAppSpecQuery,
   useCatalogAppsQuery,
   useCheckConnectionMutation,
   useConnectionDetailQuery,
+  useConnectionEntitiesQuery,
   useConnectionsQuery,
   useConnectionTransformationsQuery,
   useCreateConnectionMutation,
@@ -30,20 +32,29 @@ import {
   useRegisteredTransformersQuery,
   useRegisterStitchMutation,
   useRelinkConnectionMutation,
+  useRemoveConnectionEntityMutation,
   useReplayTransactionMutation,
-  useResetStreamCheckpointMutation,
+  useResetConnectionEntityCheckpointMutation,
   useSearchTracesByCorrelationQuery,
+  useSimulatePushMutation,
   useStitchDefinitionQuery,
   useStitchDefinitionsQuery,
   useStitchesQuery,
   useStitchRunQuery,
   useStitchRunsQuery,
-  useStreamStatesQuery,
   useSyncRunsQuery,
   useTriggerSyncRunMutation,
+  useUpdateConnectionEntityMutation,
   useUpdateConnectionMutation,
 } from '../application';
-import { AuthType, ReplayStage, SyncRunKind, TransformationMode } from '../domain/enums';
+import {
+  AuthType,
+  EntitySyncFrom,
+  EntitySyncSchedule,
+  ReplayStage,
+  SyncRunKind,
+  TransformationMode,
+} from '../domain/enums';
 import { useIpWorkspace } from '../provider/IpRepositoriesContext';
 import { IpUIProvider } from '../provider/IpUIProvider';
 import {
@@ -104,13 +115,21 @@ describe('Application Layer Query Keys', () => {
       'detail',
       'run_9',
     ]);
-    expect(ipQueryKeys.syncRuns.streamStates('ten_1', 'conn_1')).toEqual([
+    expect(ipQueryKeys.connections.discoveredStreams('ten_1', 'conn_1')).toEqual([
       'ip',
       'tenant',
       'ten_1',
       'connections',
       'conn_1',
-      'stream-states',
+      'discovered-streams',
+    ]);
+    expect(ipQueryKeys.connections.entities('ten_1', 'conn_1')).toEqual([
+      'ip',
+      'tenant',
+      'ten_1',
+      'connections',
+      'conn_1',
+      'entities',
     ]);
     expect(ipQueryKeys.transformations.byStream('ten_1', 'conn_1', 'records_alpha')).toEqual([
       'ip',
@@ -250,14 +269,65 @@ describe('Application Layer InMemory Repository Ports', () => {
     }
   });
 
-  it('resets stream checkpoints in InMemorySyncRunRepository', async () => {
+  it('manages subscribed entities in InMemoryConnectionEntityRepository', async () => {
     const harness = createInMemoryIpWorkspaceSeed();
-    const resetState = await harness.syncRuns.resetStreamCheckpoint(
+
+    const added = await harness.entities.addEntity(SEED_TENANT_ID, SEED_CONNECTION_ID, {
+      streamName: 'customers_delta',
+      syncMode: SyncRunKind.INCREMENTAL,
+      schedule: EntitySyncSchedule.EVERY_15M,
+      syncFrom: EntitySyncFrom.ALL,
+      primaryKey: ['customer_id'],
+      fields: [{ name: 'customer_id', dataType: 'string', nullable: false, description: null }],
+      cursorField: 'updated_at',
+      defaultTransformationId: 'acme.record_alpha.to_gem',
+      defaultTransformationVersion: 2,
+    });
+    expect(added.ok).toBe(true);
+
+    const autoBound = await harness.transformations.getStreamTransformation(
+      SEED_TENANT_ID,
+      SEED_CONNECTION_ID,
+      'customers_delta',
+    );
+    expect(autoBound.ok && autoBound.value.transformationVersion).toBe(2);
+
+    const updated = await harness.entities.updateEntity(
+      SEED_TENANT_ID,
+      SEED_CONNECTION_ID,
+      'customers_delta',
+      {
+        schedule: EntitySyncSchedule.EVERY_5M,
+        syncFrom: EntitySyncFrom.LAST_7D,
+      },
+    );
+    expect(updated.ok && updated.value.schedule).toBe(EntitySyncSchedule.EVERY_5M);
+    expect(updated.ok && updated.value.syncFrom).toBe(EntitySyncFrom.LAST_7D);
+
+    const resetState = await harness.entities.resetCheckpoint(
       SEED_TENANT_ID,
       SEED_CONNECTION_ID,
       'records_alpha',
     );
     expect(resetState.ok && resetState.value.recordsSyncedCount).toBe(0);
+    expect(resetState.ok && resetState.value.cursorValue).toBeNull();
+
+    const removed = await harness.entities.removeEntity(
+      SEED_TENANT_ID,
+      SEED_CONNECTION_ID,
+      'customers_delta',
+    );
+    expect(removed.ok).toBe(true);
+  });
+
+  it('executes simulated push exclusively via InMemorySimulatorRepository', async () => {
+    const harness = createInMemoryIpWorkspaceSeed();
+    const simulatedPush = await harness.simulator.simulatePush(SEED_TENANT_ID, SEED_CONNECTION_ID, {
+      streamName: 'orders',
+      count: 2,
+    });
+    expect(simulatedPush.ok && simulatedPush.value.recordsPushed).toBe(2);
+    expect('simulatePush' in harness.connections).toBe(false);
   });
 
   it('promotes shadow transformations in InMemoryTransformationRepository', async () => {
@@ -329,8 +399,12 @@ describe('Application Layer TanStack Hooks', () => {
       updateConn: ReturnType<typeof useUpdateConnectionMutation>;
       relinkConn: ReturnType<typeof useRelinkConnectionMutation>;
       deactivateConn: ReturnType<typeof useDeactivateConnectionMutation>;
+      addEntity: ReturnType<typeof useAddConnectionEntityMutation>;
+      updateEntity: ReturnType<typeof useUpdateConnectionEntityMutation>;
+      removeEntity: ReturnType<typeof useRemoveConnectionEntityMutation>;
+      resetCheckpoint: ReturnType<typeof useResetConnectionEntityCheckpointMutation>;
+      simulatePush: ReturnType<typeof useSimulatePushMutation>;
       triggerSync: ReturnType<typeof useTriggerSyncRunMutation>;
-      resetCheckpoint: ReturnType<typeof useResetStreamCheckpointMutation>;
       bindTransform: ReturnType<typeof useBindStreamTransformationMutation>;
       promoteShadow: ReturnType<typeof usePromoteShadowTransformationMutation>;
       previewTransform: ReturnType<typeof usePreviewTransformationMutation>;
@@ -353,8 +427,12 @@ describe('Application Layer TanStack Hooks', () => {
         updateConn: useUpdateConnectionMutation(SEED_CONNECTION_ID),
         relinkConn: useRelinkConnectionMutation(SEED_CONNECTION_ID),
         deactivateConn: useDeactivateConnectionMutation(SEED_CONNECTION_ID),
+        addEntity: useAddConnectionEntityMutation(SEED_CONNECTION_ID),
+        updateEntity: useUpdateConnectionEntityMutation(SEED_CONNECTION_ID),
+        removeEntity: useRemoveConnectionEntityMutation(SEED_CONNECTION_ID),
+        resetCheckpoint: useResetConnectionEntityCheckpointMutation(SEED_CONNECTION_ID),
+        simulatePush: useSimulatePushMutation(SEED_CONNECTION_ID),
         triggerSync: useTriggerSyncRunMutation(SEED_CONNECTION_ID),
-        resetCheckpoint: useResetStreamCheckpointMutation(SEED_CONNECTION_ID),
         bindTransform: useBindStreamTransformationMutation(),
         promoteShadow: usePromoteShadowTransformationMutation(),
         previewTransform: usePreviewTransformationMutation(),
@@ -403,11 +481,26 @@ describe('Application Layer TanStack Hooks', () => {
     await api.discoverCat.mutateAsync();
     await api.updateConn.mutateAsync({ newName: 'Acme Updated' });
     await api.relinkConn.mutateAsync({ newName: 'Acme Renamed' });
+    await api.addEntity.mutateAsync({
+      streamName: 'events_beta',
+      syncMode: SyncRunKind.INCREMENTAL,
+      schedule: EntitySyncSchedule.EVERY_15M,
+      syncFrom: EntitySyncFrom.ALL,
+      primaryKey: ['event_id'],
+      fields: [{ name: 'event_id', dataType: 'string', nullable: false, description: null }],
+      cursorField: 'captured_at',
+    });
+    await api.updateEntity.mutateAsync({
+      streamName: 'events_beta',
+      input: { schedule: EntitySyncSchedule.EVERY_5M, syncFrom: EntitySyncFrom.LAST_24H },
+    });
+    await api.simulatePush.mutateAsync({ streamName: 'orders', count: 1 });
     await api.triggerSync.mutateAsync({
       streamName: 'records_alpha',
       forcedKind: SyncRunKind.INCREMENTAL,
     });
     await api.resetCheckpoint.mutateAsync('records_alpha');
+    await api.removeEntity.mutateAsync('events_beta');
     await api.bindTransform.mutateAsync({
       connectionId: SEED_CONNECTION_ID,
       stream: 'records_alpha',
@@ -495,7 +588,7 @@ describe('Application Layer TanStack Hooks', () => {
         useConnectionsQuery('ACTIVE'),
         useConnectionDetailQuery(SEED_CONNECTION_ID),
         useSyncRunsQuery(SEED_CONNECTION_ID, 20),
-        useStreamStatesQuery(SEED_CONNECTION_ID),
+        useConnectionEntitiesQuery(SEED_CONNECTION_ID),
         useRegisteredTransformersQuery(),
         useConnectionTransformationsQuery(SEED_CONNECTION_ID),
         useStitchDefinitionsQuery(),
@@ -555,7 +648,7 @@ describe('Application Layer TanStack Hooks', () => {
       discoverMissing: ReturnType<typeof useDiscoverCatalogMutation>;
       relinkMissing: ReturnType<typeof useRelinkConnectionMutation>;
       deactivateMissing: ReturnType<typeof useDeactivateConnectionMutation>;
-      resetMissing: ReturnType<typeof useResetStreamCheckpointMutation>;
+      resetMissing: ReturnType<typeof useResetConnectionEntityCheckpointMutation>;
       promoteMissing: ReturnType<typeof usePromoteShadowTransformationMutation>;
       replayMissing: ReturnType<typeof useReplayTransactionMutation>;
       modifyMissing: ReturnType<typeof useModifyAndReplayMutation>;
@@ -569,7 +662,7 @@ describe('Application Layer TanStack Hooks', () => {
         discoverMissing: useDiscoverCatalogMutation('conn_missing'),
         relinkMissing: useRelinkConnectionMutation('conn_missing'),
         deactivateMissing: useDeactivateConnectionMutation('conn_missing'),
-        resetMissing: useResetStreamCheckpointMutation('conn_missing'),
+        resetMissing: useResetConnectionEntityCheckpointMutation('conn_missing'),
         promoteMissing: usePromoteShadowTransformationMutation(),
         replayMissing: useReplayTransactionMutation(),
         modifyMissing: useModifyAndReplayMutation(),

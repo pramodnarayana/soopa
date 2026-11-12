@@ -1,6 +1,8 @@
 import type { ApiProblem, Result } from '@soopa/ui';
 import type {
   CreateSimulatorEntityInput,
+  SimulatePushInput,
+  SimulatePushResult,
   SimulatorEntity,
   UpdateSimulatorEntityInput,
 } from '../domain/simulator';
@@ -30,4 +32,10 @@ export interface SimulatorRepositoryPort {
     connectionId: string,
     entityId: string,
   ): Promise<Result<void, ApiProblem>>;
+
+  simulatePush(
+    tenantId: string,
+    connectionId: string,
+    input: SimulatePushInput,
+  ): Promise<Result<SimulatePushResult, ApiProblem>>;
 }

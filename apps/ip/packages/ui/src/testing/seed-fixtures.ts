@@ -1,5 +1,6 @@
 import type { AppSpec, CatalogAppSummary } from '../domain/catalog';
 import type { Connection, DiscoveredCatalog } from '../domain/connection';
+import type { ConnectionEntity } from '../domain/connection-entity';
 import {
   AuthType,
   BatchManifestStatus,
@@ -7,6 +8,8 @@ import {
   ConnectionStatus,
   ConnectorPropertyType,
   ConnectorRuntimeArchitecture,
+  EntitySyncFrom,
+  EntitySyncSchedule,
   PipelineLayer,
   PriorityLane,
   StitchNodeKind,
@@ -27,7 +30,7 @@ import type {
 } from '../domain/intervals';
 import { type SimulatorEntity, SimulatorVelocityMode } from '../domain/simulator';
 import type { Stitch, StitchDefinition, StitchRun } from '../domain/stitch';
-import type { StreamState, SyncRun } from '../domain/sync-run';
+import type { SyncRun } from '../domain/sync-run';
 import type { IpTrace, IpTraceLineageItem } from '../domain/trace';
 import type { RegisteredTransformer, Transformation } from '../domain/transformation';
 
@@ -224,15 +227,27 @@ export const SEED_SYNC_RUN: SyncRun = {
   createdAt: '2026-10-29T08:00:00Z',
 };
 
-export const SEED_STREAM_STATE: StreamState = {
-  stateId: 'st_99887766554433221100aabb',
+export const SEED_CONNECTION_ENTITY: ConnectionEntity = {
+  entityId: 'ip_cent_99887766554433221100aabb',
   tenantId: SEED_TENANT_ID,
   connectionId: SEED_CONNECTION_ID,
   streamName: 'records_alpha',
+  syncMode: SyncRunKind.INCREMENTAL,
+  schedule: EntitySyncSchedule.EVERY_15M,
+  syncFrom: EntitySyncFrom.ALL,
+  syncFromAt: null,
+  isEnabled: true,
+  primaryKey: ['record_id', 'captured_at'],
+  fields: [
+    { name: 'record_id', dataType: 'string', nullable: false, description: 'Source Record ID' },
+    { name: 'value_num', dataType: 'number', nullable: false, description: 'Numeric Metric' },
+  ],
   cursorField: 'captured_at',
   cursorValue: '2026-10-29T08:00:00Z',
   recordsSyncedCount: 48200,
   lastSyncedAt: '2026-10-29T08:00:09Z',
+  createdAt: '2026-10-20T10:05:00Z',
+  updatedAt: '2026-10-29T08:00:09Z',
 };
 
 export const SEED_TRANSFORMERS: readonly RegisteredTransformer[] = [

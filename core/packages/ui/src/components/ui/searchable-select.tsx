@@ -23,11 +23,15 @@ export interface SearchableSelectProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  searchPlaceholder?: string;
   emptyText?: string;
+  loading?: boolean;
+  loadingText?: string;
   disabled?: boolean;
   side?: 'top' | 'right' | 'bottom' | 'left';
   allowCustomValue?: boolean;
   portaled?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function SearchableSelect({
@@ -35,19 +39,31 @@ export function SearchableSelect({
   value,
   onChange,
   placeholder = 'Select option...',
+  searchPlaceholder = 'Search...',
   emptyText = 'No results found.',
+  loading = false,
+  loadingText = 'Loading...',
   disabled = false,
   side,
   allowCustomValue = false,
   portaled = false,
+  onOpenChange,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState('');
 
   const selectedOption = options.find((opt) => opt.value === value);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setInputValue('');
+    }
+    onOpenChange?.(nextOpen);
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -76,16 +92,22 @@ export function SearchableSelect({
         align="start"
       >
         <Command>
-          <CommandInput placeholder="Search..." value={inputValue} onValueChange={setInputValue} />
+          <CommandInput
+            placeholder={searchPlaceholder}
+            value={inputValue}
+            onValueChange={setInputValue}
+          />
           <CommandList>
             <CommandEmpty>
-              {allowCustomValue && inputValue ? (
+              {loading && options.length === 0 ? (
+                loadingText
+              ) : allowCustomValue && inputValue ? (
                 <button
                   type="button"
                   className="w-full px-3 py-2 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground text-foreground transition-colors m-1 rounded-md text-left"
                   onClick={() => {
                     onChange(inputValue);
-                    setOpen(false);
+                    handleOpenChange(false);
                   }}
                 >
                   Create "{inputValue}"
@@ -105,7 +127,7 @@ export function SearchableSelect({
                   }
                   onSelect={() => {
                     onChange(option.value);
-                    setOpen(false);
+                    handleOpenChange(false);
                   }}
                 >
                   <Check

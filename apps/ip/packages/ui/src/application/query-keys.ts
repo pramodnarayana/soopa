@@ -37,8 +37,10 @@ export const ipQueryKeys = {
       ['ip', 'tenant', tenantId, 'connections', 'list', status ?? 'ALL'] as const,
     detail: (tenantId: string, connectionId: string) =>
       ['ip', 'tenant', tenantId, 'connections', 'detail', connectionId] as const,
-    catalog: (tenantId: string, connectionId: string) =>
-      ['ip', 'tenant', tenantId, 'connections', 'catalog', connectionId] as const,
+    discoveredStreams: (tenantId: string, connectionId: string) =>
+      ['ip', 'tenant', tenantId, 'connections', connectionId, 'discovered-streams'] as const,
+    entities: (tenantId: string, connectionId: string) =>
+      ['ip', 'tenant', tenantId, 'connections', connectionId, 'entities'] as const,
   },
   syncRuns: {
     all: (tenantId: string, connectionId: string) =>
@@ -56,8 +58,6 @@ export const ipQueryKeys = {
         'detail',
         runId,
       ] as const,
-    streamStates: (tenantId: string, connectionId: string) =>
-      ['ip', 'tenant', tenantId, 'connections', connectionId, 'stream-states'] as const,
   },
   transformations: {
     transformers: (tenantId: string) =>

@@ -14,9 +14,11 @@ pytestmark = pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ingest_record_success_inline(
     auth_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
     seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
+    tenant_slug = seeded_api_token["tenant_slug"]
 
     # 1. Create a connection first
     conn_response = await auth_client.post(
@@ -33,15 +35,15 @@ async def test_ingest_record_success_inline(
     assert conn_response.status_code == 201, conn_response.text
     connection_id = conn_response.json()["id"]
 
-    # 2. Ingest raw payload
+    # 2. Ingest raw payload via unauthenticated external webhook URL (omitting ?stream= defaults to 'events')
     ingress_payload = {
         "meter_serial": "MTR-88219",
         "timestamp": "2026-10-20T08:00:00Z",
         "interval_readings": [{"kwh": 4.12}, {"kwh": 3.98}],
     }
 
-    ingress_response = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}?stream=meters",
+    ingress_response = await client.post(
+        f"/api/v1/webhooks/{tenant_slug}/http/{connection_id}",
         json=ingress_payload,
         headers={"X-Correlation-ID": "CORR-AMI-001"},
     )
@@ -56,18 +58,46 @@ async def test_ingest_record_success_inline(
 
 
 @pytest.mark.asyncio
-async def test_ingest_record_unknown_connection_returns_404(
+async def test_ingest_record_unknown_connection_or_mismatched_app_returns_404(
     auth_client: httpx.AsyncClient,
+    client: httpx.AsyncClient,
     seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
+    tenant_slug = seeded_api_token["tenant_slug"]
 
-    response = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/ingress/non_existent_conn_123?stream=meters",
+    response = await client.post(
+        f"/api/v1/webhooks/{tenant_slug}/http/non_existent_conn_123?stream=meters",
         json={"data": "test"},
     )
     assert response.status_code == 404, response.text
     assert "non_existent_conn_123" in str(response.json()["detail"])
+
+    conn_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections",
+        json={
+            "app_id": "http",
+            "name": "Mismatch App Guard Target",
+            "auth_type": "API_KEY",
+            "public_config": {"endpoint_url": "https://mismatch-app.testgrid.com"},
+            "raw_credentials": {"api_key": "test_token"},
+            "endpoint_for_fingerprint": "https://mismatch-app.testgrid.com",
+        },
+    )
+    assert conn_res.status_code == 201, conn_res.text
+    connection_id = conn_res.json()["id"]
+
+    mismatch_res = await client.post(
+        f"/api/v1/webhooks/{tenant_slug}/salesforce/{connection_id}",
+        json={"data": "test"},
+    )
+    assert mismatch_res.status_code == 404, mismatch_res.text
+
+    unknown_slug_res = await client.post(
+        f"/api/v1/webhooks/non-existent-tenant/http/{connection_id}",
+        json={"data": "test"},
+    )
+    assert unknown_slug_res.status_code == 404, unknown_slug_res.text
 
 
 @pytest.mark.asyncio
@@ -76,6 +106,7 @@ async def test_ingest_record_large_payload_offload(
     seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
+    tenant_slug = seeded_api_token["tenant_slug"]
 
     # 1. Create a connection
     conn_response = await auth_client.post(
@@ -97,7 +128,7 @@ async def test_ingest_record_large_payload_offload(
     large_payload = {"records": large_list}
 
     ingress_response = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}?stream=bulk_accounts",
+        f"/api/v1/webhooks/{tenant_slug}/salesforce/{connection_id}?stream=bulk_accounts",
         json=large_payload,
     )
 
@@ -114,6 +145,7 @@ async def test_ingest_record_into_deactivated_connection_returns_409_conflict(
     seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
+    tenant_slug = seeded_api_token["tenant_slug"]
 
     conn_res = await auth_client.post(
         f"/api/v1/tenants/{tenant_id}/ip/connections",
@@ -135,7 +167,7 @@ async def test_ingest_record_into_deactivated_connection_returns_409_conflict(
     assert deact_res.status_code == 200, deact_res.text
 
     ingress_res = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}?stream=meters",
+        f"/api/v1/webhooks/{tenant_slug}/itron_mdm/{connection_id}?stream=meters",
         json={"meter_serial": "MTR-DEACT-01"},
     )
     assert ingress_res.status_code == 409, ingress_res.text
@@ -149,6 +181,7 @@ async def test_ingest_record_returns_404_when_tenant_shard_not_found(
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
+    tenant_slug = seeded_api_token["tenant_slug"]
 
     conn_res = await auth_client.post(
         f"/api/v1/tenants/{tenant_id}/ip/connections",
@@ -173,7 +206,7 @@ async def test_ingest_record_returns_404_when_tenant_shard_not_found(
         await session.commit()
 
     ingress_res = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}?stream=meters",
+        f"/api/v1/webhooks/{tenant_slug}/itron_mdm/{connection_id}?stream=meters",
         json={"meter_serial": "MTR-NO-SHARD-01"},
     )
     assert ingress_res.status_code == 404, ingress_res.text

@@ -18,6 +18,19 @@ from ip.engine.adapters.outbound.stitches.stitch_adapters import (
 from ip.engine.adapters.outbound.stitches.stitch_catalog_registry import (
     InMemoryStitchCatalogRegistry,
 )
+from ip.engine.application.use_cases.connections.connection_entity_use_cases import (
+    AddConnectionEntityCommand,
+    AddConnectionEntityUseCase,
+    ConnectionEntityFieldDTO,
+    ListConnectionEntitiesQuery,
+    ListConnectionEntitiesUseCase,
+    RemoveConnectionEntityCommand,
+    RemoveConnectionEntityUseCase,
+    ResetConnectionEntityCheckpointCommand,
+    ResetConnectionEntityCheckpointUseCase,
+    UpdateConnectionEntityCommand,
+    UpdateConnectionEntityUseCase,
+)
 from ip.engine.application.use_cases.ingestion.run_sync_use_case import (
     RunSyncCommand,
     RunSyncUseCase,
@@ -25,12 +38,8 @@ from ip.engine.application.use_cases.ingestion.run_sync_use_case import (
 from ip.engine.application.use_cases.ingestion.sync_run_control_plane_use_cases import (
     GetSyncRunQuery,
     GetSyncRunUseCase,
-    ListStreamStatesQuery,
-    ListStreamStatesUseCase,
     ListSyncRunsQuery,
     ListSyncRunsUseCase,
-    ResetStreamCheckpointCommand,
-    ResetStreamCheckpointUseCase,
     TriggerSyncRunCommand,
     TriggerSyncRunUseCase,
 )
@@ -91,16 +100,21 @@ from ip.engine.domain.normalization.transformation import (
     TransformationRejection,
     TransformationResult,
 )
+from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import (
+    EntitySyncFrom,
+    EntitySyncSchedule,
+    SyncMode,
     SyncRunKind,
     SyncRunStatus,
 )
 from ip.engine.domain.replication.inbound_record import InboundRecord
-from ip.engine.domain.replication.stream_state import ConnectionStreamState
 from ip.engine.domain.replication.sync_run import SyncRun
 from ip.engine.domain.stitch.enums import StitchStepType
 from ip.engine.domain.stitch.stitch import Stitch
-from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
+from ip.engine.ports.outbound.connection_entity_repository_port import (
+    ConnectionEntityRepositoryPort,
+)
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
@@ -134,9 +148,6 @@ from ip.engine.ports.outbound.replica_rejection_repository_port import (
 from ip.engine.ports.outbound.stitch_catalog_registry_port import StitchShardGatewayPort
 from ip.engine.ports.outbound.stitch_repository_port import (
     StitchRepositoryPort,
-)
-from ip.engine.ports.outbound.stream_state_repository_port import (
-    StreamStateRepositoryPort,
 )
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import (
@@ -396,26 +407,29 @@ class _InMemoryConnectionRepo(ConnectionRepositoryPort):
         return [c for c in self.items.values() if c.tenant_id == tenant_id]
 
 
-class _InMemoryStreamStateRepo(StreamStateRepositoryPort):
+class _InMemoryConnectionEntityRepo(ConnectionEntityRepositoryPort):
     def __init__(self) -> None:
-        self.items: dict[tuple[str, str, str], ConnectionStreamState] = {}
+        self.items: dict[tuple[str, str, str], ConnectionEntity] = {}
 
-    async def save(self, state: ConnectionStreamState) -> None:
-        self.items[(state.tenant_id, state.connection_id, state.stream_name)] = state
+    async def save(self, entity: ConnectionEntity) -> None:
+        self.items[(entity.tenant_id, entity.connection_id, entity.stream_name)] = entity
 
     async def get_by_stream(
         self, tenant_id: str, connection_id: str, stream_name: str
-    ) -> ConnectionStreamState | None:
+    ) -> ConnectionEntity | None:
         return self.items.get((tenant_id, connection_id, stream_name))
 
     async def list_by_connection(
         self, tenant_id: str, connection_id: str
-    ) -> Sequence[ConnectionStreamState]:
+    ) -> Sequence[ConnectionEntity]:
         return [
-            s
-            for s in self.items.values()
-            if s.tenant_id == tenant_id and s.connection_id == connection_id
+            e
+            for e in self.items.values()
+            if e.tenant_id == tenant_id and e.connection_id == connection_id
         ]
+
+    async def delete(self, entity: ConnectionEntity) -> None:
+        self.items.pop((entity.tenant_id, entity.connection_id, entity.stream_name), None)
 
 
 class _InMemorySyncRunRepo(SyncRunRepositoryPort):
@@ -539,15 +553,14 @@ class _InMemoryStitchRepo(StitchRepositoryPort):
 
 class _InMemoryControlPlaneUoW(IpControlPlaneUnitOfWorkPort):
     connections: ConnectionRepositoryPort
-    catalogs: CatalogRepositoryPort
-    stream_states: StreamStateRepositoryPort
+    entities: ConnectionEntityRepositoryPort
     sync_runs: SyncRunRepositoryPort
     transformations: TransformationRepositoryPort
     stitches: StitchRepositoryPort
 
     def __init__(self) -> None:
         self.connections = _InMemoryConnectionRepo()
-        self.stream_states = _InMemoryStreamStateRepo()
+        self.entities = _InMemoryConnectionEntityRepo()
         self.sync_runs = _InMemorySyncRunRepo()
         self.transformations = _InMemoryTransformationRepo()
         self.stitches = _InMemoryStitchRepo()
@@ -1077,17 +1090,56 @@ async def test_sync_run_control_plane_lifecycle_resumes_pending_run() -> None:
     assert missing_run_res.is_err
     assert missing_run_res.unwrap_err().code == IpErrorCode.SYNC_RUN_NOT_FOUND
 
-    list_states_uc = ListStreamStatesUseCase(control_plane_uow=cp_uow)
-    states_res = await list_states_uc.execute(
-        ListStreamStatesQuery(tenant_id="ten_01", connection_id="conn_sync_01")
+    list_entities_uc = ListConnectionEntitiesUseCase(control_plane_uow=cp_uow)
+    entities_res = await list_entities_uc.execute(
+        ListConnectionEntitiesQuery(tenant_id="ten_01", connection_id="conn_sync_01")
     )
-    assert states_res.is_ok
-    assert len(states_res.unwrap()) == 1
-    assert states_res.unwrap()[0].cursor_value == "2026-10-27T11:00:00Z"
+    assert entities_res.is_ok
+    assert len(entities_res.unwrap()) == 1
+    assert entities_res.unwrap()[0].cursor_value == "2026-10-27T11:00:00Z"
 
-    reset_uc = ResetStreamCheckpointUseCase(control_plane_uow=cp_uow)
+    add_entity_uc = AddConnectionEntityUseCase(control_plane_uow=cp_uow)
+    added_res = await add_entity_uc.execute(
+        AddConnectionEntityCommand(
+            tenant_id="ten_01",
+            connection_id="conn_sync_01",
+            stream_name="orders",
+            sync_mode=SyncMode.INCREMENTAL,
+            schedule=EntitySyncSchedule.HOURLY,
+            primary_key=("order_id",),
+            fields=(ConnectionEntityFieldDTO(name="order_id", data_type="string", nullable=False),),
+            cursor_field="updated_at",
+            default_transformation_id="trans.orders.v1",
+            default_transformation_version=2,
+        )
+    )
+    assert added_res.is_ok
+    assert added_res.unwrap().schedule == EntitySyncSchedule.HOURLY
+    bound_trans = await cp_uow.transformations.get_by_stream(
+        tenant_id="ten_01",
+        connection_id="conn_sync_01",
+        stream="orders",
+    )
+    assert bound_trans is not None
+    assert bound_trans.transformation_id == "trans.orders.v1"
+
+    update_entity_uc = UpdateConnectionEntityUseCase(control_plane_uow=cp_uow)
+    upd_res = await update_entity_uc.execute(
+        UpdateConnectionEntityCommand(
+            tenant_id="ten_01",
+            connection_id="conn_sync_01",
+            stream_name="orders",
+            schedule=EntitySyncSchedule.DAILY,
+            sync_from=EntitySyncFrom.LAST_7D,
+        )
+    )
+    assert upd_res.is_ok
+    assert upd_res.unwrap().schedule == EntitySyncSchedule.DAILY
+    assert upd_res.unwrap().sync_from == EntitySyncFrom.LAST_7D
+
+    reset_uc = ResetConnectionEntityCheckpointUseCase(control_plane_uow=cp_uow)
     reset_res = await reset_uc.execute(
-        ResetStreamCheckpointCommand(
+        ResetConnectionEntityCheckpointCommand(
             tenant_id="ten_01",
             connection_id="conn_sync_01",
             stream_name="records_alpha",
@@ -1095,6 +1147,21 @@ async def test_sync_run_control_plane_lifecycle_resumes_pending_run() -> None:
     )
     assert reset_res.is_ok
     assert reset_res.unwrap().cursor_value is None
+
+    remove_entity_uc = RemoveConnectionEntityUseCase(control_plane_uow=cp_uow)
+    rem_res = await remove_entity_uc.execute(
+        RemoveConnectionEntityCommand(
+            tenant_id="ten_01",
+            connection_id="conn_sync_01",
+            stream_name="orders",
+        )
+    )
+    assert rem_res.is_ok
+    remaining = await list_entities_uc.execute(
+        ListConnectionEntitiesQuery(tenant_id="ten_01", connection_id="conn_sync_01")
+    )
+    assert remaining.is_ok
+    assert len(remaining.unwrap()) == 1
 
 
 @pytest.mark.asyncio

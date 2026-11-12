@@ -1,7 +1,9 @@
 import { type ApiProblem, ok, type Result } from '@soopa/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { DiscoveredCatalog } from '../domain/connection';
 import type {
   CreateSimulatorEntityInput,
+  SimulatePushInput,
   SimulatorEntity,
   UpdateSimulatorEntityInput,
 } from '../domain/simulator';
@@ -50,7 +52,7 @@ export function useCreateSimulatorEntityMutation(connectionId: string | null | u
           queryKey: ipQueryKeys.simulator.entities(tenantId, resolvedConnectionId),
         });
         void queryClient.invalidateQueries({
-          queryKey: ipQueryKeys.connections.catalog(tenantId, resolvedConnectionId),
+          queryKey: ipQueryKeys.connections.discoveredStreams(tenantId, resolvedConnectionId),
         });
       }
     },
@@ -86,7 +88,7 @@ export function useUpdateSimulatorEntityMutation(connectionId: string | null | u
           queryKey: ipQueryKeys.simulator.entities(tenantId, resolvedConnectionId),
         });
         void queryClient.invalidateQueries({
-          queryKey: ipQueryKeys.connections.catalog(tenantId, resolvedConnectionId),
+          queryKey: ipQueryKeys.connections.discoveredStreams(tenantId, resolvedConnectionId),
         });
       }
     },
@@ -106,18 +108,56 @@ export function useDeleteSimulatorEntityMutation(connectionId: string | null | u
         entity_id: entityId,
       });
       if (res.ok && resolvedConnectionId) {
+        let deletedEntityName: string | undefined;
         queryClient.setQueryData<Result<readonly SimulatorEntity[], ApiProblem>>(
           ipQueryKeys.simulator.entities(tenantId, resolvedConnectionId),
           (previous) => {
             if (!previous?.ok) return previous;
+            deletedEntityName = previous.value.find((item) => item.id === entityId)?.entityName;
             return ok(previous.value.filter((item) => item.id !== entityId));
           },
         );
+        if (deletedEntityName) {
+          queryClient.setQueryData<Result<DiscoveredCatalog, ApiProblem>>(
+            ipQueryKeys.connections.discoveredStreams(tenantId, resolvedConnectionId),
+            (previous) => {
+              if (!previous?.ok) return previous;
+              return ok({
+                ...previous.value,
+                streams: previous.value.streams.filter((s) => s.name !== deletedEntityName),
+              });
+            },
+          );
+        }
         void queryClient.invalidateQueries({
           queryKey: ipQueryKeys.simulator.entities(tenantId, resolvedConnectionId),
         });
         void queryClient.invalidateQueries({
-          queryKey: ipQueryKeys.connections.catalog(tenantId, resolvedConnectionId),
+          queryKey: ipQueryKeys.connections.discoveredStreams(tenantId, resolvedConnectionId),
+        });
+      }
+    },
+  });
+}
+
+export function useSimulatePushMutation(connectionId: string) {
+  const { tenantId, repositories, logger } = useIpWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SimulatePushInput) =>
+      repositories.simulator.simulatePush(tenantId, connectionId, input),
+    onSuccess: (res, variables) => {
+      logResultOutcome(logger, 'ip_simulator.simulate_push', res, {
+        connection_id: connectionId,
+        stream_name: variables.streamName,
+        count: variables.count ?? 1,
+      });
+      if (res.ok) {
+        void queryClient.invalidateQueries({
+          queryKey: ipQueryKeys.traces.all(tenantId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ['ip', 'tenant', tenantId, 'records'],
         });
       }
     },

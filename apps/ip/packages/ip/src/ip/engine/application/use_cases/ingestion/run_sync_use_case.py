@@ -21,13 +21,14 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import InvalidSyncRunStateError
+from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import (
     IngestionMode,
+    SyncMode,
     SyncRunKind,
     SyncRunStatus,
 )
 from ip.engine.domain.replication.inbound_record import InboundRecord
-from ip.engine.domain.replication.stream_state import ConnectionStreamState
 from ip.engine.domain.replication.sync_run import SyncRun
 from ip.engine.ports.outbound.connector_port import RecordEnvelopeDTO, SourceConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
@@ -317,7 +318,7 @@ class RunSyncUseCase:
                     ),
                 )
 
-            state = await self._control_plane_uow.stream_states.get_by_stream(
+            entity = await self._control_plane_uow.entities.get_by_stream(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream_name=command.stream_name,
@@ -330,7 +331,9 @@ class RunSyncUseCase:
 
             if command.forced_kind is not None:
                 kind = command.forced_kind
-            elif state is None or not state.cursor_value:
+            elif entity is not None and entity.sync_mode == SyncMode.FULL_REFRESH:
+                kind = SyncRunKind.FULL_REFRESH
+            elif entity is None or not entity.cursor_value:
                 kind = SyncRunKind.INITIAL
             else:
                 kind = SyncRunKind.INCREMENTAL
@@ -338,7 +341,11 @@ class RunSyncUseCase:
             generation_id = (
                 latest_gen + 1 if kind == SyncRunKind.FULL_REFRESH else max(1, latest_gen)
             )
-            start_cursor = state.cursor_value if state else None
+            start_cursor = (
+                None
+                if kind == SyncRunKind.FULL_REFRESH
+                else (entity.cursor_value if entity else None)
+            )
 
             sync_run = SyncRun.create(
                 tenant_id=command.tenant_id,
@@ -589,24 +596,27 @@ class RunSyncUseCase:
 
         # 4. Update cursor checkpoint and SyncRun counters in Control Plane
         async with self._control_plane_uow:
-            state = await self._control_plane_uow.stream_states.get_by_stream(
+            entity = await self._control_plane_uow.entities.get_by_stream(
                 tenant_id=tenant_id,
                 connection_id=connection_id,
                 stream_name=stream_name,
             )
-            if state is None:
-                state = ConnectionStreamState.create(
+            if entity is None:
+                entity = ConnectionEntity.create(
                     tenant_id=tenant_id,
                     connection_id=connection_id,
                     stream_name=stream_name,
-                    initial_cursor=next_cursor,
+                    sync_mode=(
+                        SyncMode.FULL_REFRESH
+                        if sync_run.kind == SyncRunKind.FULL_REFRESH
+                        else SyncMode.INCREMENTAL
+                    ),
                 )
-            if next_cursor:
-                state.advance_checkpoint(
-                    new_cursor_value=next_cursor,
-                    records_in_batch=len(page),
-                )
-            await self._control_plane_uow.stream_states.save(state)
+            entity.advance_checkpoint(
+                new_cursor_value=next_cursor,
+                records_in_batch=len(page),
+            )
+            await self._control_plane_uow.entities.save(entity)
             await self._control_plane_uow.sync_runs.save(sync_run)
             await self._control_plane_uow.commit()
 

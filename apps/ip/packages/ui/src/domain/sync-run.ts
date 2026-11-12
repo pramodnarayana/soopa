@@ -22,17 +22,6 @@ export interface SyncRun {
   readonly createdAt: string;
 }
 
-export interface StreamState {
-  readonly stateId: string;
-  readonly tenantId: string;
-  readonly connectionId: string;
-  readonly streamName: string;
-  readonly cursorField: string | null;
-  readonly cursorValue: string | null;
-  readonly recordsSyncedCount: number;
-  readonly lastSyncedAt: string;
-}
-
 export interface TriggerSyncRunInput {
   readonly streamName: string;
   readonly forcedKind?: SyncRunKindValue | null;

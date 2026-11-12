@@ -19,11 +19,11 @@ from ip.engine.domain.normalization.events import (
     TransformationVersionPromotedEvent,
 )
 from ip.engine.domain.replication.events import (
+    ConnectionEntityCheckpointedEvent,
     FetchRecordRequestedEvent,
     GenerationCompletedEvent,
     InboundRecordCreatedEvent,
     ReplicaRecordChangedEvent,
-    StreamStateCheckpointedEvent,
     SyncRunCancelledEvent,
     SyncRunCompletedEvent,
     SyncRunFailedEvent,
@@ -81,15 +81,15 @@ def test_replication_domain_events_expose_routing_headers() -> None:
     assert rep_bulk.get_correlation_id() == "corr_rep"
     assert rep_bulk.get_processing_lane() is EventProcessingLane.BULK
 
-    checkpoint = StreamStateCheckpointedEvent(
-        state_id="st_1",
+    checkpoint = ConnectionEntityCheckpointedEvent(
+        entity_id="ip_cent_1",
         tenant_id="t_1",
         connection_id="c_1",
         stream_name="records",
         cursor_value="cur_9",
         records_synced_count=25,
     )
-    assert checkpoint.event_name == IpEventType.STREAM_STATE_CHECKPOINTED
+    assert checkpoint.event_name == IpEventType.CONNECTION_ENTITY_CHECKPOINTED
     assert checkpoint.get_routing_tenant_id() == "t_1"
 
     fetch_bulk = FetchRecordRequestedEvent(

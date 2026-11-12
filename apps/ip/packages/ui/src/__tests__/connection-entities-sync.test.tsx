@@ -1,4 +1,4 @@
-import { ApiErrorCode, type ApiProblem, err, ok } from '@soopa/ui';
+import { ok } from '@soopa/ui';
 import { RecordingLoggerFake } from '@soopa/ui/testing';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -6,7 +6,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ipQueryKeys } from '../application/query-keys';
 import { buildIngressWebhookUrl } from '../domain/connection';
-import { AuthType, ConnectionHandshakeStatus, UNIVERSAL_SIMULATOR_APP_ID } from '../domain/enums';
+import {
+  AuthType,
+  ConnectionHandshakeStatus,
+  EntitySyncFrom,
+  EntitySyncSchedule,
+  SyncRunKind,
+  UNIVERSAL_SIMULATOR_APP_ID,
+} from '../domain/enums';
 import {
   ActiveConnectionCard,
   shouldActivateCardOnKeyDown,
@@ -14,7 +21,6 @@ import {
 import {
   ConnectionEntitiesSyncTab,
   ConnectionOverviewTab,
-  commitStreamScheduleConfigUpdate,
   reconcileSelectedStreamNames,
 } from '../presentation/connections/ConnectionDetailTabs';
 import {
@@ -28,12 +34,13 @@ import { SimulatorEntitiesSection } from '../presentation/connections/SimulatorE
 import { IpUIProvider } from '../provider/IpUIProvider';
 import {
   createInMemoryIpWorkspaceSeed,
+  type InMemoryIpWorkspaceHarness,
   SEED_CATALOG_APPS,
   SEED_CONNECTION,
+  SEED_CONNECTION_ENTITY,
   SEED_CONNECTION_ID,
   SEED_SIMULATOR_APP_SPEC,
   SEED_SIMULATOR_ENTITY,
-  SEED_STREAM_STATE,
   SEED_SYNC_RUN,
   SEED_TENANT_ID,
 } from '../testing';
@@ -53,15 +60,15 @@ function createEntitiesQueryClient(): QueryClient {
     ok([SEED_SIMULATOR_ENTITY]),
   );
   qc.setQueryData(
-    ipQueryKeys.syncRuns.streamStates(SEED_TENANT_ID, SEED_CONNECTION_ID),
-    ok([SEED_STREAM_STATE]),
+    ipQueryKeys.connections.entities(SEED_TENANT_ID, SEED_CONNECTION_ID),
+    ok([SEED_CONNECTION_ENTITY]),
   );
   qc.setQueryData(
     ipQueryKeys.syncRuns.list(SEED_TENANT_ID, SEED_CONNECTION_ID, 40),
     ok([SEED_SYNC_RUN]),
   );
   qc.setQueryData(
-    ipQueryKeys.connections.catalog(SEED_TENANT_ID, SEED_CONNECTION_ID),
+    ipQueryKeys.connections.discoveredStreams(SEED_TENANT_ID, SEED_CONNECTION_ID),
     ok({
       connectionId: SEED_CONNECTION_ID,
       catalogVersion: 1,
@@ -73,8 +80,11 @@ function createEntitiesQueryClient(): QueryClient {
   return qc;
 }
 
-function renderEntitiesTab(node: React.ReactNode, queryClient: QueryClient): string {
-  const harness = createInMemoryIpWorkspaceSeed();
+function renderEntitiesTab(
+  node: React.ReactNode,
+  queryClient: QueryClient,
+  harness: InMemoryIpWorkspaceHarness = createInMemoryIpWorkspaceSeed(),
+): string {
   const logger = new RecordingLoggerFake();
 
   return renderToStaticMarkup(
@@ -136,9 +146,9 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    qc.setQueryData(ipQueryKeys.syncRuns.streamStates(SEED_TENANT_ID, 'conn_new_clean'), ok([]));
+    qc.setQueryData(ipQueryKeys.connections.entities(SEED_TENANT_ID, 'conn_new_clean'), ok([]));
     qc.setQueryData(
-      ipQueryKeys.connections.catalog(SEED_TENANT_ID, 'conn_new_clean'),
+      ipQueryKeys.connections.discoveredStreams(SEED_TENANT_ID, 'conn_new_clean'),
       ok({
         connectionId: 'conn_new_clean',
         catalogVersion: 1,
@@ -170,9 +180,9 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
-    qc.setQueryData(ipQueryKeys.syncRuns.streamStates(SEED_TENANT_ID, 'conn_generic_sim'), ok([]));
+    qc.setQueryData(ipQueryKeys.connections.entities(SEED_TENANT_ID, 'conn_generic_sim'), ok([]));
     qc.setQueryData(
-      ipQueryKeys.connections.catalog(SEED_TENANT_ID, 'conn_generic_sim'),
+      ipQueryKeys.connections.discoveredStreams(SEED_TENANT_ID, 'conn_generic_sim'),
       ok({
         connectionId: 'conn_generic_sim',
         catalogVersion: 1,
@@ -207,7 +217,7 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(html).toContain('Search Entities');
   });
 
-  it('keeps ConnectionOverviewTab uniform while rendering standalone SimulatorEntitiesSection for Simulator connections', () => {
+  it('isolates Simulate Push strictly onto SimulatorEntitiesSection outside production sync controls', () => {
     const qc = createEntitiesQueryClient();
     const simConnection = {
       ...SEED_CONNECTION,
@@ -238,6 +248,9 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(simulatorSectionHtml).toContain('Create Entity');
     expect(simulatorSectionHtml).toContain('Records per Pull');
     expect(simulatorSectionHtml).toContain('orders');
+    expect(simulatorSectionHtml).toContain('Simulate Push');
+    expect(simulatorSectionHtml).toContain('Edit');
+    expect(simulatorSectionHtml).toContain('Delete');
     expect(simulatorSectionHtml).toContain('role="region"');
     expect(simulatorSectionHtml).toContain('tabindex="0"');
 
@@ -252,13 +265,15 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     );
 
     expect(entitiesHtml).not.toContain('Create Entity');
-    expect(entitiesHtml).toContain('orders');
-    expect(entitiesHtml).toContain('Discover Entities');
-    expect(entitiesHtml).toContain('Webhook');
-    expect(entitiesHtml).toContain('Simulate Push');
+    expect(entitiesHtml).not.toContain('>orders<');
+    expect(entitiesHtml).toContain('records_alpha');
+    expect(entitiesHtml).toContain('Discover Entities...');
+    expect(entitiesHtml).not.toContain('<span>Discover Entities</span>');
+    expect(entitiesHtml).not.toContain('Webhook');
+    expect(entitiesHtml).not.toContain('Simulate Push');
   });
 
-  it('renders ActiveConnectionCard as semantic article with Manage Entities action plus per-stream ingress URL helper', () => {
+  it('renders ActiveConnectionCard with Copy Webhook button plus readable-prefix ingress URL helper', () => {
     const qc = createEntitiesQueryClient();
     const html = renderEntitiesTab(
       <ActiveConnectionCard
@@ -266,7 +281,7 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
         catalogApp={SEED_CATALOG_APPS[0]}
         appIcon={<span>S</span>}
         baseUrl="https://api.soopa.local"
-        tenantId={SEED_TENANT_ID}
+        tenantSlug="acme-tenant"
         onOpenDetail={() => undefined}
         onRequestDelete={() => undefined}
       />,
@@ -274,11 +289,19 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     );
 
     expect(html).toContain('<article');
+    expect(html).toContain('Copy Webhook');
     expect(html).toContain('Manage Entities');
-    expect(html).not.toContain('Copy Webhook');
-    expect(buildIngressWebhookUrl('https://api.soopa.local', 'tenant-1', 'conn-99', 'orders')).toBe(
-      'https://api.soopa.local/api/v1/tenants/tenant-1/ip/ingress/conn-99?stream=orders',
-    );
+    expect(
+      buildIngressWebhookUrl(
+        'https://api.soopa.local',
+        'acme-tenant',
+        'universal_simulator',
+        'ip_conn_99',
+      ),
+    ).toBe('https://api.soopa.local/api/v1/webhooks/acme-tenant/universal_simulator/ip_conn_99');
+    expect(() =>
+      buildIngressWebhookUrl('https://api.soopa.local', '', 'universal_simulator', 'ip_conn_99'),
+    ).toThrow('buildIngressWebhookUrl requires non-empty tenantSlug, appId, and connectionId.');
   });
 
   it('activates ActiveConnectionCard keyboard shortcut only when card root is the direct event target', () => {
@@ -328,43 +351,100 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(findDuplicateSimulatorEntityError(existing, 'customers')).toBeNull();
   });
 
-  it('surfaces ApiProblem via onProblem when stream schedule persistence fails', async () => {
-    const recordedProblems: Array<ApiProblem | null> = [];
-    const failureProblem: ApiProblem = {
-      code: ApiErrorCode.CONFLICT,
-      status: 409,
-      message: 'Unable to persist stream schedule.',
-    };
+  it('rejects custom sync-from updates without an explicit timestamp', async () => {
+    const harness = createInMemoryIpWorkspaceSeed();
+    const invalidCustomRes = await harness.entities.updateEntity(
+      SEED_TENANT_ID,
+      SEED_CONNECTION_ID,
+      'records_alpha',
+      { syncFrom: EntitySyncFrom.CUSTOM },
+    );
+    expect(invalidCustomRes.ok).toBe(false);
+  });
 
-    const failedSave = await commitStreamScheduleConfigUpdate({
-      connection: SEED_CONNECTION,
-      nextSchedules: { orders: '5m' },
-      nextSyncFrom: { orders: '24h' },
-      mutateUpdate: async () => err(failureProblem),
-      onProblem: (problem) => {
-        recordedProblems.push(problem);
-      },
+  it('preserves subscribed entity schedules across tab navigation remounts', async () => {
+    const harness = createInMemoryIpWorkspaceSeed();
+
+    const subscribedRes = await harness.entities.addEntity(SEED_TENANT_ID, SEED_CONNECTION_ID, {
+      streamName: 'customers',
+      syncMode: SyncRunKind.INCREMENTAL,
+      schedule: EntitySyncSchedule.EVERY_5M,
+      syncFrom: EntitySyncFrom.LAST_7D,
+      primaryKey: ['customer_id'],
+      fields: [{ name: 'customer_id', dataType: 'string', nullable: false, description: null }],
+      cursorField: 'updated_at',
     });
+    expect(subscribedRes.ok).toBe(true);
 
-    expect(failedSave).toBe(false);
-    expect(recordedProblems).toEqual([null, failureProblem]);
-
-    const succeededSave = await commitStreamScheduleConfigUpdate({
-      connection: SEED_CONNECTION,
-      nextSchedules: { orders: '15m' },
-      nextSyncFrom: { orders: 'all' },
-      mutateUpdate: async (input) =>
-        ok({
-          ...SEED_CONNECTION,
-          publicConfig: input.updatedPublicConfig,
-        }),
-      onProblem: (problem) => {
-        recordedProblems.push(problem);
+    const customWindowRes = await harness.entities.updateEntity(
+      SEED_TENANT_ID,
+      SEED_CONNECTION_ID,
+      'records_alpha',
+      {
+        schedule: EntitySyncSchedule.HOURLY,
+        syncFrom: EntitySyncFrom.CUSTOM,
+        syncFromAt: '2026-11-01T00:00:00Z',
       },
-    });
+    );
+    expect(customWindowRes.ok).toBe(true);
 
-    expect(succeededSave).toBe(true);
-    expect(recordedProblems).toEqual([null, failureProblem, null]);
+    const qc = createEntitiesQueryClient();
+    const persistedEntities = await harness.entities.listEntities(
+      SEED_TENANT_ID,
+      SEED_CONNECTION_ID,
+    );
+    expect(persistedEntities.ok).toBe(true);
+    if (!persistedEntities.ok) return;
+    qc.setQueryData(
+      ipQueryKeys.connections.entities(SEED_TENANT_ID, SEED_CONNECTION_ID),
+      ok(persistedEntities.value),
+    );
+
+    const initialEntitiesHtml = renderEntitiesTab(
+      <ConnectionEntitiesSyncTab
+        connectionId={SEED_CONNECTION_ID}
+        connection={SEED_CONNECTION}
+        onOpenTrace={() => undefined}
+        onProblem={() => undefined}
+      />,
+      qc,
+      harness,
+    );
+    expect(initialEntitiesHtml).toContain('records_alpha');
+    expect(initialEntitiesHtml).toContain('customers');
+    expect(initialEntitiesHtml).toContain('Every 5 minutes');
+    expect(initialEntitiesHtml).toContain('Last 7 Days');
+    expect(initialEntitiesHtml).toContain('2026-11-01');
+    expect(initialEntitiesHtml).toContain('Sync Selected (2)');
+
+    const overviewHtmlWhileNavigatedAway = renderEntitiesTab(
+      <ConnectionOverviewTab
+        connection={SEED_CONNECTION}
+        onProblem={() => undefined}
+        onDeactivated={() => undefined}
+      />,
+      qc,
+      harness,
+    );
+    expect(overviewHtmlWhileNavigatedAway).toContain('Connection Details');
+    expect(overviewHtmlWhileNavigatedAway).not.toContain('Sync Selected');
+
+    const remountedEntitiesHtml = renderEntitiesTab(
+      <ConnectionEntitiesSyncTab
+        connectionId={SEED_CONNECTION_ID}
+        connection={SEED_CONNECTION}
+        onOpenTrace={() => undefined}
+        onProblem={() => undefined}
+      />,
+      qc,
+      harness,
+    );
+    expect(remountedEntitiesHtml).toContain('records_alpha');
+    expect(remountedEntitiesHtml).toContain('customers');
+    expect(remountedEntitiesHtml).toContain('Every 5 minutes');
+    expect(remountedEntitiesHtml).toContain('Last 7 Days');
+    expect(remountedEntitiesHtml).toContain('2026-11-01');
+    expect(remountedEntitiesHtml).toContain('Sync Selected (2)');
   });
 
   it('renders CreateSimulatorEntityForm with shared MonacoCodeEditor instead of raw textarea', () => {
@@ -511,7 +591,7 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(simulatorDetailHtml).not.toContain('Virtual Sandbox');
   });
 
-  it('displays newly created Simulator entity in SimulatorEntitiesSection plus ConnectionEntitiesSyncTab', async () => {
+  it('keeps ConnectionEntitiesSyncTab clean for newly created Simulator entities until discovered via single combobox', async () => {
     const harness = createInMemoryIpWorkspaceSeed();
     const createdConnRes = await harness.connections.createConnection(SEED_TENANT_ID, {
       appId: UNIVERSAL_SIMULATOR_APP_ID,
@@ -537,13 +617,25 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(entityRes.ok).toBe(true);
     if (!entityRes.ok) return;
 
+    const discoverRes = await harness.connections.discoverCatalog(
+      SEED_TENANT_ID,
+      createdConnRes.value.id,
+    );
+    expect(discoverRes.ok).toBe(true);
+    if (!discoverRes.ok) return;
+    expect(discoverRes.value.streams.map((s) => s.name)).toEqual(['invoices']);
+
     const qc = createEntitiesQueryClient();
     qc.setQueryData(
       ipQueryKeys.simulator.entities(SEED_TENANT_ID, createdConnRes.value.id),
       ok([entityRes.value]),
     );
     qc.setQueryData(
-      ipQueryKeys.syncRuns.streamStates(SEED_TENANT_ID, createdConnRes.value.id),
+      ipQueryKeys.connections.discoveredStreams(SEED_TENANT_ID, createdConnRes.value.id),
+      ok(discoverRes.value),
+    );
+    qc.setQueryData(
+      ipQueryKeys.connections.entities(SEED_TENANT_ID, createdConnRes.value.id),
       ok([]),
     );
     qc.setQueryData(ipQueryKeys.syncRuns.list(SEED_TENANT_ID, createdConnRes.value.id, 40), ok([]));
@@ -566,9 +658,12 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
       />,
       qc,
     );
-    expect(entitiesHtml).toContain('invoices');
-    expect(entitiesHtml).toContain('Sync Selected (1)');
-    expect(entitiesHtml).toContain('Simulate Push');
+    expect(entitiesHtml).not.toContain('invoices');
+    expect(entitiesHtml).toContain('No entities');
+    expect(entitiesHtml).toContain('Sync Selected (0)');
+    expect(entitiesHtml).toContain('Discover Entities...');
+    expect(entitiesHtml).toContain('role="combobox"');
+    expect(entitiesHtml).not.toContain('<span>Discover Entities</span>');
   });
 
   it('returns empty discovered catalog without error when simulator connection has zero entities configured', async () => {

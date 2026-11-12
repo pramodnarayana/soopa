@@ -8,17 +8,22 @@ import {
 } from '@soopa/ui';
 import type {
   CreateSimulatorEntityInput,
+  SimulatePushInput,
+  SimulatePushResult,
   SimulatorEntity,
   UpdateSimulatorEntityInput,
 } from '../../../domain/simulator';
 import type { SimulatorRepositoryPort } from '../../../ports/simulator-repository.port';
 import {
   mapCreateSimulatorEntityToWire,
+  mapSimulatePushFromWire,
+  mapSimulatePushToWire,
   mapSimulatorEntityFromWire,
   mapUpdateSimulatorEntityToWire,
 } from '../mappers/simulator.mapper';
 import { parseAndMapResult } from '../parse-wire';
 import {
+  SimulatePushWireSchema,
   SimulatorEntityListWireSchema,
   SimulatorEntityWireSchema,
 } from '../schemas/simulator.schema';
@@ -99,5 +104,23 @@ export class HttpSimulatorRepository implements SimulatorRepositoryPort {
       return err(raw.error);
     }
     return ok(undefined);
+  }
+
+  public async simulatePush(
+    tenantId: string,
+    connectionId: string,
+    input: SimulatePushInput,
+  ): Promise<Result<SimulatePushResult, ApiProblem>> {
+    const raw = await this.httpClient.post<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/connections/${encodeURIComponent(connectionId)}/simulate-push`,
+      mapSimulatePushToWire(input),
+    );
+    return parseAndMapResult(
+      raw,
+      SimulatePushWireSchema,
+      mapSimulatePushFromWire,
+      `POST /ip/connections/${connectionId}/simulate-push`,
+      this.logger,
+    );
   }
 }

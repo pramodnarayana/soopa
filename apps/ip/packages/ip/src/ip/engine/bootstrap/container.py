@@ -51,17 +51,14 @@ from ip.engine.adapters.outbound.auth.token_refresh_lock import (
 from ip.engine.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
 from ip.engine.adapters.outbound.connectors.generic_http_connector import GenericHttpConnector
 from ip.engine.adapters.outbound.connectors.sftp_connector import SftpConnector
-from ip.engine.adapters.outbound.database.control_plane.catalog_repository import (
-    SqlAlchemyCatalogRepository,
+from ip.engine.adapters.outbound.database.control_plane.connection_entity_repository import (
+    SqlAlchemyConnectionEntityRepository,
 )
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
     SqlAlchemyConnectionRepository,
 )
 from ip.engine.adapters.outbound.database.control_plane.stitch_repository import (
     SqlAlchemyStitchRepository,
-)
-from ip.engine.adapters.outbound.database.control_plane.stream_state_repository import (
-    SqlAlchemyStreamStateRepository,
 )
 from ip.engine.adapters.outbound.database.control_plane.sync_run_repository import (
     SqlAlchemySyncRunRepository,
@@ -345,8 +342,7 @@ def create_ip_control_plane_uow(
     return SqlAlchemyIpControlPlaneUnitOfWork(
         global_session,
         connections=SqlAlchemyConnectionRepository(global_session),
-        catalogs=SqlAlchemyCatalogRepository(global_session),
-        stream_states=SqlAlchemyStreamStateRepository(global_session),
+        entities=SqlAlchemyConnectionEntityRepository(global_session),
         sync_runs=SqlAlchemySyncRunRepository(global_session),
         transformations=SqlAlchemyTransformationRepository(global_session),
         stitches=SqlAlchemyStitchRepository(global_session),

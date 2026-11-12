@@ -16,7 +16,6 @@ from fastapi import (
     Response,
     status,
 )
-from identity.domain.identity_context import IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
     get_inbound_ack,
     get_inbound_decoder,
@@ -24,7 +23,7 @@ from ip.engine.adapters.inbound.api.dependencies import (
     get_ip_control_plane_uow,
     get_ip_data_plane_uow_provider,
     get_tiered_storage,
-    require_tenant_member,
+    resolve_tenant_id_by_slug,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     ApiErrorHttpResponse,
@@ -40,6 +39,7 @@ from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
     ReceivePushUseCase,
 )
 from ip.engine.domain.connection.enums import ConnectionStatus
+from ip.engine.domain.constants import DEFAULT_WEBHOOK_STREAM
 from ip.engine.domain.exceptions import ConnectionDeactivatedError, ConnectionNotFoundError
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
@@ -54,7 +54,7 @@ from seedwork.domain.types import JsonValue
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/tenants/{tenant_id}/ip/ingress",
+    prefix="/api/v1/webhooks",
     tags=["Integration Platform - Ingestion Gateway (L1)"],
 )
 
@@ -121,7 +121,7 @@ def _is_allowed_ingress_header(header_name: str) -> bool:
 
 
 @router.post(
-    "/{connection_id}",
+    "/{tenant_slug}/{app_id}/{connection_id}",
     response_model=IngressRecordHttpResponse,
     responses={
         status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
@@ -130,10 +130,11 @@ def _is_allowed_ingress_header(header_name: str) -> bool:
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def ingest_record(
-    tenant_id: str,
+    tenant_slug: str,
+    app_id: str,
     connection_id: str,
     request: Request,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    tenant_id: Annotated[str, Depends(resolve_tenant_id_by_slug)],
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
     ip_dp_uow_provider: Annotated[
         IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
@@ -142,16 +143,22 @@ async def ingest_record(
     verifier: Annotated[InboundVerifierPort, Depends(get_inbound_verifier)],
     decoder: Annotated[InboundPayloadDecoderPort, Depends(get_inbound_decoder)],
     ack: Annotated[InboundAckPort, Depends(get_inbound_ack)],
+    body: Annotated[dict[str, JsonValue] | list[JsonValue], Body(...)],
     stream_name: Annotated[
         str,
-        Query(..., alias="stream", description="Target stream name, e.g. events, contacts, orders"),
-    ],
-    body: Annotated[dict[str, JsonValue] | list[JsonValue], Body(...)],
+        Query(
+            alias="stream",
+            min_length=1,
+            description="Target stream name; defaults to 'events' when omitted.",
+        ),
+    ] = DEFAULT_WEBHOOK_STREAM,
     correlation_id: Annotated[str | None, Header(alias="X-Correlation-ID")] = None,
 ) -> IngressRecordHttpResponse | Response:
     """Captures external raw data payloads with sub-20ms response and enqueues transactional outbox event."""
     log = logger.bind(
+        tenant_slug=tenant_slug,
         tenant_id=tenant_id,
+        app_id=app_id,
         connection_id=connection_id,
         stream_name=stream_name,
         correlation_id=correlation_id,
@@ -168,6 +175,15 @@ async def ingest_record(
         return from_ip_error(err)
 
     conn = conn_res.connection
+    if conn.app_id != app_id:
+        mismatch_err = ConnectionNotFoundError.for_id(connection_id)
+        log.error(
+            "ip_ingest_record.app_mismatch",
+            expected_app_id=conn.app_id,
+            error_code=mismatch_err.code.value,
+        )
+        return from_ip_error(mismatch_err)
+
     if conn.status == ConnectionStatus.DEACTIVATED.value:
         deact_err = ConnectionDeactivatedError.for_id(connection_id)
         log.error("ip_ingest_record.connection_deactivated", error_code=deact_err.code.value)

@@ -133,6 +133,22 @@ class IpApiProvider(IpApiProviderPort):
         resolved_id = result.scalar_one_or_none()
         return str(resolved_id) if resolved_id is not None else None
 
+    async def resolve_tenant_id_by_slug(
+        self, global_session: object, tenant_slug: str
+    ) -> str | None:
+        normalized_slug = tenant_slug.strip().lower()
+        if not normalized_slug:
+            return None
+        session = _as_async_session(global_session)
+        result = await session.execute(
+            select(TenantORM.id).where(
+                TenantORM.slug == normalized_slug,
+                TenantORM.deleted_at.is_(None),
+            )
+        )
+        resolved_id = result.scalar_one_or_none()
+        return str(resolved_id) if resolved_id is not None else None
+
     def get_catalog_registry(self) -> CatalogRegistryPort:
         settings = get_ip_engine_settings()
         if self._catalog_registry_factory is not None:

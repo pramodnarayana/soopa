@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SyncRunStatus } from '../domain/enums';
-import type { StreamState, SyncRun, TriggerSyncRunInput } from '../domain/sync-run';
+import type { SyncRun, TriggerSyncRunInput } from '../domain/sync-run';
 import { useIpWorkspace } from '../provider/IpRepositoriesContext';
 import { logResultOutcome } from './mutation-telemetry';
 import { ipQueryKeys } from './query-keys';
@@ -32,16 +32,6 @@ export function useSyncRunsQuery(
   return projectResultQuery(query);
 }
 
-export function useStreamStatesQuery(connectionId: string): IpQueryView<readonly StreamState[]> {
-  const { tenantId, repositories } = useIpWorkspace();
-  const query = useQuery({
-    queryKey: ipQueryKeys.syncRuns.streamStates(tenantId, connectionId),
-    queryFn: ({ signal }) => repositories.syncRuns.listStreamStates(tenantId, connectionId, signal),
-    enabled: Boolean(tenantId && connectionId),
-  });
-  return projectResultQuery(query);
-}
-
 export function useTriggerSyncRunMutation(connectionId: string) {
   const { tenantId, repositories, logger } = useIpWorkspace();
   const queryClient = useQueryClient();
@@ -58,25 +48,8 @@ export function useTriggerSyncRunMutation(connectionId: string) {
         void queryClient.invalidateQueries({
           queryKey: ipQueryKeys.syncRuns.all(tenantId, connectionId),
         });
-      }
-    },
-  });
-}
-
-export function useResetStreamCheckpointMutation(connectionId: string) {
-  const { tenantId, repositories, logger } = useIpWorkspace();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (streamName: string) =>
-      repositories.syncRuns.resetStreamCheckpoint(tenantId, connectionId, streamName),
-    onSuccess: (res, streamName) => {
-      logResultOutcome(logger, 'ip_sync_run.reset_checkpoint', res, {
-        connection_id: connectionId,
-        stream_name: streamName,
-      });
-      if (res.ok) {
         void queryClient.invalidateQueries({
-          queryKey: ipQueryKeys.syncRuns.streamStates(tenantId, connectionId),
+          queryKey: ipQueryKeys.connections.entities(tenantId, connectionId),
         });
       }
     },

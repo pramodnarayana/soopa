@@ -32,7 +32,9 @@ from ip.engine.domain.exceptions import (
     IpErrorCode,
     Result,
 )
-from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
+from ip.engine.ports.outbound.connection_entity_repository_port import (
+    ConnectionEntityRepositoryPort,
+)
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
@@ -43,7 +45,6 @@ from ip.engine.ports.outbound.connector_port import (
     WriteResultDTO,
 )
 from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort
-from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.transformation_repository_port import TransformationRepositoryPort
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
@@ -76,8 +77,7 @@ class _FakeConnectionRepo(ConnectionRepositoryPort):
 
 class _FakeControlPlaneUoW(IpControlPlaneUnitOfWorkPort):
     connections: ConnectionRepositoryPort
-    catalogs: CatalogRepositoryPort
-    stream_states: StreamStateRepositoryPort
+    entities: ConnectionEntityRepositoryPort
     sync_runs: SyncRunRepositoryPort
     transformations: TransformationRepositoryPort
     stitches: StitchRepositoryPort

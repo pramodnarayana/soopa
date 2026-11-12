@@ -129,6 +129,8 @@ def _map_catalog_dto_to_response(dto: DiscoveredCatalogDTO) -> DiscoveredCatalog
                 primary_key=list(s.primary_key),
                 cursor_field=s.cursor_field,
                 supported_sync_modes=list(s.supported_sync_modes),
+                default_transformation_id=s.default_transformation_id,
+                default_transformation_version=s.default_transformation_version,
             )
             for s in dto.streams
         ],

@@ -9,6 +9,7 @@ import { RecordingLoggerFake } from '@soopa/ui/testing';
 import { describe, expect, it } from 'vitest';
 import {
   HttpCatalogRepository,
+  HttpConnectionEntityRepository,
   HttpConnectionRepository,
   HttpIntervalRepository,
   HttpSimulatorRepository,
@@ -17,7 +18,14 @@ import {
   HttpTraceRepository,
   HttpTransformationRepository,
 } from '../adapters/http';
-import { AuthType, ReplayStage, SyncRunKind, TransformationMode } from '../domain/enums';
+import {
+  AuthType,
+  EntitySyncFrom,
+  EntitySyncSchedule,
+  ReplayStage,
+  SyncRunKind,
+  TransformationMode,
+} from '../domain/enums';
 import { SimulatorVelocityMode } from '../domain/simulator';
 
 function expectOk<T>(result: Result<T, ApiProblem>): T {
@@ -93,15 +101,24 @@ const WIRE_SYNC_RUN = {
   created_at: '2026-10-29T08:00:00Z',
 };
 
-const WIRE_STREAM_STATE = {
-  state_id: 'st_01',
+const WIRE_CONNECTION_ENTITY = {
+  entity_id: 'ip_cent_01',
   tenant_id: 'ten_01',
   connection_id: 'conn_01',
   stream_name: 'records_alpha',
+  sync_mode: 'INCREMENTAL',
+  schedule: '15m',
+  sync_from: 'all',
+  sync_from_at: null,
+  is_enabled: true,
+  primary_key: ['record_id'],
+  fields: [{ name: 'record_id', data_type: 'string', nullable: false, description: null }],
   cursor_field: 'captured_at',
   cursor_value: '2026-10-29T08:00:00Z',
   records_synced_count: 150,
   last_synced_at: '2026-10-29T08:00:05Z',
+  created_at: '2026-10-20T10:05:00Z',
+  updated_at: '2026-10-29T08:00:05Z',
 };
 
 const WIRE_TRANSFORMATION = {
@@ -302,18 +319,12 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     expect(deleteCall?.url).toContain('permanent=true');
   });
 
-  it('maps HttpSyncRunRepository wire responses across all 5 methods', async () => {
+  it('maps HttpSyncRunRepository wire responses across all 3 methods', async () => {
     const logger = new RecordingLoggerFake();
     const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/connections/conn_01/sync-runs': [WIRE_SYNC_RUN],
       'GET /api/v1/tenants/ten_01/ip/connections/conn_01/sync-runs/sync_01': WIRE_SYNC_RUN,
       'POST /api/v1/tenants/ten_01/ip/connections/conn_01/sync-runs': WIRE_SYNC_RUN,
-      'GET /api/v1/tenants/ten_01/ip/connections/conn_01/streams/state': [WIRE_STREAM_STATE],
-      'POST /api/v1/tenants/ten_01/ip/connections/conn_01/streams/records_alpha/reset': {
-        ...WIRE_STREAM_STATE,
-        cursor_value: null,
-        records_synced_count: 0,
-      },
     });
 
     const client = new FetchHttpClientAdapter({
@@ -336,15 +347,74 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
       }),
     );
     expect(triggered.runId).toBe('sync_01');
+    expect(calls).toHaveLength(3);
+  });
 
-    const states = expectOk(await syncRepo.listStreamStates('ten_01', 'conn_01'));
-    expect(states[0]?.cursorField).toBe('captured_at');
+  it('maps HttpConnectionEntityRepository wire responses across all 5 methods', async () => {
+    const logger = new RecordingLoggerFake();
+    const { fetchImpl, calls } = createRouteFetch({
+      'GET /api/v1/tenants/ten_01/ip/connections/conn_01/entities': [WIRE_CONNECTION_ENTITY],
+      'POST /api/v1/tenants/ten_01/ip/connections/conn_01/entities': WIRE_CONNECTION_ENTITY,
+      'PATCH /api/v1/tenants/ten_01/ip/connections/conn_01/entities/records_alpha': {
+        ...WIRE_CONNECTION_ENTITY,
+        schedule: '5m',
+        sync_from: '7d',
+      },
+      'POST /api/v1/tenants/ten_01/ip/connections/conn_01/entities/records_alpha/reset-checkpoint':
+        {
+          ...WIRE_CONNECTION_ENTITY,
+          cursor_value: null,
+          records_synced_count: 0,
+          last_synced_at: null,
+        },
+      'DELETE /api/v1/tenants/ten_01/ip/connections/conn_01/entities/records_alpha': {},
+    });
 
-    const reset = expectOk(
-      await syncRepo.resetStreamCheckpoint('ten_01', 'conn_01', 'records_alpha'),
+    const client = new FetchHttpClientAdapter({
+      baseUrl: 'https://api.soopa.local',
+      fetchImpl,
+      logger,
+    });
+    const entityRepo = new HttpConnectionEntityRepository(client, logger);
+
+    const listed = expectOk(await entityRepo.listEntities('ten_01', 'conn_01'));
+    expect(listed[0]?.entityId).toBe('ip_cent_01');
+    expect(listed[0]?.cursorField).toBe('captured_at');
+
+    const added = expectOk(
+      await entityRepo.addEntity('ten_01', 'conn_01', {
+        streamName: 'records_alpha',
+        syncMode: SyncRunKind.INCREMENTAL,
+        schedule: EntitySyncSchedule.EVERY_15M,
+        syncFrom: EntitySyncFrom.ALL,
+        primaryKey: ['record_id'],
+        fields: [{ name: 'record_id', dataType: 'string', nullable: false, description: null }],
+        cursorField: 'captured_at',
+        defaultTransformationId: 'acme.record_alpha.to_gem',
+        defaultTransformationVersion: 2,
+      }),
     );
+    expect(added.streamName).toBe('records_alpha');
+
+    const updated = expectOk(
+      await entityRepo.updateEntity('ten_01', 'conn_01', 'records_alpha', {
+        schedule: EntitySyncSchedule.EVERY_5M,
+        syncFrom: EntitySyncFrom.LAST_7D,
+      }),
+    );
+    expect(updated.schedule).toBe(EntitySyncSchedule.EVERY_5M);
+    expect(updated.syncFrom).toBe(EntitySyncFrom.LAST_7D);
+
+    const reset = expectOk(await entityRepo.resetCheckpoint('ten_01', 'conn_01', 'records_alpha'));
     expect(reset.cursorValue).toBeNull();
+    expect(reset.recordsSyncedCount).toBe(0);
+
+    expectOk(await entityRepo.removeEntity('ten_01', 'conn_01', 'records_alpha'));
     expect(calls).toHaveLength(5);
+
+    const addBody = JSON.parse(calls[1]?.bodyText ?? '{}');
+    expect(addBody.default_transformation_id).toBe('acme.record_alpha.to_gem');
+    expect(addBody.default_transformation_version).toBe(2);
   });
 
   it('maps HttpTransformationRepository wire responses across all 6 methods', async () => {
@@ -971,6 +1041,14 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
         wireEntity,
       'DELETE /api/v1/tenants/ten_01/ip/connections/conn_0102030405060708090a0b0c/simulator/entities/sim_ent_0102030405060708090a0b0c':
         {},
+      'POST /api/v1/tenants/ten_01/ip/connections/conn_0102030405060708090a0b0c/simulate-push': {
+        connection_id: 'conn_0102030405060708090a0b0c',
+        stream_name: 'orders',
+        records_pushed: 2,
+        record_ids: ['SIM-000001', 'SIM-000002'],
+        trace_ids: ['trc_sim_001', 'trc_sim_002'],
+        status: 'ACCEPTED',
+      },
     });
 
     const client = new FetchHttpClientAdapter({
@@ -1018,6 +1096,15 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
         'sim_ent_0102030405060708090a0b0c',
       ),
     );
-    expect(calls).toHaveLength(4);
+
+    const pushed = expectOk(
+      await simRepo.simulatePush('ten_01', 'conn_0102030405060708090a0b0c', {
+        streamName: 'orders',
+        count: 2,
+      }),
+    );
+    expect(pushed.recordsPushed).toBe(2);
+    expect(pushed.traceIds).toEqual(['trc_sim_001', 'trc_sim_002']);
+    expect(calls).toHaveLength(5);
   });
 });

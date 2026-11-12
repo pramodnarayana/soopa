@@ -22,15 +22,17 @@ from ip.engine.domain.exceptions import (
     PayloadNotFoundError,
     Result,
 )
+from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import (
     IngestionMode,
     SyncRunKind,
     SyncRunStatus,
 )
 from ip.engine.domain.replication.inbound_record import InboundRecord
-from ip.engine.domain.replication.stream_state import ConnectionStreamState
 from ip.engine.domain.replication.sync_run import SyncRun
-from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
+from ip.engine.ports.outbound.connection_entity_repository_port import (
+    ConnectionEntityRepositoryPort,
+)
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
@@ -52,7 +54,6 @@ from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecor
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
 )
-from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStoragePort,
@@ -88,26 +89,29 @@ class FakeConnectionRepository(ConnectionRepositoryPort):
         return list(self.connections.values())
 
 
-class FakeStreamStateRepository(StreamStateRepositoryPort):
+class FakeConnectionEntityRepository(ConnectionEntityRepositoryPort):
     def __init__(self) -> None:
-        self.states: dict[tuple[str, str, str], ConnectionStreamState] = {}
+        self.entities: dict[tuple[str, str, str], ConnectionEntity] = {}
 
-    async def save(self, state: ConnectionStreamState) -> None:
-        self.states[(state.tenant_id, state.connection_id, state.stream_name)] = state
+    async def save(self, entity: ConnectionEntity) -> None:
+        self.entities[(entity.tenant_id, entity.connection_id, entity.stream_name)] = entity
 
     async def get_by_stream(
         self, tenant_id: str, connection_id: str, stream_name: str
-    ) -> ConnectionStreamState | None:
-        return self.states.get((tenant_id, connection_id, stream_name))
+    ) -> ConnectionEntity | None:
+        return self.entities.get((tenant_id, connection_id, stream_name))
 
     async def list_by_connection(
         self, tenant_id: str, connection_id: str
-    ) -> Sequence[ConnectionStreamState]:
+    ) -> Sequence[ConnectionEntity]:
         return [
-            s
-            for s in self.states.values()
-            if s.tenant_id == tenant_id and s.connection_id == connection_id
+            e
+            for e in self.entities.values()
+            if e.tenant_id == tenant_id and e.connection_id == connection_id
         ]
+
+    async def delete(self, entity: ConnectionEntity) -> None:
+        self.entities.pop((entity.tenant_id, entity.connection_id, entity.stream_name), None)
 
 
 class FakeSyncRunRepository(SyncRunRepositoryPort):
@@ -163,13 +167,9 @@ class FakeSyncRunRepository(SyncRunRepositoryPort):
 class FakeControlPlaneUnitOfWork(IpControlPlaneUnitOfWorkPort):
     def __init__(self) -> None:
         self.connections = FakeConnectionRepository()
-        self.stream_states = FakeStreamStateRepository()
+        self.entities = FakeConnectionEntityRepository()
         self.sync_runs = FakeSyncRunRepository()
         self.committed = False
-
-    @property
-    def catalogs(self) -> CatalogRepositoryPort:
-        raise NotImplementedError
 
     async def __aenter__(self) -> FakeControlPlaneUnitOfWork:
         return self
@@ -462,11 +462,11 @@ async def test_run_sync_initial_pull() -> None:
     assert res.records_synced == 2
     assert res.end_checkpoint == "2026-10-23T10:01:00Z"
 
-    # Check Control Plane: Stream state updated
-    state = await cp_uow.stream_states.get_by_stream("tenant_a", "conn_1", "records_alpha")
-    assert state is not None
-    assert state.cursor_value == "2026-10-23T10:01:00Z"
-    assert state.records_synced_count == 2
+    # Check Control Plane: Subscribed entity watermark updated
+    entity = await cp_uow.entities.get_by_stream("tenant_a", "conn_1", "records_alpha")
+    assert entity is not None
+    assert entity.cursor_value == "2026-10-23T10:01:00Z"
+    assert entity.records_synced_count == 2
 
     # Check Data Plane: InboundRecord persisted with PULL_INITIAL
     assert len(dp_uow.inbound_records.records) == 1
@@ -482,14 +482,14 @@ async def test_run_sync_incremental_with_lookback() -> None:
     cipher = FakeCipher()
     storage = FakeTieredStorageAdapter()
 
-    # Pre-seed existing stream state
-    existing_state = ConnectionStreamState.create(
+    # Pre-seed existing subscribed entity watermark
+    existing_entity = ConnectionEntity.create(
         tenant_id="tenant_a",
         connection_id="conn_1",
         stream_name="records_alpha",
         initial_cursor="2026-10-23T10:05:00+00:00",
     )
-    await cp_uow.stream_states.save(existing_state)
+    await cp_uow.entities.save(existing_entity)
 
     connector = FakePagingConnector([])
     connectors = {"acme_source": connector}

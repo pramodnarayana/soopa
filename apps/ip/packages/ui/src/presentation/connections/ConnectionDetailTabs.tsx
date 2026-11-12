@@ -2,11 +2,6 @@ import {
   ApiErrorCode,
   type ApiProblem,
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   CopyableIdPill,
   DataTable,
   Dialog,
@@ -17,7 +12,6 @@ import {
   DialogTitle,
   Input,
   Label,
-  type Result,
   SearchableSelect,
   type SearchableSelectOption,
   Select,
@@ -36,50 +30,51 @@ import {
 } from '@soopa/ui';
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import {
-  Check,
   ChevronDown,
   ChevronRight,
-  Compass,
-  Copy,
   Database,
   Play,
-  Radio,
+  RotateCcw,
   Search,
   ShieldAlert,
+  Trash2,
 } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useCatalogAppSpecQuery } from '../../application/use-catalog-queries';
 import {
-  useConnectionCatalogQuery,
+  useAddConnectionEntityMutation,
+  useConnectionEntitiesQuery,
+  useRemoveConnectionEntityMutation,
+  useResetConnectionEntityCheckpointMutation,
+  useUpdateConnectionEntityMutation,
+} from '../../application/use-connection-entity-queries';
+import {
   useDeactivateConnectionMutation,
   useDeleteConnectionMutation,
   useDiscoverCatalogMutation,
+  useDiscoveredStreamsQuery,
   useRelinkConnectionMutation,
-  useSimulatePushMutation,
   useUpdateConnectionMutation,
 } from '../../application/use-connection-queries';
-import { useSimulatorEntitiesQuery } from '../../application/use-simulator-queries';
 import {
-  useStreamStatesQuery,
   useSyncRunsQuery,
   useTriggerSyncRunMutation,
 } from '../../application/use-sync-run-queries';
-import {
-  buildIngressWebhookUrl,
-  type Connection,
-  type DiscoveredCatalog,
-  type StreamSchema,
-} from '../../domain/connection';
+import type { Connection } from '../../domain/connection';
+import type { ConnectionEntityField } from '../../domain/connection-entity';
 import {
   ConnectionStatus,
   ConnectorPropertyKey,
+  EntitySyncFrom,
+  type EntitySyncFromValue,
+  EntitySyncSchedule,
+  type EntitySyncScheduleValue,
   SyncRunKind,
+  type SyncRunKindValue,
   SyncRunStatus,
-  UNIVERSAL_SIMULATOR_APP_ID,
 } from '../../domain/enums';
-import type { StreamState, SyncRun } from '../../domain/sync-run';
-import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
+import type { SyncRun } from '../../domain/sync-run';
 import { formatRelativeTimestamp, mapSyncRunStatusTone } from '../shared/status-mapping';
 import {
   isPropertyVisible,
@@ -91,11 +86,14 @@ import {
 
 const EntityRowLocalStatus = {
   UNSYNCED: 'UNSYNCED',
-  UNKNOWN: 'UNKNOWN',
 } as const;
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function isEntitySyncScheduleValue(value: string): value is EntitySyncScheduleValue {
+  return Object.values(EntitySyncSchedule).some((item) => item === value);
+}
+
+function isEntitySyncFromValue(value: string): value is EntitySyncFromValue {
+  return Object.values(EntitySyncFrom).some((item) => item === value);
 }
 
 export function ConnectionOverviewTab({
@@ -365,138 +363,6 @@ export function ConnectionOverviewTab({
   );
 }
 
-export function ConnectionCatalogTab({
-  connectionId,
-  onProblem,
-  onConfigureTransformation,
-}: {
-  readonly connectionId: string;
-  readonly onProblem: (problem: ApiProblem | null) => void;
-  readonly onConfigureTransformation: () => void;
-}) {
-  const [discovered, setDiscovered] = useState<DiscoveredCatalog | null>(null);
-  const discoverMutation = useDiscoverCatalogMutation(connectionId);
-
-  const handleDiscover = async (): Promise<void> => {
-    onProblem(null);
-    const res = await discoverMutation.mutateAsync();
-    if (!res.ok) {
-      onProblem(res.error);
-      return;
-    }
-    setDiscovered(res.value);
-    toast.success(
-      `Discovered ${res.value.streams.length} stream(s) (Catalog v${res.value.catalogVersion}).`,
-    );
-  };
-
-  const streams = useMemo(() => [...(discovered?.streams ?? [])], [discovered]);
-
-  const columns = useMemo<ColumnDef<StreamSchema>[]>(
-    () => [
-      {
-        accessorKey: 'name',
-        header: 'Stream Name',
-        cell: ({ row }) => <span className="font-mono font-semibold">{row.original.name}</span>,
-      },
-      {
-        id: 'primaryKey',
-        header: 'Primary Key',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs">{row.original.primaryKey.join(', ') || '—'}</span>
-        ),
-      },
-      {
-        accessorKey: 'cursorField',
-        header: 'Incremental Cursor',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs">{row.original.cursorField ?? '—'}</span>
-        ),
-      },
-      {
-        id: 'syncModes',
-        header: 'Supported Sync Modes',
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            {row.original.supportedSyncModes.map((mode) => (
-              <StatusBadge key={mode} label={mode} tone={StatusTone.NEUTRAL} />
-            ))}
-          </div>
-        ),
-      },
-      {
-        id: 'fieldsCount',
-        header: 'Fields',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs tabular-nums">{row.original.fields.length}</span>
-        ),
-      },
-      {
-        id: 'actions',
-        header: 'L3 Transformation',
-        cell: () => (
-          <Button type="button" variant="outline" size="sm" onClick={onConfigureTransformation}>
-            Configure Transformer
-          </Button>
-        ),
-      },
-    ],
-    [onConfigureTransformation],
-  );
-
-  const table = useReactTable({
-    data: streams,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>Discovered Source Schema Catalog</CardTitle>
-          <CardDescription>
-            Introspect live streams, primary keys, and incremental cursor capabilities directly from
-            the connector.
-          </CardDescription>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          disabled={discoverMutation.isPending}
-          onClick={() => void handleDiscover()}
-          className="gap-1.5"
-        >
-          <Compass className="h-4 w-4" />
-          <span>{discoverMutation.isPending ? 'Introspecting...' : 'Discover Schema Catalog'}</span>
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {discovered ? (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <CopyableIdPill
-              value={discovered.catalogHash}
-              prefixLabel="Catalog Hash"
-              truncateLength={16}
-            />
-            <span>Version v{discovered.catalogVersion}</span>
-          </div>
-        ) : null}
-        <DataTable
-          table={table}
-          columnsLength={columns.length}
-          isLoading={discoverMutation.isPending}
-          dataLength={streams.length}
-          ariaLabel="Discovered connector streams"
-          emptyIcon={<Database className="h-6 w-6" />}
-          emptyTitle="Catalog Not Yet Introspected"
-          emptyDescription="Click Discover Schema Catalog to fetch live stream schemas from the external endpoint."
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
 export interface ConnectionEntitiesSyncTabProps {
   readonly connectionId: string;
   readonly connection?: Connection;
@@ -505,77 +371,51 @@ export interface ConnectionEntitiesSyncTabProps {
   readonly onProblem: (problem: ApiProblem | null) => void;
 }
 
-const SCHEDULE_OPTIONS: readonly { readonly value: string; readonly label: string }[] = [
-  { value: 'manual', label: 'Manual' },
-  { value: '5m', label: 'Every 5 minutes' },
-  { value: '15m', label: 'Every 15 minutes' },
-  { value: '1h', label: 'Hourly' },
-  { value: '6h', label: 'Every 6 hours' },
-  { value: '24h', label: 'Daily' },
+const SCHEDULE_OPTIONS: readonly {
+  readonly value: EntitySyncScheduleValue;
+  readonly label: string;
+}[] = [
+  { value: EntitySyncSchedule.MANUAL, label: 'Manual' },
+  { value: EntitySyncSchedule.EVERY_5M, label: 'Every 5 minutes' },
+  { value: EntitySyncSchedule.EVERY_15M, label: 'Every 15 minutes' },
+  { value: EntitySyncSchedule.HOURLY, label: 'Hourly' },
+  { value: EntitySyncSchedule.EVERY_6H, label: 'Every 6 hours' },
+  { value: EntitySyncSchedule.DAILY, label: 'Daily' },
 ];
 
-const SYNC_FROM_OPTIONS: readonly { readonly value: string; readonly label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: '30d', label: 'Last 30 Days' },
-  { value: '7d', label: 'Last 7 Days' },
-  { value: '24h', label: 'Last 24 Hours' },
-  { value: 'custom', label: 'Specific Date' },
+const SYNC_FROM_OPTIONS: readonly {
+  readonly value: EntitySyncFromValue;
+  readonly label: string;
+}[] = [
+  { value: EntitySyncFrom.ALL, label: 'All' },
+  { value: EntitySyncFrom.LAST_90D, label: 'Last 90 Days' },
+  { value: EntitySyncFrom.LAST_30D, label: 'Last 30 Days' },
+  { value: EntitySyncFrom.LAST_7D, label: 'Last 7 Days' },
+  { value: EntitySyncFrom.LAST_24H, label: 'Last 24 Hours' },
+  { value: EntitySyncFrom.CUSTOM, label: 'Specific Date' },
 ];
 
 interface EntityRow {
+  readonly entityId: string;
   readonly streamName: string;
-  readonly canonical: string;
+  readonly syncMode: SyncRunKindValue | (string & {});
+  readonly schedule: EntitySyncScheduleValue | (string & {});
+  readonly syncFrom: EntitySyncFromValue | (string & {});
+  readonly syncFromAt: string | null;
+  readonly isEnabled: boolean;
+  readonly primaryKey: readonly string[];
+  readonly fields: readonly ConnectionEntityField[];
   readonly status: string;
-  readonly syncMode: string;
   readonly cursorField: string | null;
   readonly cursorValue: string | null;
   readonly recordsSyncedCount: number;
   readonly lastSyncedAt: string | null;
 }
 
-export interface StreamScheduleMutationInput {
-  readonly newName: string;
-  readonly updatedPublicConfig: Record<string, unknown>;
-}
-
-export async function commitStreamScheduleConfigUpdate(params: {
-  readonly connection: Connection | undefined;
-  readonly nextSchedules: Record<string, string>;
-  readonly nextSyncFrom: Record<string, string>;
-  readonly mutateUpdate: (
-    input: StreamScheduleMutationInput,
-  ) => Promise<Result<Connection, ApiProblem>>;
-  readonly onProblem: (problem: ApiProblem | null) => void;
-}): Promise<boolean> {
-  const { connection, nextSchedules, nextSyncFrom, mutateUpdate, onProblem } = params;
-  if (!connection) return false;
-  onProblem(null);
-  const allKeys = new Set([...Object.keys(nextSchedules), ...Object.keys(nextSyncFrom)]);
-  const serializedSchedules: Record<string, { schedule: string; sync_from: string }> = {};
-  for (const key of allKeys) {
-    serializedSchedules[key] = {
-      schedule: nextSchedules[key] ?? '15m',
-      sync_from: nextSyncFrom[key] ?? 'all',
-    };
-  }
-  const res = await mutateUpdate({
-    newName: connection.name,
-    updatedPublicConfig: {
-      ...connection.publicConfig,
-      stream_schedules: serializedSchedules,
-    },
-  });
-  if (!res.ok) {
-    onProblem(res.error);
-    return false;
-  }
-  return true;
-}
-
 export function reconcileSelectedStreamNames(
   previous: Set<string>,
   validStreamNames: ReadonlySet<string>,
-  newlyAddedStreams: readonly string[],
+  newlyAddedStreams: readonly string[] = [],
 ): Set<string> {
   let mutated = false;
   const next = new Set<string>();
@@ -602,55 +442,31 @@ export function ConnectionEntitiesSyncTab({
   onOpenTrace,
   onProblem,
 }: ConnectionEntitiesSyncTabProps) {
-  const { baseUrl, tenantId } = useIpWorkspace();
   const [search, setSearch] = useState('');
-  const [userSelectedStreams, setUserSelectedStreams] = useState<string[]>([]);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [copiedStreamWebhook, setCopiedStreamWebhook] = useState<string | null>(null);
-  const [streamSyncFrom, setStreamSyncFrom] = useState<Record<string, string>>({});
-  const [streamCustomDates, setStreamCustomDates] = useState<Record<string, string>>({});
-  const [streamSchedules, setStreamSchedules] = useState<Record<string, string>>({});
   const [expandedStreams, setExpandedStreams] = useState<Set<string>>(new Set());
-  const [hasDiscoveredEmpty, setHasDiscoveredEmpty] = useState(false);
 
   const isAuthPending = connection?.status === ConnectionStatus.PENDING_AUTH;
-  const isSimulator = connection?.appId === UNIVERSAL_SIMULATOR_APP_ID;
 
-  const catalogView = useConnectionCatalogQuery(connectionId, false);
-  const simulatorEntitiesView = useSimulatorEntitiesQuery(connectionId, Boolean(isSimulator));
-  const statesView = useStreamStatesQuery(connectionId);
+  const entitiesView = useConnectionEntitiesQuery(connectionId);
+  const discoveredView = useDiscoveredStreamsQuery(connectionId);
   const runsView = useSyncRunsQuery(connectionId, 40);
-  const triggerMutation = useTriggerSyncRunMutation(connectionId);
+
   const discoverMutation = useDiscoverCatalogMutation(connectionId);
-  const updateConnectionMutation = useUpdateConnectionMutation(connectionId);
-  const simulatePushMutation = useSimulatePushMutation(connectionId);
+  const addEntityMutation = useAddConnectionEntityMutation(connectionId);
+  const updateEntityMutation = useUpdateConnectionEntityMutation(connectionId);
+  const removeEntityMutation = useRemoveConnectionEntityMutation(connectionId);
+  const resetCheckpointMutation = useResetConnectionEntityCheckpointMutation(connectionId);
+  const triggerMutation = useTriggerSyncRunMutation(connectionId);
 
-  // Hydrate persisted stream schedules from connection.publicConfig.stream_schedules
-  React.useEffect(() => {
-    const rawSchedules = connection?.publicConfig?.stream_schedules;
-    if (isPlainRecord(rawSchedules)) {
-      const nextSchedules: Record<string, string> = {};
-      const nextSyncFrom: Record<string, string> = {};
-      for (const [sName, val] of Object.entries(rawSchedules)) {
-        if (typeof val === 'string') {
-          nextSchedules[sName] = val;
-        } else if (isPlainRecord(val)) {
-          if (typeof val.schedule === 'string') nextSchedules[sName] = val.schedule;
-          if (typeof val.sync_from === 'string') nextSyncFrom[sName] = val.sync_from;
-        }
-      }
-      setStreamSchedules((prev) => ({ ...nextSchedules, ...prev }));
-      setStreamSyncFrom((prev) => ({ ...nextSyncFrom, ...prev }));
+  useEffect(() => {
+    if (entitiesView.problem) {
+      onProblem(entitiesView.problem);
     }
-  }, [connection?.publicConfig?.stream_schedules]);
+  }, [entitiesView.problem, onProblem]);
 
-  // Build entity rows from recorded stream states, simulator entities, and user-selected entities
+  // Build entity rows uniformly from persisted subscribed ConnectionEntity records + latest sync runs
   const entityRows = useMemo<EntityRow[]>(() => {
-    const statesMap = new Map<string, StreamState>();
-    for (const st of statesView.data ?? []) {
-      statesMap.set(st.streamName, st);
-    }
-
     const latestRunByStream = new Map<string, SyncRun>();
     for (const run of runsView.data ?? []) {
       if (!latestRunByStream.has(run.streamName)) {
@@ -658,78 +474,32 @@ export function ConnectionEntitiesSyncTab({
       }
     }
 
-    const seenStreams = new Set<string>();
-    const rows: EntityRow[] = [];
-
-    // 1. Add any streams already recorded in statesView (previously synced)
-    for (const [sName, state] of statesMap.entries()) {
-      seenStreams.add(sName);
-      const latestRun = latestRunByStream.get(sName);
+    return (entitiesView.data ?? []).map((entity) => {
+      const latestRun = latestRunByStream.get(entity.streamName);
       const status = latestRun
         ? latestRun.status
-        : state.lastSyncedAt
+        : entity.lastSyncedAt
           ? SyncRunStatus.SUCCEEDED
-          : EntityRowLocalStatus.UNKNOWN;
-      rows.push({
-        streamName: sName,
-        canonical: 'CANONICAL_RECORD',
+          : EntityRowLocalStatus.UNSYNCED;
+      return {
+        entityId: entity.entityId,
+        streamName: entity.streamName,
+        syncMode: entity.syncMode,
+        schedule: entity.schedule,
+        syncFrom: entity.syncFrom,
+        syncFromAt: entity.syncFromAt,
+        isEnabled: entity.isEnabled,
+        primaryKey: entity.primaryKey,
+        fields: entity.fields,
         status,
-        syncMode: SyncRunKind.INCREMENTAL,
-        cursorField: state.cursorField ?? null,
-        cursorValue: state.cursorValue ?? null,
-        recordsSyncedCount: state.recordsSyncedCount,
-        lastSyncedAt: state.lastSyncedAt ?? null,
-      });
-    }
+        cursorField: entity.cursorField,
+        cursorValue: entity.cursorValue,
+        recordsSyncedCount: entity.recordsSyncedCount,
+        lastSyncedAt: entity.lastSyncedAt,
+      };
+    });
+  }, [entitiesView.data, runsView.data]);
 
-    // 2. For Simulator connections, display configured simulator entities immediately
-    if (isSimulator) {
-      for (const simEnt of simulatorEntitiesView.data ?? []) {
-        if (!seenStreams.has(simEnt.entityName)) {
-          seenStreams.add(simEnt.entityName);
-          rows.push({
-            streamName: simEnt.entityName,
-            canonical: 'CANONICAL_RECORD',
-            status: EntityRowLocalStatus.UNSYNCED,
-            syncMode: SyncRunKind.INCREMENTAL,
-            cursorField: simEnt.cursorField,
-            cursorValue: null,
-            recordsSyncedCount: 0,
-            lastSyncedAt: null,
-          });
-        }
-      }
-    }
-
-    // 3. Add user-selected entities (explicitly added from discovered catalog or picker)
-    for (const sName of userSelectedStreams) {
-      if (!seenStreams.has(sName)) {
-        seenStreams.add(sName);
-        const catalogStream = catalogView.data?.streams.find((s) => s.name === sName);
-        rows.push({
-          streamName: sName,
-          canonical: 'CANONICAL_RECORD',
-          status: EntityRowLocalStatus.UNSYNCED,
-          syncMode: catalogStream?.supportedSyncModes[0] ?? SyncRunKind.INCREMENTAL,
-          cursorField: catalogStream?.cursorField ?? null,
-          cursorValue: null,
-          recordsSyncedCount: 0,
-          lastSyncedAt: null,
-        });
-      }
-    }
-
-    return rows;
-  }, [
-    statesView.data,
-    runsView.data,
-    isSimulator,
-    simulatorEntitiesView.data,
-    userSelectedStreams,
-    catalogView.data?.streams,
-  ]);
-
-  // Active stream names (already in the table)
   const activeStreamNames = useMemo(() => {
     const set = new Set<string>();
     for (const row of entityRows) {
@@ -738,10 +508,9 @@ export function ConnectionEntitiesSyncTab({
     return set;
   }, [entityRows]);
 
-  // Available discovered streams from external app that haven't been added to the table yet
   const availableDiscoveredOptions = useMemo<readonly SearchableSelectOption[]>(() => {
-    const catalogStreams = catalogView.data?.streams ?? [];
-    return catalogStreams
+    const discoveredStreams = discoveredView.data?.streams ?? [];
+    return discoveredStreams
       .filter((st) => !activeStreamNames.has(st.name))
       .map((st) => ({
         value: st.name,
@@ -755,71 +524,84 @@ export function ConnectionEntitiesSyncTab({
         ),
         searchString: st.name,
       }));
-  }, [catalogView.data?.streams, activeStreamNames]);
+  }, [discoveredView.data?.streams, activeStreamNames]);
 
-  // Selection state (selected stream names for batch sync)
   const [selectedStreams, setSelectedStreams] = useState<Set<string>>(() => {
     const initial = new Set<string>();
     for (const row of entityRows) {
-      if (row.recordsSyncedCount > 0 || isSimulator) {
+      if (row.isEnabled) {
         initial.add(row.streamName);
       }
     }
     return initial;
   });
 
-  const initializedStatesRef = React.useRef(false);
-  React.useEffect(() => {
-    if (!initializedStatesRef.current && (statesView.data?.length ?? 0) > 0) {
-      initializedStatesRef.current = true;
+  const initializedEntitiesRef = React.useRef(entityRows.length > 0);
+  useEffect(() => {
+    if (!initializedEntitiesRef.current && (entitiesView.data?.length ?? 0) > 0) {
+      initializedEntitiesRef.current = true;
       setSelectedStreams((prev) => {
         const next = new Set(prev);
-        for (const st of statesView.data ?? []) {
-          next.add(st.streamName);
+        for (const entity of entitiesView.data ?? []) {
+          if (entity.isEnabled) {
+            next.add(entity.streamName);
+          }
         }
         return next;
       });
     }
-  }, [statesView.data]);
+  }, [entitiesView.data]);
 
-  const seenSimulatorStreamsRef = React.useRef<Set<string>>(
-    new Set(isSimulator ? (simulatorEntitiesView.data ?? []).map((e) => e.entityName) : []),
+  useEffect(() => {
+    setSelectedStreams((prev) => reconcileSelectedStreamNames(prev, activeStreamNames));
+  }, [activeStreamNames]);
+
+  const handleSelectDiscoveredEntity = useCallback(
+    async (streamName: string): Promise<void> => {
+      const trimmed = streamName.trim();
+      if (!trimmed || activeStreamNames.has(trimmed)) return;
+      onProblem(null);
+
+      const discoveredStream = discoveredView.data?.streams.find((s) => s.name === trimmed);
+      const supportsIncremental =
+        discoveredStream === undefined ||
+        discoveredStream.supportedSyncModes.length === 0 ||
+        discoveredStream.supportedSyncModes.includes(SyncRunKind.INCREMENTAL);
+      const syncMode = supportsIncremental ? SyncRunKind.INCREMENTAL : SyncRunKind.FULL_REFRESH;
+
+      const res = await addEntityMutation.mutateAsync({
+        streamName: trimmed,
+        syncMode,
+        schedule: EntitySyncSchedule.MANUAL,
+        syncFrom: EntitySyncFrom.ALL,
+        isEnabled: true,
+        primaryKey: discoveredStream?.primaryKey ?? [],
+        fields: discoveredStream?.fields ?? [],
+        cursorField: discoveredStream?.cursorField ?? null,
+        defaultTransformationId: discoveredStream?.defaultTransformationId ?? null,
+        defaultTransformationVersion: discoveredStream?.defaultTransformationVersion ?? 1,
+      });
+      if (!res.ok) {
+        onProblem(res.error);
+        return;
+      }
+      setSelectedStreams((prev) => new Set([...prev, res.value.streamName]));
+      toast.success(`Subscribed to "${res.value.streamName}".`);
+    },
+    [activeStreamNames, discoveredView.data?.streams, addEntityMutation, onProblem],
   );
-  React.useEffect(() => {
-    const currentSimNames = isSimulator
-      ? (simulatorEntitiesView.data ?? []).map((e) => e.entityName)
-      : [];
-    const newlyAddedSim = currentSimNames.filter((n) => !seenSimulatorStreamsRef.current.has(n));
-    seenSimulatorStreamsRef.current = new Set(currentSimNames);
-    if (newlyAddedSim.length > 0) {
-      setHasDiscoveredEmpty(false);
-    }
-    setSelectedStreams((prev) =>
-      reconcileSelectedStreamNames(prev, activeStreamNames, newlyAddedSim),
-    );
-  }, [activeStreamNames, isSimulator, simulatorEntitiesView.data]);
-
-  const handleSelectDiscoveredEntity = (streamName: string) => {
-    const trimmed = streamName.trim();
-    if (!trimmed || activeStreamNames.has(trimmed)) return;
-    setUserSelectedStreams((prev) => [...prev, trimmed]);
-    setSelectedStreams((prev) => new Set([...prev, trimmed]));
-    toast.success(`Added "${trimmed}" to entities table.`);
-  };
 
   const filteredEntityRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return entityRows;
-    return entityRows.filter(
-      (r) => r.streamName.toLowerCase().includes(q) || r.canonical.toLowerCase().includes(q),
-    );
+    return entityRows.filter((r) => r.streamName.toLowerCase().includes(q));
   }, [entityRows, search]);
 
   const allVisibleSelected =
     filteredEntityRows.length > 0 &&
     filteredEntityRows.every((r) => selectedStreams.has(r.streamName));
 
-  const toggleSelectAll = () => {
+  const toggleSelectAll = useCallback(() => {
     if (allVisibleSelected) {
       const next = new Set(selectedStreams);
       for (const r of filteredEntityRows) {
@@ -833,19 +615,21 @@ export function ConnectionEntitiesSyncTab({
       }
       setSelectedStreams(next);
     }
-  };
+  }, [allVisibleSelected, filteredEntityRows, selectedStreams]);
 
-  const toggleStream = (streamName: string) => {
-    const next = new Set(selectedStreams);
-    if (next.has(streamName)) {
-      next.delete(streamName);
-    } else {
-      next.add(streamName);
-    }
-    setSelectedStreams(next);
-  };
+  const toggleStream = useCallback((streamName: string) => {
+    setSelectedStreams((prev) => {
+      const next = new Set(prev);
+      if (next.has(streamName)) {
+        next.delete(streamName);
+      } else {
+        next.add(streamName);
+      }
+      return next;
+    });
+  }, []);
 
-  const toggleRowExpanded = (streamName: string) => {
+  const toggleRowExpanded = useCallback((streamName: string) => {
     setExpandedStreams((prev) => {
       const next = new Set(prev);
       if (next.has(streamName)) {
@@ -855,109 +639,121 @@ export function ConnectionEntitiesSyncTab({
       }
       return next;
     });
-  };
+  }, []);
 
-  const persistStreamScheduleConfig = async (
-    nextSchedules: Record<string, string>,
-    nextSyncFrom: Record<string, string>,
-  ): Promise<boolean> =>
-    commitStreamScheduleConfigUpdate({
-      connection,
-      nextSchedules,
-      nextSyncFrom,
-      mutateUpdate: (input) => updateConnectionMutation.mutateAsync(input),
-      onProblem,
+  const handleSyncFromChange = useCallback(
+    async (row: EntityRow, rawSyncFrom: string): Promise<void> => {
+      if (!isEntitySyncFromValue(rawSyncFrom)) return;
+      onProblem(null);
+      const fallbackDateIso = `${new Date().toISOString().slice(0, 10)}T00:00:00Z`;
+      const syncFromAt =
+        rawSyncFrom === EntitySyncFrom.CUSTOM ? (row.syncFromAt ?? fallbackDateIso) : null;
+
+      const res = await updateEntityMutation.mutateAsync({
+        streamName: row.streamName,
+        input: {
+          syncFrom: rawSyncFrom,
+          syncFromAt,
+        },
+      });
+      if (!res.ok) {
+        onProblem(res.error);
+        return;
+      }
+      const match = SYNC_FROM_OPTIONS.find((opt) => opt.value === rawSyncFrom);
+      toast.success(`Sync from for "${row.streamName}" set to ${match?.label ?? rawSyncFrom}.`);
+    },
+    [updateEntityMutation, onProblem],
+  );
+
+  const handleCustomDateChange = useCallback(
+    async (streamName: string, nextDate: string): Promise<void> => {
+      if (!nextDate) return;
+      onProblem(null);
+      const res = await updateEntityMutation.mutateAsync({
+        streamName,
+        input: {
+          syncFrom: EntitySyncFrom.CUSTOM,
+          syncFromAt: `${nextDate}T00:00:00Z`,
+        },
+      });
+      if (!res.ok) {
+        onProblem(res.error);
+      }
+    },
+    [updateEntityMutation, onProblem],
+  );
+
+  const handleScheduleChange = useCallback(
+    async (streamName: string, rawSchedule: string): Promise<void> => {
+      if (!isEntitySyncScheduleValue(rawSchedule)) return;
+      onProblem(null);
+      const res = await updateEntityMutation.mutateAsync({
+        streamName,
+        input: { schedule: rawSchedule },
+      });
+      if (!res.ok) {
+        onProblem(res.error);
+        return;
+      }
+      const match = SCHEDULE_OPTIONS.find((opt) => opt.value === rawSchedule);
+      toast.success(`Sync schedule for "${streamName}" set to ${match?.label ?? rawSchedule}.`);
+    },
+    [updateEntityMutation, onProblem],
+  );
+
+  const handleRemoveEntity = useCallback(
+    async (streamName: string): Promise<void> => {
+      onProblem(null);
+      const res = await removeEntityMutation.mutateAsync(streamName);
+      if (!res.ok) {
+        onProblem(res.error);
+        return;
+      }
+      toast.success(`Removed "${streamName}" from subscribed entities.`);
+    },
+    [removeEntityMutation, onProblem],
+  );
+
+  const handleResetCheckpoint = useCallback(
+    async (streamName: string): Promise<void> => {
+      onProblem(null);
+      const res = await resetCheckpointMutation.mutateAsync(streamName);
+      if (!res.ok) {
+        onProblem(res.error);
+        return;
+      }
+      toast.success(`Reset sync checkpoint for "${streamName}".`);
+    },
+    [resetCheckpointMutation, onProblem],
+  );
+
+  const handleDiscoverDropdownOpenChange = (open: boolean): void => {
+    if (!open || isAuthPending || discoverMutation.isPending) {
+      return;
+    }
+    onProblem(null);
+    void discoverMutation.mutateAsync().then((res) => {
+      if (!res.ok) {
+        onProblem(res.error);
+      }
     });
-
-  const handleSyncFromChange = async (streamName: string, syncFrom: string): Promise<void> => {
-    const previousSyncFrom = streamSyncFrom;
-    const nextSyncFrom = { ...streamSyncFrom, [streamName]: syncFrom };
-    setStreamSyncFrom(nextSyncFrom);
-    const saved = await persistStreamScheduleConfig(streamSchedules, nextSyncFrom);
-    if (!saved) {
-      setStreamSyncFrom(previousSyncFrom);
-      return;
-    }
-    const match = SYNC_FROM_OPTIONS.find((b) => b.value === syncFrom);
-    toast.success(`Sync from for "${streamName}" set to ${match?.label ?? syncFrom}.`);
   };
 
-  const handleScheduleChange = async (streamName: string, schedule: string): Promise<void> => {
-    const previousSchedules = streamSchedules;
-    const nextSchedules = { ...streamSchedules, [streamName]: schedule };
-    setStreamSchedules(nextSchedules);
-    const saved = await persistStreamScheduleConfig(nextSchedules, streamSyncFrom);
-    if (!saved) {
-      setStreamSchedules(previousSchedules);
-      return;
-    }
-    const match = SCHEDULE_OPTIONS.find((s) => s.value === schedule);
-    toast.success(`Sync schedule for "${streamName}" set to ${match?.label ?? schedule}.`);
-  };
-
-  const handleDiscoverEntities = async (): Promise<void> => {
-    onProblem(null);
-    const res = await discoverMutation.mutateAsync();
-    if (!res.ok) {
-      onProblem(res.error);
-      return;
-    }
-    const discoveredNames = res.value.streams.map((s) => s.name);
-    if (discoveredNames.length === 0) {
-      setHasDiscoveredEmpty(true);
-      toast.info('No entities found.');
-      return;
-    }
-    setHasDiscoveredEmpty(false);
-    setUserSelectedStreams((prev) => Array.from(new Set([...prev, ...discoveredNames])));
-    setSelectedStreams((prev) => new Set([...prev, ...discoveredNames]));
-    toast.success(`Discovered ${discoveredNames.length} entity stream(s).`);
-  };
-
-  const handleCopyEntityWebhook = async (streamName: string): Promise<void> => {
-    const resolvedTenantId = connection?.tenantId ?? tenantId;
-    const url = buildIngressWebhookUrl(baseUrl, resolvedTenantId, connectionId, streamName);
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedStreamWebhook(streamName);
-      toast.success(`Copied webhook URL for entity "${streamName}".`);
-      setTimeout(() => {
-        setCopiedStreamWebhook((curr) => (curr === streamName ? null : curr));
-      }, 2000);
-    } catch {
-      toast.error('Unable to copy entity webhook URL to clipboard.');
-    }
-  };
-
-  const handleSimulatePush = async (streamName: string): Promise<void> => {
-    onProblem(null);
-    const res = await simulatePushMutation.mutateAsync({
-      streamName,
-      count: 1,
-    });
-    if (!res.ok) {
-      onProblem(res.error);
-      return;
-    }
-    toast.success(
-      `Simulated push for "${streamName}" (${res.value.recordsPushed} record ingested into L1).`,
-    );
-  };
-
-  const handleTrigger = async (
-    streamName: string,
-    forcedKind: typeof SyncRunKind.INCREMENTAL | typeof SyncRunKind.FULL_REFRESH,
-  ): Promise<void> => {
-    const trimmed = streamName.trim();
-    if (!trimmed) return;
-    onProblem(null);
-    const res = await triggerMutation.mutateAsync({ streamName: trimmed, forcedKind });
-    if (!res.ok) {
-      onProblem(res.error);
-      return;
-    }
-    toast.success(`Triggered sync for "${trimmed}".`);
-  };
+  const handleTrigger = useCallback(
+    async (streamName: string, forcedKind: SyncRunKindValue): Promise<void> => {
+      const trimmed = streamName.trim();
+      if (!trimmed) return;
+      onProblem(null);
+      const res = await triggerMutation.mutateAsync({ streamName: trimmed, forcedKind });
+      if (!res.ok) {
+        onProblem(res.error);
+        return;
+      }
+      toast.success(`Triggered sync for "${trimmed}".`);
+    },
+    [triggerMutation, onProblem],
+  );
 
   const handleSyncAllSelected = async (): Promise<void> => {
     if (selectedStreams.size === 0) return;
@@ -969,10 +765,11 @@ export function ConnectionEntitiesSyncTab({
 
     try {
       for (const streamName of selectedStreams) {
-        const streamDef = catalogView.data?.streams.find((s) => s.name === streamName);
-        const supportsIncremental =
-          streamDef?.supportedSyncModes.includes(SyncRunKind.INCREMENTAL) ?? true;
-        const forcedKind = supportsIncremental ? SyncRunKind.INCREMENTAL : SyncRunKind.FULL_REFRESH;
+        const entityRow = entityRows.find((r) => r.streamName === streamName);
+        const forcedKind =
+          entityRow?.syncMode === SyncRunKind.FULL_REFRESH
+            ? SyncRunKind.FULL_REFRESH
+            : SyncRunKind.INCREMENTAL;
         const res = await triggerMutation.mutateAsync({
           streamName,
           forcedKind,
@@ -1053,16 +850,21 @@ export function ConnectionEntitiesSyncTab({
         id: 'syncFrom',
         header: 'Sync From',
         cell: ({ row }) => {
-          const selectedValue = streamSyncFrom[row.original.streamName] ?? 'all';
-          const isCustom = selectedValue === 'custom';
+          const selectedValue = row.original.syncFrom;
+          const selectedLabel =
+            SYNC_FROM_OPTIONS.find((opt) => opt.value === selectedValue)?.label ?? selectedValue;
+          const isCustom = selectedValue === EntitySyncFrom.CUSTOM;
+          const customDateValue = row.original.syncFromAt
+            ? row.original.syncFromAt.slice(0, 10)
+            : '';
           return (
             <div className="flex items-center gap-2">
               <Select
                 value={selectedValue}
-                onValueChange={(val) => void handleSyncFromChange(row.original.streamName, val)}
+                onValueChange={(val) => void handleSyncFromChange(row.original, val)}
               >
                 <SelectTrigger className="h-7 w-32 text-xs">
-                  <SelectValue />
+                  <SelectValue>{selectedLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {SYNC_FROM_OPTIONS.map((opt) => (
@@ -1075,12 +877,9 @@ export function ConnectionEntitiesSyncTab({
               {isCustom ? (
                 <Input
                   type="date"
-                  value={streamCustomDates[row.original.streamName] ?? ''}
+                  value={customDateValue}
                   onChange={(e) =>
-                    setStreamCustomDates((prev) => ({
-                      ...prev,
-                      [row.original.streamName]: e.target.value,
-                    }))
+                    void handleCustomDateChange(row.original.streamName, e.target.value)
                   }
                   className="h-7 w-36 text-xs px-2"
                 />
@@ -1092,23 +891,28 @@ export function ConnectionEntitiesSyncTab({
       {
         id: 'schedule',
         header: 'Schedule',
-        cell: ({ row }) => (
-          <Select
-            value={streamSchedules[row.original.streamName] ?? '15m'}
-            onValueChange={(val) => void handleScheduleChange(row.original.streamName, val)}
-          >
-            <SelectTrigger className="h-7 w-36 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SCHEDULE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ),
+        cell: ({ row }) => {
+          const selectedScheduleLabel =
+            SCHEDULE_OPTIONS.find((opt) => opt.value === row.original.schedule)?.label ??
+            row.original.schedule;
+          return (
+            <Select
+              value={row.original.schedule}
+              onValueChange={(val) => void handleScheduleChange(row.original.streamName, val)}
+            >
+              <SelectTrigger className="h-7 w-36 text-xs">
+                <SelectValue>{selectedScheduleLabel}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {SCHEDULE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          );
+        },
       },
       {
         accessorKey: 'status',
@@ -1135,93 +939,93 @@ export function ConnectionEntitiesSyncTab({
       {
         id: 'actions',
         header: 'Actions',
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isAuthPending || triggerMutation.isPending || isSyncingAll}
-              onClick={() => {
-                const streamDef = catalogView.data?.streams.find(
-                  (s) => s.name === row.original.streamName,
-                );
-                const supportsIncremental =
-                  streamDef?.supportedSyncModes.includes(SyncRunKind.INCREMENTAL) ?? true;
-                const forcedKind = supportsIncremental
-                  ? SyncRunKind.INCREMENTAL
-                  : SyncRunKind.FULL_REFRESH;
-                void handleTrigger(row.original.streamName, forcedKind);
-              }}
-              className="h-7 gap-1 text-xs"
-            >
-              <Play className="h-3 w-3" />
-              <span>Sync</span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleCopyEntityWebhook(row.original.streamName)}
-              title="Copy entity-specific webhook URL"
-              className="h-7 gap-1 text-xs"
-            >
-              {copiedStreamWebhook === row.original.streamName ? (
-                <>
-                  <Check className="h-3 w-3 text-emerald-600" />
-                  <span>Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3 w-3" />
-                  <span>Webhook</span>
-                </>
-              )}
-            </Button>
-            {isSimulator ? (
+        cell: ({ row }) => {
+          const forcedKind =
+            row.original.syncMode === SyncRunKind.FULL_REFRESH
+              ? SyncRunKind.FULL_REFRESH
+              : SyncRunKind.INCREMENTAL;
+          const canResetCheckpoint =
+            row.original.recordsSyncedCount > 0 || row.original.cursorValue !== null;
+          return (
+            <div className="flex items-center gap-1.5">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={simulatePushMutation.isPending}
-                onClick={() => void handleSimulatePush(row.original.streamName)}
-                title="Emit synthetic push event into L1 Ingress"
+                disabled={isAuthPending || triggerMutation.isPending || isSyncingAll}
+                onClick={() => void handleTrigger(row.original.streamName, forcedKind)}
                 className="h-7 gap-1 text-xs"
               >
-                <Radio className="h-3 w-3 text-primary" />
-                <span>Simulate Push</span>
+                <Play className="h-3 w-3" />
+                <span>Sync</span>
               </Button>
-            ) : null}
-            {onInspectEntity ? (
+              {onInspectEntity ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onInspectEntity(row.original.streamName)}
+                  className="h-7 gap-1 text-xs text-primary font-medium"
+                >
+                  <Database className="h-3 w-3" />
+                  <span>Data</span>
+                </Button>
+              ) : null}
+              {canResetCheckpoint ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={
+                    resetCheckpointMutation.isPending &&
+                    resetCheckpointMutation.variables === row.original.streamName
+                  }
+                  onClick={() => void handleResetCheckpoint(row.original.streamName)}
+                  className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  <span>Reset</span>
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => onInspectEntity(row.original.streamName)}
-                className="h-7 gap-1 text-xs text-primary font-medium"
+                aria-label={`Remove ${row.original.streamName}`}
+                disabled={
+                  removeEntityMutation.isPending &&
+                  removeEntityMutation.variables === row.original.streamName
+                }
+                onClick={() => void handleRemoveEntity(row.original.streamName)}
+                className="h-7 px-2 text-xs text-destructive hover:text-destructive"
               >
-                <Database className="h-3 w-3" />
-                <span>Data</span>
+                <Trash2 className="h-3 w-3" />
               </Button>
-            ) : null}
-          </div>
-        ),
+            </div>
+          );
+        },
       },
     ],
     [
       allVisibleSelected,
       selectedStreams,
-      filteredEntityRows,
-      streamSyncFrom,
-      streamCustomDates,
-      streamSchedules,
       expandedStreams,
+      isAuthPending,
       triggerMutation.isPending,
-      simulatePushMutation.isPending,
-      copiedStreamWebhook,
-      isSimulator,
+      resetCheckpointMutation.isPending,
+      resetCheckpointMutation.variables,
+      removeEntityMutation.isPending,
+      removeEntityMutation.variables,
       isSyncingAll,
       onInspectEntity,
+      toggleSelectAll,
+      toggleStream,
+      handleSyncFromChange,
+      handleCustomDateChange,
+      handleScheduleChange,
+      handleTrigger,
+      handleResetCheckpoint,
+      handleRemoveEntity,
     ],
   );
 
@@ -1290,18 +1094,6 @@ export function ConnectionEntitiesSyncTab({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            disabled={isAuthPending || discoverMutation.isPending}
-            onClick={() => void handleDiscoverEntities()}
-            className="h-8 gap-1.5 text-xs"
-          >
-            <Compass className="h-3.5 w-3.5" />
-            <span>{discoverMutation.isPending ? 'Discovering...' : 'Discover Entities'}</span>
-          </Button>
-
-          <Button
-            type="button"
             size="sm"
             disabled={isAuthPending || selectedStreams.size === 0 || isSyncingAll}
             onClick={() => void handleSyncAllSelected()}
@@ -1323,24 +1115,28 @@ export function ConnectionEntitiesSyncTab({
       {/* Entity Selection & Table Filter Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-3">
-          {/* Single Discover Entities Search & Select */}
+          {/* Single Stateless Live Discover Entities Combobox */}
           <div className="w-72">
             <SearchableSelect
               value=""
-              onChange={handleSelectDiscoveredEntity}
+              onChange={(streamName) => void handleSelectDiscoveredEntity(streamName)}
+              onOpenChange={handleDiscoverDropdownOpenChange}
               options={availableDiscoveredOptions}
               portaled={true}
-              placeholder={
-                discoverMutation.isPending || catalogView.isLoading
-                  ? 'Discovering Entities...'
-                  : 'Discover Entities...'
-              }
+              placeholder="Discover Entities..."
+              searchPlaceholder="Search entities..."
+              loading={discoverMutation.isPending || addEntityMutation.isPending}
+              loadingText="Discovering entities..."
               disabled={isAuthPending}
-              emptyText="No matching discovered entities"
+              emptyText={
+                (discoveredView.data?.streams.length ?? 0) > 0
+                  ? 'All discovered entities added'
+                  : 'No entities found'
+              }
             />
           </div>
 
-          {/* Search/Filter Entities in table */}
+          {/* Search/Filter Subscribed Entities in table */}
           <div className="relative w-64">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -1357,7 +1153,7 @@ export function ConnectionEntitiesSyncTab({
         </span>
       </div>
 
-      {/* EDI-Style Single-Border TanStack Table with Permanent TableHeader */}
+      {/* Subscribed Entities Control Plane Table */}
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <Table>
           <TableHeader className="bg-muted/50 border-b border-border">
@@ -1377,7 +1173,7 @@ export function ConnectionEntitiesSyncTab({
             ))}
           </TableHeader>
           <TableBody>
-            {statesView.isLoading ? (
+            {entitiesView.isLoading ? (
               <TableRow>
                 <TableCell
                   colSpan={entityColumns.length}
@@ -1392,11 +1188,7 @@ export function ConnectionEntitiesSyncTab({
                   colSpan={entityColumns.length}
                   className="h-32 text-center text-xs text-muted-foreground"
                 >
-                  {isAuthPending
-                    ? 'Authentication Pending'
-                    : hasDiscoveredEmpty
-                      ? 'No entities found'
-                      : 'No entities'}
+                  {isAuthPending ? 'Authentication Pending' : 'No entities'}
                 </TableCell>
               </TableRow>
             ) : (
@@ -1428,77 +1220,57 @@ export function ConnectionEntitiesSyncTab({
                   {expandedStreams.has(row.original.streamName) ? (
                     <TableRow className="bg-muted/30 border-b border-border hover:bg-muted/30">
                       <TableCell colSpan={entityColumns.length} className="py-3 px-8 text-xs">
-                        {(() => {
-                          const streamInfo = catalogView.data?.streams.find(
-                            (s) => s.name === row.original.streamName,
-                          );
-                          const simEntity = isSimulator
-                            ? (simulatorEntitiesView.data ?? []).find(
-                                (e) => e.entityName === row.original.streamName,
-                              )
-                            : undefined;
-                          const fields =
-                            streamInfo?.fields ??
-                            (simEntity && isPlainRecord(simEntity.inferredJsonSchema.properties)
-                              ? Object.entries(simEntity.inferredJsonSchema.properties).map(
-                                  ([fieldName, rawDef]) => ({
-                                    name: fieldName,
-                                    dataType:
-                                      isPlainRecord(rawDef) && typeof rawDef.type === 'string'
-                                        ? rawDef.type
-                                        : 'string',
-                                    nullable: fieldName !== simEntity.primaryKeyField,
-                                    description: null,
-                                  }),
-                                )
-                              : []);
-                          return (
-                            <div className="space-y-2">
-                              <span className="font-semibold text-foreground text-xs uppercase tracking-wider">
-                                Schema Fields
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-semibold text-foreground text-xs uppercase tracking-wider">
+                              Schema Fields
+                            </span>
+                            {row.original.primaryKey.length > 0 ? (
+                              <span className="font-mono text-xs text-muted-foreground">
+                                Primary Key: {row.original.primaryKey.join(', ')}
                               </span>
-                              {fields.length === 0 ? (
-                                <span className="text-muted-foreground text-xs block">
-                                  No schema fields discovered for this entity.
-                                </span>
-                              ) : (
-                                <div className="rounded-lg border border-border bg-card overflow-hidden">
-                                  <table className="w-full text-xs">
-                                    <thead className="bg-muted/50 border-b border-border">
-                                      <tr>
-                                        <th className="text-left py-1.5 px-3 font-medium text-foreground">
-                                          Field
-                                        </th>
-                                        <th className="text-left py-1.5 px-3 font-medium text-foreground">
-                                          Type
-                                        </th>
-                                        <th className="text-left py-1.5 px-3 font-medium text-foreground">
-                                          Nullable
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {fields.map((f) => (
-                                        <tr
-                                          key={f.name}
-                                          className="border-b border-border/50 last:border-0"
-                                        >
-                                          <td className="py-1 px-3 font-mono">{f.name}</td>
-                                          <td className="py-1 px-3 font-mono text-muted-foreground">
-                                            {f.dataType}
-                                          </td>
-                                          <td className="py-1 px-3 text-muted-foreground">
-                                            {f.nullable ? 'Yes' : 'No'}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
+                            ) : null}
+                          </div>
+                          {row.original.fields.length === 0 ? (
+                            <span className="text-muted-foreground text-xs block">
+                              No schema fields recorded for this entity.
+                            </span>
+                          ) : (
+                            <div className="rounded-lg border border-border bg-card overflow-hidden">
+                              <table className="w-full text-xs">
+                                <thead className="bg-muted/50 border-b border-border">
+                                  <tr>
+                                    <th className="text-left py-1.5 px-3 font-medium text-foreground">
+                                      Field
+                                    </th>
+                                    <th className="text-left py-1.5 px-3 font-medium text-foreground">
+                                      Type
+                                    </th>
+                                    <th className="text-left py-1.5 px-3 font-medium text-foreground">
+                                      Nullable
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {row.original.fields.map((f) => (
+                                    <tr
+                                      key={f.name}
+                                      className="border-b border-border/50 last:border-0"
+                                    >
+                                      <td className="py-1 px-3 font-mono">{f.name}</td>
+                                      <td className="py-1 px-3 font-mono text-muted-foreground">
+                                        {f.dataType}
+                                      </td>
+                                      <td className="py-1 px-3 text-muted-foreground">
+                                        {f.nullable ? 'Yes' : 'No'}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
                             </div>
-                          );
-                        })()}
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : null}
@@ -1529,5 +1301,3 @@ export function ConnectionEntitiesSyncTab({
     </div>
   );
 }
-
-export const ConnectionStreamsSyncTab = ConnectionEntitiesSyncTab;

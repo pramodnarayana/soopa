@@ -70,51 +70,23 @@ class ConnectionRecord(IpGlobalBase):
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class ConnectionCatalogRecord(IpGlobalBase):
-    """Database record representation of the ip.connection_catalogs table."""
+class ConnectionEntityRecord(IpGlobalBase):
+    """Database record representation of the ip.connection_entities table."""
 
-    __tablename__ = "connection_catalogs"
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id",
-            "connection_id",
-            "catalog_version",
-            name="uq_ip_catalog_connection_version",
-        ),
-        Index(
-            "idx_ip_connection_catalogs_tenant_conn",
-            "tenant_id",
-            "connection_id",
-        ),
-        {"schema": "ip"},
-    )
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    connection_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("ip.connections.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    catalog_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    catalog_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    schema_definition: Mapped[JsonDict] = mapped_column(JSONB, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class ConnectionStreamStateRecord(IpGlobalBase):
-    """Database record representation of the ip.connection_stream_state table."""
-
-    __tablename__ = "connection_stream_state"
+    __tablename__ = "connection_entities"
     __table_args__ = (
         UniqueConstraint(
             "tenant_id",
             "connection_id",
             "stream_name",
-            name="uq_ip_stream_state_tenant_conn_stream",
+            name="uq_ip_connection_entities_tenant_conn_stream",
         ),
-        Index("idx_ip_stream_state_conn", "tenant_id", "connection_id"),
+        Index("idx_ip_connection_entities_conn", "tenant_id", "connection_id"),
+        Index(
+            "idx_ip_connection_entities_due_schedule",
+            "schedule",
+            postgresql_where=text("is_enabled = true AND schedule != 'manual'"),
+        ),
         {"schema": "ip"},
     )
 
@@ -126,10 +98,29 @@ class ConnectionStreamStateRecord(IpGlobalBase):
         nullable=False,
     )
     stream_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    sync_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="INCREMENTAL")
+    schedule: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    sync_from: Mapped[str] = mapped_column(String(32), nullable=False, default="all")
+    sync_from_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    primary_key: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    fields_schema: Mapped[list[JsonDict]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
     cursor_field: Mapped[str | None] = mapped_column(String(128), nullable=True)
     cursor_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     records_synced_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class SyncRunRecord(IpGlobalBase):
@@ -272,9 +263,8 @@ class IpOutboxRecord(IpGlobalBase, OutboxMixin):
 
 
 __all__ = [
-    "ConnectionCatalogRecord",
+    "ConnectionEntityRecord",
     "ConnectionRecord",
-    "ConnectionStreamStateRecord",
     "IpOutboxRecord",
     "StitchRecord",
     "SyncRunRecord",

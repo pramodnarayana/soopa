@@ -1,4 +1,4 @@
-"""FastAPI router for Pull Synchronization Runs and Incremental Stream State Checkpoints."""
+"""FastAPI router for Pull Synchronization Runs."""
 
 from __future__ import annotations
 
@@ -14,20 +14,14 @@ from ip.engine.adapters.inbound.api.dependencies import (
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import from_ip_error
 from ip.engine.adapters.inbound.api.dtos.sync_run_dtos import (
-    StreamStateHttpResponse,
     SyncRunHttpResponse,
     TriggerSyncRunHttpRequest,
 )
 from ip.engine.application.use_cases.ingestion import (
     GetSyncRunQuery,
     GetSyncRunUseCase,
-    ListStreamStatesQuery,
-    ListStreamStatesUseCase,
     ListSyncRunsQuery,
     ListSyncRunsUseCase,
-    ResetStreamCheckpointCommand,
-    ResetStreamCheckpointUseCase,
-    StreamStateSummaryDTO,
     SyncRunSummaryDTO,
     TriggerSyncRunCommand,
     TriggerSyncRunUseCase,
@@ -38,7 +32,7 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}",
-    tags=["IP - Sync Runs & Stream State"],
+    tags=["IP - Sync Runs"],
 )
 
 
@@ -63,19 +57,6 @@ def _to_sync_run_response(dto: SyncRunSummaryDTO) -> SyncRunHttpResponse:
         started_at=dto.started_at,
         finished_at=dto.finished_at,
         created_at=dto.created_at,
-    )
-
-
-def _to_stream_state_response(dto: StreamStateSummaryDTO) -> StreamStateHttpResponse:
-    return StreamStateHttpResponse(
-        state_id=dto.state_id,
-        tenant_id=dto.tenant_id,
-        connection_id=dto.connection_id,
-        stream_name=dto.stream_name,
-        cursor_field=dto.cursor_field,
-        cursor_value=dto.cursor_value,
-        records_synced_count=dto.records_synced_count,
-        last_synced_at=dto.last_synced_at,
     )
 
 
@@ -214,86 +195,3 @@ async def get_sync_run(
         status=run.status,
     )
     return _to_sync_run_response(run)
-
-
-@router.get("/streams/state", response_model=list[StreamStateHttpResponse])
-async def list_stream_states(
-    tenant_id: str,
-    connection_id: str,
-    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
-) -> list[StreamStateHttpResponse] | JSONResponse:
-    """Lists incremental stream state checkpoints for a connection."""
-    logger.info(
-        "http_list_stream_states.received",
-        tenant_id=tenant_id,
-        connection_id=connection_id,
-    )
-    use_case = ListStreamStatesUseCase(control_plane_uow=cp_uow)
-    res = await use_case.execute(
-        ListStreamStatesQuery(
-            tenant_id=tenant_id,
-            connection_id=connection_id,
-        )
-    )
-    if res.is_err:
-        err = res.unwrap_err()
-        logger.error(
-            "http_list_stream_states.failed",
-            tenant_id=tenant_id,
-            connection_id=connection_id,
-            error_code=err.code.value,
-        )
-        return from_ip_error(err)
-    states = res.unwrap()
-    logger.info(
-        "http_list_stream_states.completed",
-        tenant_id=tenant_id,
-        connection_id=connection_id,
-        state_count=len(states),
-    )
-    return [_to_stream_state_response(s) for s in states]
-
-
-@router.post("/streams/{stream_name}/reset", response_model=StreamStateHttpResponse)
-async def reset_stream_checkpoint(
-    tenant_id: str,
-    connection_id: str,
-    stream_name: str,
-    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
-) -> StreamStateHttpResponse | JSONResponse:
-    """Resets a stream's incremental checkpoint cursor to force full historical re-sync."""
-    logger.info(
-        "http_reset_stream_checkpoint.received",
-        tenant_id=tenant_id,
-        connection_id=connection_id,
-        stream_name=stream_name,
-    )
-    use_case = ResetStreamCheckpointUseCase(control_plane_uow=cp_uow)
-    res = await use_case.execute(
-        ResetStreamCheckpointCommand(
-            tenant_id=tenant_id,
-            connection_id=connection_id,
-            stream_name=stream_name,
-        )
-    )
-    if res.is_err:
-        err = res.unwrap_err()
-        logger.error(
-            "http_reset_stream_checkpoint.failed",
-            tenant_id=tenant_id,
-            connection_id=connection_id,
-            stream_name=stream_name,
-            error_code=err.code.value,
-        )
-        return from_ip_error(err)
-    dto = res.unwrap()
-    logger.info(
-        "http_reset_stream_checkpoint.completed",
-        tenant_id=tenant_id,
-        connection_id=connection_id,
-        stream_name=stream_name,
-        state_id=dto.state_id,
-    )
-    return _to_stream_state_response(dto)

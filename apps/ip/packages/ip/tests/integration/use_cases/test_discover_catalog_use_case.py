@@ -9,9 +9,6 @@ from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.generic_http_connector import (
     GenericHttpConnector,
 )
-from ip.engine.adapters.outbound.database.control_plane.catalog_repository import (
-    SqlAlchemyCatalogRepository,
-)
 from ip.engine.application.use_cases.connections.create_connection_use_case import (
     CreateConnectionCommand,
     CreateConnectionUseCase,
@@ -75,7 +72,6 @@ async def test_discover_catalog_use_case(
         allow_private_ips=True,
     )
     uow = create_ip_control_plane_uow(global_session)
-    cat_repo = SqlAlchemyCatalogRepository(global_session)
     tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
 
     create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
@@ -103,13 +99,14 @@ async def test_discover_catalog_use_case(
     catalog_dto = await discover_uc.execute(conn_dto.id, tenant_id=tenant_id)
     assert catalog_dto.success is True
     assert catalog_dto.connection_id == conn_dto.id
+    assert catalog_dto.catalog_version == 1
+    assert len(catalog_dto.catalog_hash) == 64
     assert len(catalog_dto.streams) == 3
 
-    persisted_catalog = await cat_repo.get_active_by_connection_id(tenant_id, conn_dto.id)
-    assert persisted_catalog is not None
-    assert persisted_catalog.tenant_id == tenant_id
-    assert persisted_catalog.catalog_version == 1
-    assert persisted_catalog.catalog_hash == catalog_dto.catalog_hash
+    # Stateless discovery MUST NOT auto-subscribe entities in Control Plane
+    async with uow:
+        subscribed_entities = await uow.entities.list_by_connection(tenant_id, conn_dto.id)
+    assert len(subscribed_entities) == 0
 
 
 @pytest.mark.asyncio
@@ -148,7 +145,6 @@ async def test_discover_catalog_skips_unsupported_sync_modes(
         allow_private_ips=True,
     )
     uow = create_ip_control_plane_uow(global_session)
-    cat_repo = SqlAlchemyCatalogRepository(global_session)
     tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
 
     create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
@@ -178,12 +174,6 @@ async def test_discover_catalog_skips_unsupported_sync_modes(
     assert len(catalog_dto.streams) == 1
     assert catalog_dto.streams[0].name == "supported_stream"
     assert list(catalog_dto.streams[0].supported_sync_modes) == ["INCREMENTAL"]
-
-    persisted = await cat_repo.get_active_by_connection_id(tenant_id, conn_dto.id)
-    assert persisted is not None
-    assert persisted.tenant_id == tenant_id
-    assert len(persisted.streams) == 1
-    assert persisted.streams[0].name == "supported_stream"
 
 
 @pytest.mark.asyncio
