@@ -259,6 +259,36 @@ def test_energy_meter_reading_transformer_coerces_non_finite_optional_metrics() 
     assert _parse_float(10**400, 0.0) == 0.0
 
 
+def test_ami_meter_reading_transformer_supports_meter_id_alias() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_ami_01",
+        connection_id="conn_ami_01",
+        stream="meter_readings",
+        trace_id="trc_ami_02",
+    )
+    v1 = AmiMeterReadingTransformerV1()
+
+    res = v1.transform(
+        ReplicaSnapshot(
+            id="rep_ami_alt",
+            connection_id="conn_ami_01",
+            stream="meter_readings",
+            record_key="MTR-ALT-700",
+            version=1,
+            data={
+                "meter_id": "MTR-ALT-700",
+                "timestamp": "2026-10-27T12:00:00Z",
+                "kwh_delivered": 42.0,
+                "kwh_received": 2.0,
+            },
+        ),
+        ctx,
+    )
+    assert not res.rejections
+    assert len(res.drafts) == 1
+    assert res.drafts[0].fields["meter_serial_number"] == "MTR-ALT-700"
+
+
 def test_itron_meter_reading_transformer_maps_vendor_contract() -> None:
     ctx = TransformationContext(
         tenant_id="ten_itron_01",

@@ -44,14 +44,14 @@ class AmiMeterReadingTransformerV1(TransformerPort):
         self, replica: ReplicaSnapshot, context: TransformationContext
     ) -> TransformationResult:
         payload = replica.data
-        meter_serial = str(payload.get("meter_serial") or "").strip()
+        meter_serial = str(payload.get("meter_serial") or payload.get("meter_id") or "").strip()
         if not meter_serial:
             return TransformationResult(
                 rejections=(
                     TransformationRejection(
                         reason=NormalizationRejectionReason.MISSING_REQUIRED_FIELD,
                         field_path="meter_serial",
-                        detail="Missing required meter_serial field.",
+                        detail="Missing required meter_serial or meter_id field.",
                     ),
                 )
             )
