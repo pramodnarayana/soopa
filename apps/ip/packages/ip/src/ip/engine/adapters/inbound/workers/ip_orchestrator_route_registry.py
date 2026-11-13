@@ -272,6 +272,15 @@ class IpOrchestratorRouteRegistry:
                 else None
             )
 
+            if self._auto_bind_transformation_use_case is not None:
+                await self._auto_bind_transformation_use_case.execute(
+                    AutoBindDefaultTransformationCommand(
+                        tenant_id=dto.tenant_id,
+                        connection_id=dto.connection_id,
+                        stream_name=dto.stream_name,
+                    )
+                )
+
             if self._process_inbound_range_use_case is not None:
                 range_res = await self._process_inbound_range_use_case.execute(
                     ProcessInboundRangeCommand(
@@ -733,6 +742,7 @@ class IpOrchestratorRouteRegistry:
                 merged = _sanitize_json_dict(latest.canonical_data)
                 merged.setdefault("source_id", source_id)
                 merged.setdefault("canonical_type", canonical_type)
+                merged.setdefault("connection_id", latest.connection_id)
                 return merged
         merged_fallback = dict(fallback_payload)
         merged_fallback.setdefault("source_id", source_id)
@@ -757,6 +767,7 @@ class IpOrchestratorRouteRegistry:
                 merged = _sanitize_json_dict(record.canonical_data)
                 merged.setdefault("source_id", record.source_id)
                 merged.setdefault("canonical_type", record.canonical_type)
+                merged.setdefault("connection_id", record.connection_id)
                 return merged
         return dict(fallback_payload)
 

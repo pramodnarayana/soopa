@@ -4,6 +4,7 @@ from contextlib import AbstractAsyncContextManager
 import structlog
 
 from ucp.domain.constants import LifecycleStatus
+from ucp.ports.outbound.shard_allocation_port import ShardAllocationStrategyPort
 from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
@@ -22,8 +23,13 @@ class AppSubscriptionManager:
     This preserves correct exit order: transaction rollback/close happens before session disposal.
     """
 
-    def __init__(self, uow_factory: Callable[[], AbstractAsyncContextManager[UcpUnitOfWorkPort]]):
+    def __init__(
+        self,
+        uow_factory: Callable[[], AbstractAsyncContextManager[UcpUnitOfWorkPort]],
+        shard_allocator: ShardAllocationStrategyPort,
+    ):
         self.uow_factory = uow_factory
+        self.shard_allocator = shard_allocator
 
     async def handle_app_subscribed(self, event: UcpEventMessage) -> None:
         """
@@ -56,15 +62,34 @@ class AppSubscriptionManager:
                     tenant_id, app.id, LifecycleStatus.ACTIVE.value
                 )
 
-                # Allocate Database Shard (Hardcoded to edi_shard_1 for now)
-                shard_id = "edi_shard_1"
+                # Polymorphic Dynamic Shard Allocation (Gold Standard 1)
+                allocation_result = await self.shard_allocator.allocate_shard_for_app(
+                    uow=uow,
+                    tenant_id=tenant_id,
+                    app_id=app.id,
+                    app_slug=app.slug,
+                )
+                if allocation_result.is_err:
+                    problem = allocation_result.unwrap_err()
+                    logger.error(
+                        "app_subscription_shard_allocation_failed",
+                        tenant_id=tenant_id,
+                        app_id=app.id,
+                        app_slug=app.slug,
+                        error_code=problem.code.value,
+                        reason=problem.message,
+                    )
+                    await uow.rollback()
+                    raise RuntimeError(f"Shard allocation failed: {problem.message}")
+
+                shard_id = allocation_result.unwrap()
                 await uow.tenant_repo.allocate_shard(tenant_id, app.id, shard_id)
 
                 await uow.commit()
                 logger.info(
                     "app_subscribed_infrastructure_provisioned",
                     tenant_id=tenant_id,
-                    app_id_from_event=app_id_from_event,
+                    app_id=app.id,
                     shard_id=shard_id,
                 )
 

@@ -19,6 +19,7 @@ from ip.engine.domain.exceptions import (
     Result,
 )
 from ip.engine.domain.replication.enums import (
+    CursorKind,
     EntitySyncFrom,
     EntitySyncSchedule,
     SyncMode,
@@ -31,6 +32,7 @@ from ip.engine.domain.replication.events import (
     ConnectionEntitySubscribedEvent,
     ConnectionEntityUnsubscribedEvent,
 )
+from ip.engine.domain.replication.stream_definition import StreamDefinition
 
 __all__ = ["ConnectionEntity", "PlannedSyncExecution"]
 
@@ -362,4 +364,44 @@ class ConnectionEntity(AggregateRoot):
                 connection_id=self.connection_id,
                 stream_name=self.stream_name,
             )
+        )
+
+    def to_stream_definition(self) -> StreamDefinition:
+        """Derives a declarative StreamDefinition for L2 universal replication and hash-merging."""
+        pk_tuples = tuple(
+            tuple(part for part in pk.split(".") if part)
+            for pk in self.primary_key
+            if pk and pk.strip()
+        )
+        if not pk_tuples:
+            pk_tuples = (("id",),)
+
+        cursor_tuple: tuple[str, ...] | None = None
+        cursor_kind = CursorKind.STRING
+        if self.cursor_field and self.cursor_field.strip():
+            cursor_name = self.cursor_field.strip()
+            cursor_tuple = tuple(part for part in cursor_name.split(".") if part)
+            field_def = next((f for f in self.fields if f.name == cursor_name), None)
+            data_type = field_def.data_type.lower() if field_def else ""
+            if data_type in ("datetime", "date-time", "timestamp", "date"):
+                cursor_kind = CursorKind.DATETIME
+            elif data_type in ("integer", "int", "bigint"):
+                cursor_kind = CursorKind.INTEGER
+            elif cursor_name.lower() in (
+                "updated_at",
+                "created_at",
+                "timestamp",
+                "last_reading_time",
+                "reading_timestamp",
+                "emitted_at",
+                "modified_at",
+            ):
+                cursor_kind = CursorKind.DATETIME
+
+        return StreamDefinition(
+            stream=self.stream_name,
+            primary_key=pk_tuples,
+            cursor_field=cursor_tuple,
+            cursor_kind=cursor_kind,
+            sync_mode=self.sync_mode,
         )

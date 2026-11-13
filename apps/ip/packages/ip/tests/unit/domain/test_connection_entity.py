@@ -10,6 +10,7 @@ from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import IpErrorCode
 from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import (
+    CursorKind,
     EntitySyncFrom,
     EntitySyncSchedule,
     SyncMode,
@@ -268,3 +269,50 @@ def test_plan_sync_execution_resolves_initial_floor_cursor() -> None:
     assert plan_disabled.is_err
     assert plan_disabled.error is not None
     assert plan_disabled.error.code == IpErrorCode.CONNECTION_ENTITY_DISABLED
+
+
+def test_to_stream_definition_maps_configured_entity_attributes() -> None:
+    account_entity = _create_entity(
+        stream_name="accounts",
+        sync_mode=SyncMode.INCREMENTAL,
+        primary_key=["account_id"],
+        fields=[
+            StreamField(name="account_id", data_type="STRING", nullable=False),
+            StreamField(name="updated_at", data_type="STRING", nullable=False),
+        ],
+        cursor_field="updated_at",
+    )
+    account_def = account_entity.to_stream_definition()
+    assert account_def.stream == "accounts"
+    assert account_def.primary_key == (("account_id",),)
+    assert account_def.cursor_field == ("updated_at",)
+    assert account_def.cursor_kind == CursorKind.DATETIME
+    assert account_def.sync_mode == SyncMode.INCREMENTAL
+
+    composite_entity = _create_entity(
+        stream_name="audit_logs",
+        sync_mode=SyncMode.FULL_REFRESH,
+        primary_key=["actor.org_id", "timestamp"],
+        fields=[
+            StreamField(name="version_seq", data_type="INTEGER", nullable=False),
+        ],
+        cursor_field="version_seq",
+    )
+    composite_def = composite_entity.to_stream_definition()
+    assert composite_def.primary_key == (("actor", "org_id"), ("timestamp",))
+    assert composite_def.cursor_field == ("version_seq",)
+    assert composite_def.cursor_kind == CursorKind.INTEGER
+    assert composite_def.sync_mode == SyncMode.FULL_REFRESH
+
+    string_cursor_entity = ConnectionEntity.try_create(
+        tenant_id=generate_id(IdentityIdPrefix.TENANT.value),
+        connection_id=generate_id(IpIdPrefix.CONNECTION.value),
+        stream_name="ledger_entries",
+        primary_key=(),
+        fields=[StreamField(name="cursor_token", data_type="STRING", nullable=False)],
+        cursor_field="cursor_token",
+    ).unwrap()
+    fallback_def = string_cursor_entity.to_stream_definition()
+    assert fallback_def.primary_key == (("id",),)
+    assert fallback_def.cursor_field == ("cursor_token",)
+    assert fallback_def.cursor_kind == CursorKind.STRING

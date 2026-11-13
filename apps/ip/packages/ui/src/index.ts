@@ -65,6 +65,10 @@ export {
   type ZeroLossReconciliationBannerProps,
 } from './presentation/intervals/ZeroLossReconciliationBanner';
 export {
+  NormalizedEntityDataTable,
+  type NormalizedEntityDataTableProps,
+} from './presentation/records/NormalizedEntityDataTable';
+export {
   SyncedDataInspectionPanel,
   type SyncedDataInspectionPanelProps,
 } from './presentation/records/SyncedDataInspectionPanel';

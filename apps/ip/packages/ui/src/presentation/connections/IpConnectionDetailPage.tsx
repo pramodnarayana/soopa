@@ -11,7 +11,6 @@ import { ArrowLeft } from 'lucide-react';
 import React, { useState } from 'react';
 import { useConnectionDetailQuery } from '../../application/use-connection-queries';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
-import { SyncedDataInspectionPanel } from '../records/SyncedDataInspectionPanel';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
 import { ConnectionEntitiesSyncTab } from './ConnectionEntitiesSyncTab';
@@ -21,7 +20,7 @@ import { resolveConnectionOverviewExtension } from './connection-overview-extens
 export const ConnectionDetailTab = {
   CONNECTION: 'connection',
   ENTITIES: 'entities',
-  DATA: 'data',
+  DATA: 'entities',
 } as const;
 
 export type ConnectionDetailTabValue =
@@ -52,7 +51,7 @@ export function IpConnectionDetailPage({
 
   const handleInspectEntity = (entityName: string) => {
     setInspectEntityFilter(entityName);
-    setActiveTab(ConnectionDetailTab.DATA);
+    setActiveTab(ConnectionDetailTab.ENTITIES);
   };
 
   return (
@@ -98,9 +97,6 @@ export function IpConnectionDetailPage({
             <TabsTrigger value={ConnectionDetailTab.ENTITIES} className={DETAIL_TAB_TRIGGER_CLASS}>
               Entities
             </TabsTrigger>
-            <TabsTrigger value={ConnectionDetailTab.DATA} className={DETAIL_TAB_TRIGGER_CLASS}>
-              Data
-            </TabsTrigger>
           </TabsList>
 
           <TabsContent value={ConnectionDetailTab.CONNECTION} className="space-y-6 pt-4">
@@ -119,17 +115,10 @@ export function IpConnectionDetailPage({
             <ConnectionEntitiesSyncTab
               connectionId={connection.id}
               connection={connection}
+              initialExpandedEntity={inspectEntityFilter}
               onInspectEntity={handleInspectEntity}
               onOpenTrace={(traceId) => navigation.toTraceDetail(traceId)}
               onProblem={setActionProblem}
-            />
-          </TabsContent>
-
-          <TabsContent value={ConnectionDetailTab.DATA} className="pt-4">
-            <SyncedDataInspectionPanel
-              connectionId={connection.id}
-              initialEntityFilter={inspectEntityFilter}
-              onOpenTrace={(traceId) => navigation.toTraceDetail(traceId)}
             />
           </TabsContent>
         </Tabs>

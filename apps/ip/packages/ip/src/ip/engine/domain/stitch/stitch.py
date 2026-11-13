@@ -104,9 +104,9 @@ class QueryReplicaStepInput:
 
     @classmethod
     def from_payload(cls, data: JsonDict) -> Result[QueryReplicaStepInput, WorkflowError]:
-        conn_id = data.get("connection_id")
-        stream = data.get("stream")
-        rec_key = data.get("record_key")
+        conn_id = data.get("connection_id") or data.get("source_connection_id")
+        stream = data.get("stream") or data.get("stream_name")
+        rec_key = data.get("record_key") or data.get("source_id")
         if (
             not isinstance(conn_id, str)
             or not conn_id.strip()
@@ -202,6 +202,20 @@ class EmitNotificationStepOutput:
         }
 
 
+def _resolve_effective_payload(data: JsonDict) -> JsonDict:
+    """Extracts effective step input, merging parent task output if nested under parents."""
+    parents = data.get("parents")
+    if isinstance(parents, dict):
+        for parent_val in parents.values():
+            if isinstance(parent_val, dict) and (
+                "connection_id" in parent_val
+                or "destination_connection_id" in parent_val
+                or "target_connection_id" in parent_val
+            ):
+                return {**data, **parent_val}
+    return dict(data)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ExecuteHttpActionStepInput:
     """Strongly-typed input DTO for dispatching an L5 outbound mutation from a Stitch step."""
@@ -217,14 +231,26 @@ class ExecuteHttpActionStepInput:
 
     @classmethod
     def from_payload(cls, data: JsonDict) -> Result[ExecuteHttpActionStepInput, WorkflowError]:
-        conn_id = data.get("connection_id")
-        stream_name = data.get("stream_name") or data.get("stream")
-        raw_op = data.get("operation", HttpWriteOperation.CREATE.value)
-        raw_payload = data.get("payload")
-        raw_record_id = data.get("record_id")
-        raw_headers = data.get("headers")
-        raw_conflict = data.get("conflict_strategy", OutboundConflictStrategy.FAIL.value)
-        raw_causation_depth = data.get("causation_depth", 0)
+        effective_data = _resolve_effective_payload(data)
+        conn_id = (
+            effective_data.get("destination_connection_id")
+            or effective_data.get("target_connection_id")
+            or effective_data.get("connection_id")
+        )
+        stream_name = (
+            effective_data.get("destination_stream")
+            or effective_data.get("stream_name")
+            or effective_data.get("stream")
+        )
+        raw_op = effective_data.get("operation", HttpWriteOperation.CREATE.value)
+        if "payload" in effective_data:
+            raw_payload = effective_data["payload"]
+        else:
+            raw_payload = {k: v for k, v in effective_data.items() if k != "parents"}
+        raw_record_id = effective_data.get("record_id") or effective_data.get("source_id")
+        raw_headers = effective_data.get("headers")
+        raw_conflict = effective_data.get("conflict_strategy", OutboundConflictStrategy.FAIL.value)
+        raw_causation_depth = effective_data.get("causation_depth", 0)
 
         if (
             not isinstance(conn_id, str)

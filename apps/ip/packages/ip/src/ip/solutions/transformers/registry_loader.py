@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 from ip.engine.domain.normalization.registries import TransformerRegistry
-from ip.engine.ports.outbound.transformer_port import TransformerRegistryPort
-from ip.solutions.domains.energy.transformers import (
+from ip.engine.ports.outbound.transformer_port import (
+    TransformerPort,
+    TransformerRegistryPort,
+)
+from ip.solutions.domains.energy.transformers.ami.meter_reading import (
     AmiMeterReadingTransformerV1,
     AmiMeterReadingTransformerV2,
+)
+from ip.solutions.domains.energy.transformers.ami.service_point import (
     AmiServicePointTransformerV1,
+)
+from ip.solutions.domains.energy.transformers.itron.meter_reading import (
+    ItronMeterReadingTransformerV1,
+)
+from ip.solutions.domains.energy.transformers.itron.service_point import (
+    ItronServicePointTransformerV1,
 )
 from ip.solutions.domains.tms.transformers import (
     MercuryGateCarrierTransformerV1,
@@ -15,15 +26,25 @@ from ip.solutions.domains.tms.transformers import (
     MercuryGateLoadTransformerV2,
 )
 
+_DEFAULT_ENERGY_TRANSFORMERS: tuple[TransformerPort, ...] = (
+    AmiMeterReadingTransformerV1(),
+    AmiMeterReadingTransformerV2(),
+    AmiServicePointTransformerV1(),
+    ItronMeterReadingTransformerV1(),
+    ItronServicePointTransformerV1(),
+)
+
+_DEFAULT_TMS_TRANSFORMERS: tuple[TransformerPort, ...] = (
+    MercuryGateLoadTransformerV1(),
+    MercuryGateLoadTransformerV2(),
+    MercuryGateCarrierTransformerV1(),
+)
+
 
 def register_default_transformers(registry: TransformerRegistryPort) -> None:
     """Register all built-in Energy and TMS pure transformers into the provided TransformerRegistryPort."""
-    registry.register(AmiMeterReadingTransformerV1())
-    registry.register(AmiMeterReadingTransformerV2())
-    registry.register(AmiServicePointTransformerV1())
-    registry.register(MercuryGateLoadTransformerV1())
-    registry.register(MercuryGateLoadTransformerV2())
-    registry.register(MercuryGateCarrierTransformerV1())
+    for transformer in (*_DEFAULT_ENERGY_TRANSFORMERS, *_DEFAULT_TMS_TRANSFORMERS):
+        registry.register(transformer)
 
 
 def create_default_transformer_registry() -> TransformerRegistry:
@@ -37,6 +58,8 @@ __all__ = [
     "AmiMeterReadingTransformerV1",
     "AmiMeterReadingTransformerV2",
     "AmiServicePointTransformerV1",
+    "ItronMeterReadingTransformerV1",
+    "ItronServicePointTransformerV1",
     "MercuryGateCarrierTransformerV1",
     "MercuryGateLoadTransformerV1",
     "MercuryGateLoadTransformerV2",

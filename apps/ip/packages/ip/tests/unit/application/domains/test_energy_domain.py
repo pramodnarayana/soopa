@@ -16,9 +16,18 @@ from ip.solutions.domains.energy.models import (
     MdmServicePointRecord,
 )
 from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
-from ip.solutions.domains.energy.transformers import (
+from ip.solutions.domains.energy.transformers.ami.meter_reading import (
     AmiMeterReadingTransformerV1,
     AmiMeterReadingTransformerV2,
+)
+from ip.solutions.domains.energy.transformers.ami.service_point import (
+    AmiServicePointTransformerV1,
+)
+from ip.solutions.domains.energy.transformers.itron.meter_reading import (
+    ItronMeterReadingTransformerV1,
+)
+from ip.solutions.domains.energy.transformers.itron.service_point import (
+    ItronServicePointTransformerV1,
 )
 from ip.solutions.domains.energy.writers import (
     _parse_float,
@@ -248,3 +257,204 @@ def test_energy_meter_reading_transformer_coerces_non_finite_optional_metrics() 
     assert to_finite_int(float("nan"), 15) == 15
     assert _parse_optional_float(10**400) is None
     assert _parse_float(10**400, 0.0) == 0.0
+
+
+def test_itron_meter_reading_transformer_maps_vendor_contract() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_itron_01",
+        connection_id="conn_itron_01",
+        stream="meter_readings",
+        trace_id="trc_itron_01",
+    )
+    itron_xfrm = ItronMeterReadingTransformerV1()
+    assert itron_xfrm.transformation_id == "energy.itron_meter_reading"
+    assert itron_xfrm.transformation_version == 1
+
+    res = itron_xfrm.transform(
+        ReplicaSnapshot(
+            id="rep_itron_01",
+            connection_id="conn_itron_01",
+            stream="meter_readings",
+            record_key="ITR-9901:2026-11-13T01:00:00Z",
+            version=1,
+            data={
+                "serial_number": "ITR-9901",
+                "last_reading_time": "2026-11-13T01:00:00Z",
+                "kwh_delivered": 45.2,
+                "kwh_received": 1.2,
+                "voltage_avg": 240.2,
+                "service_point_id": "SP-ITRON-501",
+                "interval_minutes": 15,
+                "quality": "VALIDATED",
+            },
+        ),
+        ctx,
+    )
+    assert not res.rejections
+    assert len(res.drafts) == 1
+    draft = res.drafts[0]
+    assert draft.fields["meter_serial_number"] == "ITR-9901"
+    assert draft.fields["reading_timestamp"] == "2026-11-13T01:00:00Z"
+    assert draft.fields["kwh_delivered"] == 45.2
+    assert draft.fields["voltage_avg"] == 240.2
+    assert draft.fields["service_point_id"] == "SP-ITRON-501"
+
+
+def test_itron_meter_reading_transformer_rejects_missing_serial() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_itron_01",
+        connection_id="conn_itron_01",
+        stream="meter_readings",
+        trace_id="trc_itron_01",
+    )
+    itron_xfrm = ItronMeterReadingTransformerV1()
+
+    res = itron_xfrm.transform(
+        ReplicaSnapshot(
+            id="rep_itron_bad",
+            connection_id="conn_itron_01",
+            stream="meter_readings",
+            record_key="bad",
+            version=1,
+            data={"last_reading_time": "2026-11-13T01:00:00Z", "kwh_delivered": 10.0},
+        ),
+        ctx,
+    )
+    assert not res.drafts
+    assert len(res.rejections) == 1
+    assert res.rejections[0].field_path == "serial_number"
+    assert res.rejections[0].reason == NormalizationRejectionReason.MISSING_REQUIRED_FIELD
+
+
+def test_itron_service_point_transformer_maps_vendor_contract() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_itron_01",
+        connection_id="conn_itron_01",
+        stream="service_points",
+        trace_id="trc_itron_sp_01",
+    )
+    itron_sp_xfrm = ItronServicePointTransformerV1()
+    assert itron_sp_xfrm.transformation_id == "energy.itron_service_point"
+
+    res = itron_sp_xfrm.transform(
+        ReplicaSnapshot(
+            id="rep_itron_sp_01",
+            connection_id="conn_itron_01",
+            stream="service_points",
+            record_key="PREM-9001",
+            version=1,
+            data={
+                "premise_id": "PREM-9001",
+                "serial_number": "ITR-9901",
+                "customer_ref": "CUST-9001",
+                "address": "9001 Substation Blvd",
+                "grid_zone": "ERCOT-SOUTH",
+                "status": "ACTIVE",
+            },
+        ),
+        ctx,
+    )
+    assert not res.rejections
+    assert len(res.drafts) == 1
+    draft = res.drafts[0]
+    assert draft.fields["service_point_external_id"] == "PREM-9001"
+    assert draft.fields["meter_serial_number"] == "ITR-9901"
+    assert draft.fields["customer_external_id"] == "CUST-9001"
+    assert draft.fields["service_address"] == "9001 Substation Blvd"
+    assert draft.fields["grid_region"] == "ERCOT-SOUTH"
+
+
+def test_ami_service_point_transformer_maps_vendor_contract() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_ami_01",
+        connection_id="conn_ami_01",
+        stream="service_points",
+        trace_id="trc_ami_sp_01",
+    )
+    ami_sp_xfrm = AmiServicePointTransformerV1()
+    assert ami_sp_xfrm.transformation_id == "energy.ami_service_point"
+
+    res = ami_sp_xfrm.transform(
+        ReplicaSnapshot(
+            id="rep_ami_sp_01",
+            connection_id="conn_ami_01",
+            stream="service_points",
+            record_key="SP-AMI-1001",
+            version=1,
+            data={
+                "service_point_id": "SP-AMI-1001",
+                "meter_serial": "MTR-AMI-1001",
+                "customer_id": "CUST-AMI-1001",
+                "service_address": "1001 Power Way",
+                "grid_region": "CAISO",
+                "status": "ACTIVE",
+            },
+        ),
+        ctx,
+    )
+    assert not res.rejections
+    assert len(res.drafts) == 1
+    draft = res.drafts[0]
+    assert draft.fields["service_point_external_id"] == "SP-AMI-1001"
+    assert draft.fields["meter_serial_number"] == "MTR-AMI-1001"
+    assert draft.fields["customer_external_id"] == "CUST-AMI-1001"
+    assert draft.fields["service_address"] == "1001 Power Way"
+    assert draft.fields["grid_region"] == "CAISO"
+
+
+def test_ami_service_point_transformer_rejects_missing_service_point_id() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_ami_01",
+        connection_id="conn_ami_01",
+        stream="service_points",
+        trace_id="trc_ami_sp_01",
+    )
+    ami_sp_xfrm = AmiServicePointTransformerV1()
+
+    res = ami_sp_xfrm.transform(
+        ReplicaSnapshot(
+            id="rep_ami_sp_bad",
+            connection_id="conn_ami_01",
+            stream="service_points",
+            record_key="",
+            version=1,
+            data={
+                "customer_id": "CUST-AMI-1001",
+            },
+        ),
+        ctx,
+    )
+    assert not res.drafts
+    assert len(res.rejections) == 1
+    assert res.rejections[0].field_path == "service_point_id"
+    assert res.rejections[0].reason == NormalizationRejectionReason.MISSING_REQUIRED_FIELD
+
+
+def test_ami_service_point_transformer_supports_meter_id_alias() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_ami_01",
+        connection_id="conn_ami_01",
+        stream="service_points",
+        trace_id="trc_ami_sp_01",
+    )
+    ami_sp_xfrm = AmiServicePointTransformerV1()
+
+    res = ami_sp_xfrm.transform(
+        ReplicaSnapshot(
+            id="rep_ami_sp_02",
+            connection_id="conn_ami_01",
+            stream="service_points",
+            record_key="SP-AMI-1002",
+            version=1,
+            data={
+                "service_point_id": "SP-AMI-1002",
+                "meter_id": "MTR-ALT-999",
+                "address": "999 Alternative St",
+            },
+        ),
+        ctx,
+    )
+    assert not res.rejections
+    assert len(res.drafts) == 1
+    assert res.drafts[0].fields["meter_serial_number"] == "MTR-ALT-999"
+    assert res.drafts[0].fields["service_address"] == "999 Alternative St"

@@ -580,7 +580,7 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
       <IpConnectionDetailPage connectionId={freshSimConnection.id} />,
       qc,
     );
-    expect(simulatorDetailHtml.match(/role="tab"/g)?.length).toBe(3);
+    expect(simulatorDetailHtml.match(/role="tab"/g)?.length).toBe(2);
     expect(simulatorDetailHtml).toContain('Connection Details');
     expect(simulatorDetailHtml).toContain('Simulator Entities');
     expect(simulatorDetailHtml).toContain('Create Entity');
@@ -715,5 +715,50 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
 
     expect(resolveConnectionOverviewExtension('acme_source')).toBeNull();
     expect(resolveConnectionOverviewExtension(UNIVERSAL_SIMULATOR_APP_ID)).not.toBeNull();
+  });
+
+  it('renders inline entity-centric data inspection panel when entity row is expanded', () => {
+    const qc = createEntitiesQueryClient();
+    qc.setQueryData(
+      ipQueryKeys.records.normalized(SEED_TENANT_ID, {
+        connectionId: SEED_CONNECTION_ID,
+        limit: 100,
+      }),
+      ok([
+        {
+          id: 'norm-entity-1',
+          tenantId: SEED_TENANT_ID,
+          traceId: 'tr-1',
+          connectionId: SEED_CONNECTION_ID,
+          canonicalType: 'records_alpha',
+          sourceId: 'SRC-alpha-1',
+          canonicalData: { record_id: 'SRC-alpha-1', value_num: 120 },
+          normalizedAt: '2026-11-05T10:00:00Z',
+        },
+      ]),
+    );
+
+    const html = renderEntitiesTab(
+      <ConnectionEntitiesSyncTab
+        connectionId={SEED_CONNECTION_ID}
+        connection={SEED_CONNECTION}
+        initialExpandedEntity="records_alpha"
+        onOpenTrace={() => undefined}
+        onProblem={() => undefined}
+      />,
+      qc,
+    );
+
+    expect(html).toContain('Records Alpha');
+    expect(html).toContain('1 record');
+    expect(html).toContain('role="region"');
+    expect(html).toContain('aria-label="records_alpha records table"');
+    expect(html).toContain('Record ID');
+    expect(html).toContain('Value Num');
+    expect(html).toContain('PK');
+    // Verifies no confusing engineering tabs leak into user view
+    expect(html).not.toContain('L3: Normalized Canonical');
+    expect(html).not.toContain('GEM: Identity Map');
+    expect(html).not.toContain('Current View: Customer Support (Full Diagnostic)');
   });
 });

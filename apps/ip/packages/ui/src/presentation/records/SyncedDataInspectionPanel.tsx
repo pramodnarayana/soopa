@@ -79,9 +79,14 @@ function PermanentRecordTable<TData>({
   emptyMessage,
 }: PermanentRecordTableProps<TData>) {
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div
+      tabIndex={0}
+      role="region"
+      aria-label="Synced records table"
+      className="table-wrapper rounded-xl border border-border bg-card overflow-auto max-h-[440px]"
+    >
       <Table>
-        <TableHeader className="bg-muted/50 border-b border-border">
+        <TableHeader className="sticky top-0 bg-muted/90 backdrop-blur-sm z-10 border-b border-border">
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id} className="hover:bg-transparent border-0">
               {headerGroup.headers.map((header) => (
@@ -137,12 +142,14 @@ export interface SyncedDataInspectionPanelProps {
   readonly connectionId?: string;
   readonly initialEntityFilter?: string | null;
   readonly onOpenTrace?: (traceId: string) => void;
+  readonly compact?: boolean;
 }
 
 export function SyncedDataInspectionPanel({
   connectionId,
   initialEntityFilter,
   onOpenTrace,
+  compact = false,
 }: SyncedDataInspectionPanelProps) {
   const { userRole } = useIpWorkspace();
   const [activeTab, setActiveTab] = useState<string>('l3');
@@ -505,41 +512,45 @@ export function SyncedDataInspectionPanel({
   });
 
   return (
-    <div className="space-y-6">
-      {/* Role-Based Visibility Banner */}
-      <Card className="border border-border bg-card/60">
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
-          <div className="flex items-center gap-3">
-            <div
-              className={`flex h-10 w-10 items-center justify-center rounded-xl ${isCustomerRole ? 'bg-status-warning-bg text-status-warning-fg' : 'bg-status-healthy-bg text-status-healthy-fg'}`}
-            >
-              {isCustomerRole ? <Lock className="h-5 w-5" /> : <Shield className="h-5 w-5" />}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-foreground">
-                  Current View:{' '}
-                  {isCustomerRole ? 'Customer (Restricted)' : 'Customer Support (Full Diagnostic)'}
-                </span>
-                <StatusBadge
-                  label={userRole.toUpperCase()}
-                  tone={isCustomerRole ? StatusTone.WARNING : StatusTone.HEALTHY}
-                />
+    <div className={compact ? 'space-y-4' : 'space-y-6'}>
+      {/* Role-Based Visibility Banner (hidden in compact stream-embedded mode) */}
+      {!compact && (
+        <Card className="border border-border bg-card/60">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
+            <div className="flex items-center gap-3">
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-xl ${isCustomerRole ? 'bg-status-warning-bg text-status-warning-fg' : 'bg-status-healthy-bg text-status-healthy-fg'}`}
+              >
+                {isCustomerRole ? <Lock className="h-5 w-5" /> : <Shield className="h-5 w-5" />}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {isCustomerRole
-                  ? 'Restricted View: You can only view Layer 3 Normalized Records, GEM identity crosswalks, and Execution Traces. Raw wire (L1) and replica staging (L2) are strictly hidden.'
-                  : 'Full View: Customer Support has permission to inspect all layers including Raw Wire Inbound (L1), Universal Replica (L2), Normalized (L3), GEM, and Traces.'}
-              </p>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground">
+                    Current View:{' '}
+                    {isCustomerRole
+                      ? 'Customer (Restricted)'
+                      : 'Customer Support (Full Diagnostic)'}
+                  </span>
+                  <StatusBadge
+                    label={userRole.toUpperCase()}
+                    tone={isCustomerRole ? StatusTone.WARNING : StatusTone.HEALTHY}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {isCustomerRole
+                    ? 'Restricted View: You can only view Layer 3 Normalized Records, GEM identity crosswalks, and Execution Traces. Raw wire (L1) and replica staging (L2) are strictly hidden.'
+                    : 'Full View: Customer Support has permission to inspect all layers including Raw Wire Inbound (L1), Universal Replica (L2), Normalized (L3), GEM, and Traces.'}
+                </p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main Tabbed Record Viewer */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <TabsList>
+          <TabsList className={compact ? 'bg-muted/50 p-0.5' : undefined}>
             <TabsTrigger value="l3" className="gap-2">
               <Database className="h-4 w-4" />
               <span>L3: Normalized Canonical</span>
@@ -560,10 +571,12 @@ export function SyncedDataInspectionPanel({
                 </TabsTrigger>
               </>
             )}
-            <TabsTrigger value="traces" className="gap-2">
-              <FileCode2 className="h-4 w-4" />
-              <span>Activity & Traces</span>
-            </TabsTrigger>
+            {!compact && (
+              <TabsTrigger value="traces" className="gap-2">
+                <FileCode2 className="h-4 w-4" />
+                <span>Activity & Traces</span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <div className="relative w-72">

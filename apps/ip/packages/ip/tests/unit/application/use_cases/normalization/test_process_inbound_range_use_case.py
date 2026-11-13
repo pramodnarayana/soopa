@@ -39,6 +39,7 @@ from ip.engine.domain.normalization.transformation import (
     TransformationContext,
     TransformationResult,
 )
+from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import CursorKind, MergeOutcome, SyncMode
 from ip.engine.domain.replication.inbound_record import InboundBatchItemSpec, InboundRecord
 from ip.engine.domain.replication.replica_record import (
@@ -666,14 +667,46 @@ class _FakeTransformationRepo(TransformationRepositoryPort):
         ]
 
 
+class _FakeEntityRepo(ConnectionEntityRepositoryPort):
+    def __init__(
+        self, entities: dict[tuple[str, str, str], ConnectionEntity] | None = None
+    ) -> None:
+        self.entities = entities or {}
+
+    async def get_by_stream(
+        self, tenant_id: str, connection_id: str, stream_name: str
+    ) -> ConnectionEntity | None:
+        return self.entities.get((tenant_id, connection_id, stream_name))
+
+    async def list_by_connection(
+        self, tenant_id: str, connection_id: str
+    ) -> Sequence[ConnectionEntity]:
+        return [
+            e
+            for (tid, cid, _), e in self.entities.items()
+            if tid == tenant_id and cid == connection_id
+        ]
+
+    async def save(self, entity: ConnectionEntity) -> None:
+        self.entities[(entity.tenant_id, entity.connection_id, entity.stream_name)] = entity
+
+    async def delete(self, entity: ConnectionEntity) -> None:
+        self.entities.pop((entity.tenant_id, entity.connection_id, entity.stream_name), None)
+
+
 class _FakeControlPlaneUoW(IpControlPlaneUnitOfWorkPort):
     connections: ConnectionRepositoryPort
     entities: ConnectionEntityRepositoryPort
     sync_runs: SyncRunRepositoryPort
     stitches: StitchRepositoryPort
 
-    def __init__(self, transformations: dict[tuple[str, str, str], Transformation]) -> None:
+    def __init__(
+        self,
+        transformations: dict[tuple[str, str, str], Transformation],
+        entities: ConnectionEntityRepositoryPort | None = None,
+    ) -> None:
         self.transformations = _FakeTransformationRepo(transformations)
+        self.entities = entities if entities is not None else _FakeEntityRepo()
 
     async def __aenter__(self) -> _FakeControlPlaneUoW:
         return self
@@ -1254,3 +1287,56 @@ async def test_process_inbound_range_rolls_back_preserves_existing_replica_state
     surviving = dp_uow.replica_records.committed[initial_replica.id]
     assert surviving.version == initial_version
     assert surviving.data == initial_data
+
+
+@pytest.mark.asyncio
+async def test_process_inbound_range_resolves_subscribed_entity_stream_definition() -> None:
+    dp_uow, _, _, fused_uc = _build_fused_harness()
+    entity = ConnectionEntity.try_create(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        stream_name="orders",
+        primary_key=["order_number"],
+        cursor_field="updated_at",
+    ).unwrap()
+    await fused_uc._control_plane_uow.entities.save(entity)
+
+    payload: JsonDict = {
+        "id": "ORD-CUSTOM-99",
+        "order_number": "ORD-CUSTOM-99",
+        "total": 77.0,
+        "updated_at": "2026-11-12T00:00:00Z",
+    }
+    inbound = InboundRecord.create(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        app_id="crm_source",
+        stream_name="orders",
+        payload_bytes=json.dumps(payload).encode("utf-8"),
+        is_inlined=True,
+        request_body=payload,
+        trace_id="ip_trc_entity_lookup",
+    )
+    await dp_uow.inbound_records.save(inbound)
+
+    res = await fused_uc.execute(
+        ProcessInboundRangeCommand(
+            tenant_id="ten_01",
+            connection_id="conn_01",
+            stream="orders",
+            batch_id=inbound.batch_id,
+            range_start=inbound.id,
+            range_end=inbound.id,
+            count=1,
+            generation_id=1,
+            trace_id="ip_trc_entity_lookup",
+            stream_definition=None,
+        )
+    )
+
+    assert res.is_ok
+    dto = res.unwrap()
+    assert dto.replication_summary.inserted_count == 1
+    assert len(dp_uow.replica_records.committed) == 1
+    saved_rep = next(iter(dp_uow.replica_records.committed.values()))
+    assert saved_rep.primary_key_values == ("ORD-CUSTOM-99",)

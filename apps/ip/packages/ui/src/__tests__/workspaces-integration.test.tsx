@@ -288,7 +288,7 @@ describe('IP Presentation Workspaces Narrow Integration', () => {
     expect(connDetailHtml).toContain('Acme Primary Workspace');
     expect(connDetailHtml).toContain('Connection');
     expect(connDetailHtml).toContain('Entities');
-    expect(connDetailHtml).toContain('Data');
+    expect(connDetailHtml).not.toContain('>Data<');
     expect(connDetailHtml).toContain('Connection Details');
     expect(connDetailHtml).toContain('Name');
     expect(connDetailHtml).toContain('Save Changes');
