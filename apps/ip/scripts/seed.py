@@ -98,9 +98,8 @@ async def seed_ip_domain() -> None:
                             app_id=actual_app_id,
                             shard_id=IP_SHARD_ID,
                         )
-                        .on_conflict_do_update(
+                        .on_conflict_do_nothing(
                             index_elements=[ShardRegistry.tenant_id, ShardRegistry.app_id],
-                            set_={"shard_id": IP_SHARD_ID},
                         )
                     )
                     await session.execute(stmt_binding)

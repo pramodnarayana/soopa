@@ -7,7 +7,7 @@ fail-closed DSN guards ensuring tests never connect to live development database
 
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import aclosing, asynccontextmanager
 from types import TracebackType
 from typing import cast
 
@@ -133,8 +133,10 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
 
     @asynccontextmanager
     async def global_session_scope(self) -> AsyncIterator[GlobalSession]:
-        async for session in self.get_global_session():
-            yield session
+        agen = self.get_global_session()
+        async with aclosing(agen):
+            async for session in agen:
+                yield session
 
     async def get_tenant_session(
         self, tenant_id: str, shard_key: str, shard_url: str
@@ -147,6 +149,11 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
                 join_transaction_mode="create_savepoint",
             )
 
+            prev_setting_res = await self.shard_conn.execute(
+                text("SELECT current_setting('platform.current_tenant_id', true)")
+            )
+            prev_tenant_id = prev_setting_res.scalar() or ""
+
             try:
                 async with factory() as session:
                     await session.execute(
@@ -158,7 +165,8 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
             finally:
                 if not self.shard_conn.closed:
                     await self.shard_conn.execute(
-                        text("SELECT set_config('platform.current_tenant_id', '', true)")
+                        text("SELECT set_config('platform.current_tenant_id', :tenant_id, true)"),
+                        {"tenant_id": prev_tenant_id},
                     )
 
     async def get_tenant_read_session(
@@ -175,6 +183,10 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
                 class_=AsyncSession,
                 join_transaction_mode="create_savepoint",
             )
+            prev_setting_res = await self.shard_conn.execute(
+                text("SELECT current_setting('platform.current_tenant_id', true)")
+            )
+            prev_tenant_id = prev_setting_res.scalar() or ""
             try:
                 async with factory() as session:
                     await session.execute(text("SET LOCAL TRANSACTION READ ONLY"))
@@ -187,7 +199,8 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
             finally:
                 if not self.shard_conn.closed:
                     await self.shard_conn.execute(
-                        text("SELECT set_config('platform.current_tenant_id', '', true)")
+                        text("SELECT set_config('platform.current_tenant_id', :tenant_id, true)"),
+                        {"tenant_id": prev_tenant_id},
                     )
 
     async def get_shard_session(

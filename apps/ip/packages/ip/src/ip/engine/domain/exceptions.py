@@ -82,6 +82,10 @@ class IpError:
     http_status: int = 400
     details: JsonDict = field(default_factory=dict)
 
+    @property
+    def is_retryable(self) -> bool:
+        return self.disposition is FailureDisposition.RETRY
+
 
 @dataclass(frozen=True, kw_only=True)
 class ConnectionNotFoundError(IpError):

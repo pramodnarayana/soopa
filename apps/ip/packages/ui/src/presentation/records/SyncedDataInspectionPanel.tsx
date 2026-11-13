@@ -83,7 +83,7 @@ function PermanentRecordTable<TData>({
       tabIndex={0}
       role="region"
       aria-label="Synced records table"
-      className="table-wrapper rounded-xl border border-border bg-card overflow-auto max-h-[440px]"
+      className="table-wrapper rounded-xl border border-border bg-card overflow-auto max-h-[440px] [&_[data-slot=table-container]]:overflow-visible"
     >
       <Table>
         <TableHeader className="sticky top-0 bg-muted/90 backdrop-blur-sm z-10 border-b border-border">

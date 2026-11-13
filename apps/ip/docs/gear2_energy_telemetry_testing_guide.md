@@ -53,27 +53,54 @@ Gear 2 governs all **high-frequency, columnar time-series telemetry** in the Ene
 ]
 ```
 
-### 2.2 ClickHouse Physical Storage DDL (`telemetry.meter_interval_readings_local`)
+### 2.2 ClickHouse Physical Storage DDL (`ip_intervals.interval_readings_15m`)
 ```sql
-CREATE TABLE telemetry.meter_interval_readings_local (
-    tenant_id UUID,
-    connection_id UUID,
-    gem_device_id UUID,
-    source_meter_id LowCardinality(String),
-    feeder_id LowCardinality(String),
-    substation_id LowCardinality(String),
-    tariff_bucket Enum8('PEAK' = 1, 'SHOULDER' = 2, 'OFF_PEAK' = 3),
-    quality_status Enum8('VALID' = 1, 'ESTIMATED_VEE' = 2, 'QUARANTINED_SPIKE' = 6),
-    interval_end_utc DateTime64(3, 'UTC'),
-    scaled_kwh_delivered Decimal64(6) CODEC(ZSTD(3)),
-    scaled_kwh_received Decimal64(6) CODEC(ZSTD(3)),
-    voltage_v Decimal32(3) CODEC(ZSTD(3)),
-    source_batch_id UUID,
-    updated_at_utc DateTime64(3, 'UTC')
+CREATE TABLE IF NOT EXISTS ip_intervals.interval_readings_15m
+(
+    tenant_id             LowCardinality(String) CODEC(ZSTD(1)),
+    connection_id         LowCardinality(String) CODEC(ZSTD(1)),
+    gem_device_id         LowCardinality(String) CODEC(ZSTD(1)),
+    source_meter_id       LowCardinality(String) CODEC(ZSTD(1)),
+    endpoint_location_id  LowCardinality(String) CODEC(ZSTD(1)),
+    feeder_id             LowCardinality(String) CODEC(ZSTD(1)),
+    substation_id         LowCardinality(String) CODEC(ZSTD(1)),
+    tariff_bucket         LowCardinality(String) CODEC(ZSTD(1)),
+    quality_status        LowCardinality(String) CODEC(ZSTD(1)),
+    interval_end_utc      DateTime64(3, 'UTC')   CODEC(DoubleDelta, ZSTD(1)),
+    scaled_kwh_delivered  Decimal64(4)           CODEC(ZSTD(3)),
+    scaled_kwh_received   Decimal64(4)           CODEC(ZSTD(3)),
+    reactive_kvarh        Decimal64(4)           CODEC(ZSTD(3)),
+    voltage_v             Float32                CODEC(ZSTD(3)),
+    source_batch_id       LowCardinality(String) CODEC(ZSTD(1)),
+    parquet_row_offset    UInt32                 CODEC(DoubleDelta, ZSTD(1)),
+    trace_id              LowCardinality(String) CODEC(ZSTD(1)),
+    delivery_receipt_id   LowCardinality(String) CODEC(ZSTD(1)),
+    updated_at_utc        DateTime64(3, 'UTC')   CODEC(DoubleDelta, ZSTD(1))
 )
-ENGINE = ReplicatedReplacingMergeTree(updated_at_utc)
+ENGINE = ReplacingMergeTree(updated_at_utc)
 PARTITION BY toYYYYMM(interval_end_utc)
-ORDER BY (tenant_id, gem_device_id, interval_end_utc);
+ORDER BY (tenant_id, gem_device_id, interval_end_utc)
+TTL toDateTime(interval_end_utc) + INTERVAL 90 DAY DELETE;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS ip_intervals.mv_interval_readings_hourly
+ENGINE = AggregatingMergeTree()
+PARTITION BY toYYYYMM(hour_start_utc)
+ORDER BY (tenant_id, gem_device_id, hour_start_utc, tariff_bucket)
+AS SELECT
+    tenant_id,
+    gem_device_id,
+    anyLastState(source_meter_id) AS source_meter_id_state,
+    toStartOfHour(interval_end_utc) AS hour_start_utc,
+    anyLastState(feeder_id) AS feeder_id_state,
+    tariff_bucket,
+    countState() AS interval_count_state,
+    sumState(scaled_kwh_delivered) AS total_kwh_delivered_state,
+    sumState(scaled_kwh_received) AS total_kwh_received_state,
+    maxState(scaled_kwh_delivered * 4) AS max_kw_demand_state,
+    avgState(voltage_v) AS avg_voltage_v_state
+FROM ip_intervals.interval_readings_15m
+WHERE quality_status != 'QUARANTINED_SPIKE'
+GROUP BY tenant_id, gem_device_id, hour_start_utc, tariff_bucket;
 ```
 
 ---
@@ -89,10 +116,8 @@ You can run the full Gear 2 interval streams test suite against your local test 
 ```
 
 ### Key Tests Verified in Suite:
-1. `test_buffer_raw_interval_batch_creates_manifest_in_cold_storage`: Verifies L1 Ingress shock absorber, SHA-256 calculation, and `BatchManifestModel` creation.
-2. `test_process_interval_batch_executes_zero_loss_reconciliation`: Verifies the **Zero-Loss Accounting Invariant** (`raw == valid + duplicates_dropped + quarantined`).
-3. `test_process_interval_batch_detects_and_promotes_outage_clusters`: Verifies L3.5 Storm Outage Bridge (detects $\ge 25$ simultaneous $0\text{V}$ readings and publishes `P0_CRITICAL` event to Gear 1).
-4. `test_interval_rollup_queries_and_completeness_matrix`: Verifies ClickHouse / Rollup repository queries return 96-slot completeness matrices and TOU aggregations.
+1. `test_interval_batch_ingress_persists_manifest_with_claim_check_event`: Verifies L1 Ingress shock absorber, SHA-256 calculation, and `BatchManifestModel` creation in PostgreSQL.
+2. `test_interval_orchestrator_processes_batch_end_to_end_pipeline`: Verifies the full pipeline end-to-end against real PostgreSQL data plane tables, executing the Zero-Loss Accounting Invariant (`raw == valid + duplicates_dropped + quarantined`), storm outage bridge cluster promotion, and verifying rollup queries in-memory (using `ColumnarIntervalRollupRepositoryAdapter`). ClickHouse live query execution is verified when connected to an external OLAP cluster driver.
 
 ---
 
@@ -108,18 +133,18 @@ curl -X POST "http://localhost:8000/api/v1/tenants/TENANT_ID/ip/intervals/ingres
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '[
     {
-      "meter_id": "MTR-SMART-9001",
+      "source_meter_id": "MTR-SMART-9001",
       "feeder_id": "F-NORTH-12",
       "substation_id": "SUB-WEST-01",
-      "interval_end": "2026-11-12T12:15:00Z",
+      "interval_end_utc": "2026-11-12T12:15:00Z",
       "kwh_delivered": 1.45,
       "voltage_v": 240.2
     },
     {
-      "meter_id": "MTR-SMART-9002",
+      "source_meter_id": "MTR-SMART-9002",
       "feeder_id": "F-NORTH-12",
       "substation_id": "SUB-WEST-01",
-      "interval_end": "2026-11-12T12:15:00Z",
+      "interval_end_utc": "2026-11-12T12:15:00Z",
       "kwh_delivered": 0.98,
       "voltage_v": 240.0
     }
@@ -204,7 +229,7 @@ curl -X POST "http://localhost:8000/api/v1/tenants/TENANT_ID/ip/intervals/batche
 ```sql
 SELECT id, stream_name, status, raw_ingested_count, valid_canonical_count, 
        duplicates_dropped_count, quarantined_held_count, delivery_receipt_id, completed_at
-FROM public.batch_manifests
+FROM public.ip_batch_manifests
 WHERE tenant_id = 'TENANT_ID'
 ORDER BY created_at DESC LIMIT 5;
 ```
@@ -214,15 +239,15 @@ ORDER BY created_at DESC LIMIT 5;
 In `clickhouse-client`:
 ```sql
 SELECT gem_device_id, interval_end_utc, scaled_kwh_delivered, voltage_v, quality_status
-FROM telemetry.meter_interval_readings_local
+FROM ip_intervals.interval_readings_15m
 WHERE tenant_id = 'TENANT_ID'
 ORDER BY interval_end_utc DESC LIMIT 10;
 ```
 
 ### 3. Verify ClickHouse Real-Time Pre-Aggregated Hourly TOU View
 ```sql
-SELECT hour_start_utc, count() AS interval_count, sum(total_kwh_delivered) AS total_kwh
-FROM telemetry.hourly_interval_rollups_local
+SELECT hour_start_utc, countMerge(interval_count_state) AS interval_count, sumMerge(total_kwh_delivered_state) AS total_kwh
+FROM ip_intervals.mv_interval_readings_hourly
 WHERE tenant_id = 'TENANT_ID'
 GROUP BY hour_start_utc
 ORDER BY hour_start_utc DESC LIMIT 5;

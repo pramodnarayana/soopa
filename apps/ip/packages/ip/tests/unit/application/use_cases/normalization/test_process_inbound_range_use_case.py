@@ -1302,7 +1302,7 @@ async def test_process_inbound_range_resolves_subscribed_entity_stream_definitio
     await fused_uc._control_plane_uow.entities.save(entity)
 
     payload: JsonDict = {
-        "id": "ORD-CUSTOM-99",
+        "id": "FALLBACK-ID-01",
         "order_number": "ORD-CUSTOM-99",
         "total": 77.0,
         "updated_at": "2026-11-12T00:00:00Z",

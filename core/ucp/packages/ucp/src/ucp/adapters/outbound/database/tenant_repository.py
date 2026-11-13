@@ -293,6 +293,14 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_retained_shard(self, tenant_id: str, app_id: str) -> str | None:
+        stmt = select(ShardRegistry.shard_id).where(
+            ShardRegistry.tenant_id == tenant_id,
+            ShardRegistry.app_id == app_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_active_candidate_shards(
         self, app_slug: str, app_id: str
     ) -> list[ShardCandidateDTO]:

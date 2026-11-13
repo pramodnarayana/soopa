@@ -19,13 +19,45 @@ def fake_uow():
 async def test_idempotency_returns_existing_shard(fake_uow):
     tenant_id = "ten_123"
     app_id = "app_edi"
-    fake_uow.tenant_repo.allocations.append((tenant_id, app_id, "existing_shard_99"))
+    fake_uow.tenant_repo.candidate_shards = [
+        ShardCandidateDTO(
+            shard_id="edi_shard_99",
+            shard_name="Existing Shard",
+            current_tenant_count=1,
+            status="active",
+        )
+    ]
+    fake_uow.tenant_repo.allocations.append((tenant_id, app_id, "edi_shard_99"))
 
     allocator = LeastLoadedPooledShardStrategy()
     result = await allocator.allocate_shard_for_app(fake_uow, tenant_id, app_id, "edi")
 
     assert result.is_ok
-    assert result.unwrap() == "existing_shard_99"
+    assert result.unwrap() == "edi_shard_99"
+
+
+@pytest.mark.asyncio
+async def test_retained_shard_decommissioned_returns_error(fake_uow):
+    tenant_id = "ten_123"
+    app_id = "app_edi"
+    # Retained shard is edi_shard_99, but candidate pool only has edi_shard_1
+    fake_uow.tenant_repo.candidate_shards = [
+        ShardCandidateDTO(
+            shard_id="edi_shard_1",
+            shard_name="EDI Shard 1",
+            current_tenant_count=1,
+            status="active",
+        )
+    ]
+    fake_uow.tenant_repo.allocations.append((tenant_id, app_id, "edi_shard_99"))
+
+    allocator = LeastLoadedPooledShardStrategy()
+    result = await allocator.allocate_shard_for_app(fake_uow, tenant_id, app_id, "edi")
+
+    assert result.is_err
+    err = result.unwrap_err()
+    assert err.code == ShardAllocationErrorCode.NO_ACTIVE_SHARDS
+    assert "cannot be reactivated without data migration" in err.message
 
 
 @pytest.mark.asyncio

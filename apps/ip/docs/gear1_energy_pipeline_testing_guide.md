@@ -129,24 +129,7 @@ curl -X POST "http://localhost:8000/api/v1/tenants/TENANT_ID/ip/connections/SOUR
   }'
 ```
 
-### Step 3: Trigger Ingress (Push Webhook $\to$ L1)
-```bash
-curl -X POST "http://localhost:8000/api/v1/ip/ingress/TENANT_SLUG/universal_simulator/SOURCE_CONN_ID?stream=meter_readings" \
-  -H "Content-Type: application/json" \
-  -H "X-Correlation-ID: corr_manual_001" \
-  -d '{
-    "meter_serial": "MTR-ENERGY-1001",
-    "timestamp": "2026-11-12T12:00:00Z",
-    "kwh_delivered": 14.52,
-    "kwh_received": 0.0,
-    "voltage_avg": 240.1,
-    "interval_minutes": 15,
-    "service_point_id": "SP-NORTH-401"
-  }'
-```
-*Response: HTTP 202 Accepted with assigned `record_id`.*
-
-### Step 4: Create Destination Connection (ERP Simulator)
+### Step 3: Create Destination Connection (ERP Simulator)
 ```bash
 curl -X POST "http://localhost:8000/api/v1/tenants/TENANT_ID/ip/connections" \
   -H "Content-Type: application/json" \
@@ -162,7 +145,7 @@ curl -X POST "http://localhost:8000/api/v1/tenants/TENANT_ID/ip/connections" \
 ```
 *Note the returned `id` as `DEST_CONN_ID`.*
 
-### Step 5: Register Destination Entity Blueprint
+### Step 4: Register Destination Entity Blueprint & Stitch Binding
 ```bash
 curl -X POST "http://localhost:8000/api/v1/tenants/TENANT_ID/ip/connections/DEST_CONN_ID/simulator/entities" \
   -H "Content-Type: application/json" \
@@ -182,6 +165,38 @@ curl -X POST "http://localhost:8000/api/v1/tenants/TENANT_ID/ip/connections/DEST
   }'
 ```
 
+*Note on Stitch Registration:*  
+In local testing and integration environments, the delivery stitch (`energy.meter_reading_erp_delivery_stitch`) links canonical meter readings to the destination connection (`DEST_CONN_ID`). As modeled in `_register_energy_erp_delivery_workflow_and_stitch` (see `test_energy_l3_to_l5_delivery_pipeline.py`), this can be bound via the Control Plane Orchestrator Stitches API:
+```bash
+curl -X POST "http://localhost:8000/api/v1/tenants/TENANT_ID/ip/stitches" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "name": "Meter Reading ERP Sync",
+    "workflow_id": "energy.meter_reading_erp_delivery_stitch",
+    "source_entity": "energy.meter_reading",
+    "destination_connection_id": "DEST_CONN_ID",
+    "destination_stream": "billing_readings"
+  }'
+```
+
+### Step 5: Trigger Ingress (Push Webhook $\to$ L1)
+```bash
+curl -X POST "http://localhost:8000/api/v1/ip/ingress/TENANT_SLUG/universal_simulator/SOURCE_CONN_ID?stream=meter_readings" \
+  -H "Content-Type: application/json" \
+  -H "X-Correlation-ID: corr_manual_001" \
+  -d '{
+    "meter_serial": "MTR-ENERGY-1001",
+    "timestamp": "2026-11-12T12:00:00Z",
+    "kwh_delivered": 14.52,
+    "kwh_received": 0.0,
+    "voltage_avg": 240.1,
+    "interval_minutes": 15,
+    "service_point_id": "SP-NORTH-401"
+  }'
+```
+*Response: HTTP 202 Accepted with assigned `record_id`.*
+
 ---
 
 ## 5. PostgreSQL Verification Queries (Layer-by-Layer)
@@ -190,7 +205,7 @@ Connect to the tenant database shard via `psql` to inspect the physical rows:
 
 ### 1. Verify Layer 1 (Raw Ingress Journal)
 ```sql
-SELECT id, stream_name, payload_hash, length(raw_payload) AS bytes, created_at
+SELECT id, stream_name, request_sha256 AS payload_hash, request_size_bytes AS bytes, created_at
 FROM public.inbound_records
 WHERE tenant_id = 'TENANT_ID'
 ORDER BY created_at DESC LIMIT 5;

@@ -743,8 +743,9 @@ export function ConnectionEntitiesSyncTab({
                 aria-expanded={expandedStreams.has(row.original.streamName)}
                 aria-label={`Inspect data for ${row.original.streamName}`}
                 onClick={() => {
+                  const willExpand = !expandedStreams.has(row.original.streamName);
                   toggleRowExpanded(row.original.streamName);
-                  if (onInspectEntity) {
+                  if (willExpand && onInspectEntity) {
                     onInspectEntity(row.original.streamName);
                   }
                 }}

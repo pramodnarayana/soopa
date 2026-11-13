@@ -247,7 +247,11 @@ class ExecuteHttpActionStepInput:
             raw_payload = effective_data["payload"]
         else:
             raw_payload = {k: v for k, v in effective_data.items() if k != "parents"}
-        raw_record_id = effective_data.get("record_id") or effective_data.get("source_id")
+        raw_record_id = (
+            effective_data["record_id"]
+            if "record_id" in effective_data and effective_data["record_id"] is not None
+            else effective_data.get("source_id")
+        )
         raw_headers = effective_data.get("headers")
         raw_conflict = effective_data.get("conflict_strategy", OutboundConflictStrategy.FAIL.value)
         raw_causation_depth = effective_data.get("causation_depth", 0)

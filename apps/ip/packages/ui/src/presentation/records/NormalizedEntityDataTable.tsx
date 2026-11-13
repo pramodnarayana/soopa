@@ -102,7 +102,7 @@ export function NormalizedEntityDataTable({
       );
     });
 
-    return filtered.length > 0 ? filtered : allRecords;
+    return filtered;
   }, [normalizedQuery.data, streamName]);
 
   // Client-side search across all fields of the record
@@ -132,10 +132,14 @@ export function NormalizedEntityDataTable({
     // 1. When normalized records exist, columns come strictly from canonicalData.
     // Fall back to schema fields only when the table is empty.
     const attributeKeys: string[] = [];
-    if (matchingRecords.length > 0 && matchingRecords[0]?.canonicalData) {
-      for (const key of Object.keys(matchingRecords[0].canonicalData)) {
-        if (!INTERNAL_METADATA_KEYS.has(key) && !attributeKeys.includes(key)) {
-          attributeKeys.push(key);
+    if (matchingRecords.length > 0) {
+      for (const record of matchingRecords) {
+        if (record.canonicalData && typeof record.canonicalData === 'object') {
+          for (const key of Object.keys(record.canonicalData)) {
+            if (!INTERNAL_METADATA_KEYS.has(key) && !attributeKeys.includes(key)) {
+              attributeKeys.push(key);
+            }
+          }
         }
       }
     } else if (fields && fields.length > 0) {
@@ -358,8 +362,8 @@ export function NormalizedEntityDataTable({
             {formatHeaderLabel(streamName)}
           </span>
           <span className="rounded-full bg-muted/80 border border-border px-2 py-0.5 text-[11px] font-mono font-medium text-muted-foreground tabular-nums">
-            {filteredRows.length.toLocaleString()}{' '}
-            {filteredRows.length === 1 ? 'record' : 'records'}
+            Showing {filteredRows.length.toLocaleString()}{' '}
+            {filteredRows.length === 1 ? 'record' : 'records'} (recent preview, max 100)
           </span>
         </div>
 
@@ -396,7 +400,7 @@ export function NormalizedEntityDataTable({
         tabIndex={0}
         role="region"
         aria-label={`${streamName} records table`}
-        className="table-wrapper rounded-xl border border-border bg-card overflow-auto max-h-[440px]"
+        className="table-wrapper rounded-xl border border-border bg-card overflow-auto max-h-[440px] [&_[data-slot=table-container]]:overflow-visible"
       >
         <Table>
           <TableHeader className="sticky top-0 bg-muted/90 backdrop-blur-sm z-10 border-b border-border">
@@ -424,6 +428,27 @@ export function NormalizedEntityDataTable({
                   className="h-32 text-center text-xs text-muted-foreground"
                 >
                   Loading {formatHeaderLabel(streamName)} records...
+                </TableCell>
+              </TableRow>
+            ) : normalizedQuery.problem ? (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-32 text-center text-xs text-destructive space-y-2 py-6"
+                >
+                  <p className="font-medium">
+                    Failed to load records:{' '}
+                    {normalizedQuery.problem.message || normalizedQuery.problem.code}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void normalizedQuery.refetch()}
+                    className="h-7 text-xs mt-2"
+                  >
+                    Retry
+                  </Button>
                 </TableCell>
               </TableRow>
             ) : filteredRows.length === 0 ? (

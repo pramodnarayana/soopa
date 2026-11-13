@@ -44,17 +44,39 @@ class LeastLoadedPooledShardStrategy(ShardAllocationStrategyPort):
         app_id: str,
         app_slug: str,
     ) -> Result[str, ShardAllocationProblem]:
-        # 1. Idempotency Guard: Check if tenant is already allocated to a shard for this app
-        existing_shard = await uow.tenant_repo.get_allocated_shard(tenant_id, app_id)
-        if existing_shard:
-            logger.info(
-                "shard_allocation_idempotent_hit",
+        # 1. Retained Allocation / Idempotency Guard:
+        # Check if tenant has a retained shard (active or inactive) for this app
+        retained_shard = await uow.tenant_repo.get_retained_shard(tenant_id, app_id)
+        if retained_shard:
+            candidates = await uow.tenant_repo.list_active_candidate_shards(app_slug, app_id)
+            candidate_ids = {c.shard_id for c in candidates}
+            if retained_shard in candidate_ids:
+                logger.info(
+                    "shard_allocation_retained_hit",
+                    tenant_id=tenant_id,
+                    app_id=app_id,
+                    app_slug=app_slug,
+                    shard_id=retained_shard,
+                )
+                return Result.ok(retained_shard)
+            logger.error(
+                "retained_shard_unavailable",
                 tenant_id=tenant_id,
                 app_id=app_id,
                 app_slug=app_slug,
-                shard_id=existing_shard,
+                shard_id=retained_shard,
             )
-            return Result.ok(existing_shard)
+            return Result.err(
+                ShardAllocationProblem(
+                    code=ShardAllocationErrorCode.NO_ACTIVE_SHARDS,
+                    message=(
+                        f"Retained shard '{retained_shard}' for app '{app_slug}' "
+                        f"is not active and cannot be reactivated without data migration."
+                    ),
+                    app_slug=app_slug,
+                    tenant_id=tenant_id,
+                )
+            )
 
         # 2. Query active candidate shards matching the app namespace
         candidates = await uow.tenant_repo.list_active_candidate_shards(app_slug, app_id)

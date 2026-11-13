@@ -14,6 +14,7 @@ from seedwork.domain.types import JsonDict
 
 from ucp.application.dto.shard_allocation import ShardCandidateDTO
 from ucp.domain.app import App
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.tenant import Tenant
 from ucp.domain.webhook import Webhook
 from ucp.ports.outbound.app_repository_port import AppRepositoryPort
@@ -62,6 +63,7 @@ class FakeTenantRepository(TenantRepositoryPort):
 
     async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
         self.allocations.append((tenant_id, app_id, shard_id))
+        self.shard_statuses[(tenant_id, app_id)] = LifecycleStatus.ACTIVE.value
 
     async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
         self.subscriptions[(tenant_id, app_id)] = status
@@ -70,6 +72,17 @@ class FakeTenantRepository(TenantRepositoryPort):
         self.shard_statuses[(tenant_id, app_id)] = status
 
     async def get_allocated_shard(self, tenant_id: str, app_id: str) -> str | None:
+        for t_id, a_id, s_id in reversed(self.allocations):
+            if (
+                t_id == tenant_id
+                and a_id == app_id
+                and self.shard_statuses.get((t_id, a_id), LifecycleStatus.ACTIVE.value)
+                == LifecycleStatus.ACTIVE.value
+            ):
+                return s_id
+        return None
+
+    async def get_retained_shard(self, tenant_id: str, app_id: str) -> str | None:
         for t_id, a_id, s_id in reversed(self.allocations):
             if t_id == tenant_id and a_id == app_id:
                 return s_id

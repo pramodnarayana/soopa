@@ -51,6 +51,10 @@ class TenantRepositoryPort(Protocol):
         """Returns the currently allocated shard_id for (tenant_id, app_id) or None."""
         ...
 
+    async def get_retained_shard(self, tenant_id: str, app_id: str) -> str | None:
+        """Returns any existing shard allocation for (tenant_id, app_id) regardless of active/inactive status."""
+        ...
+
     async def list_active_candidate_shards(
         self, app_slug: str, app_id: str
     ) -> list[ShardCandidateDTO]:

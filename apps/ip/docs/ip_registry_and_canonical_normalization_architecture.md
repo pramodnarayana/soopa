@@ -68,7 +68,7 @@ flowchart TD
 The `ip.engine` processing kernel interacts with vendor-specific behaviors exclusively through four strongly-typed Registry Ports:
 
 ### 2.1 `TransformerRegistryPort` (L2 $\rightarrow$ L3 Normalization)
-- **Port Definition**: [`ip.engine.ports.outbound.transformer_port.TransformerRegistryPort`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/ports/outbound/transformer_port.py#L39)
+- **Port Definition**: [`ip.engine.ports.outbound.transformer_port.TransformerRegistryPort`](apps/ip/packages/ip/src/ip/engine/ports/outbound/transformer_port.py#L39)
 - **Contract (`TransformerPort`)**:
   ```python
   class TransformerPort(Protocol):
@@ -85,7 +85,7 @@ The `ip.engine` processing kernel interacts with vendor-specific behaviors exclu
 - **Lifecycle**: Pure in-memory computation. Given a `ReplicaSnapshot` (L2 row state), it deterministically outputs `CanonicalDraft` objects and validation rejections. Zero network, database, or clock access.
 
 ### 2.2 `CanonicalWriterRegistryPort` (L3 Domain Persistence)
-- **Port Definition**: [`ip.engine.ports.outbound.canonical_writer_port.CanonicalWriterRegistryPort`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/ports/outbound/canonical_writer_port.py)
+- **Port Definition**: [`ip.engine.ports.outbound.canonical_writer_port.CanonicalWriterRegistryPort`](apps/ip/packages/ip/src/ip/engine/ports/outbound/canonical_writer_port.py)
 - **Contract (`CanonicalWriterPort`)**:
   ```python
   class CanonicalWriterPort(Protocol):
@@ -101,14 +101,14 @@ The `ip.engine` processing kernel interacts with vendor-specific behaviors exclu
 - **Lifecycle**: Translates drafts into strongly-typed domain ORM models (e.g. `MdmMeterReadingRecord`) and executes atomic SQL upserts into dedicated domain tables (`mdm_meter_readings`) alongside the `normalized_records` audit ledger within the tenant's data plane transaction.
 
 ### 2.3 `ConnectorCatalogRegistryPort` (L1 Ingest & L5 Outbound)
-- **Port Definition**: [`ip.engine.ports.outbound.connector_catalog_port.ConnectorCatalogRegistryPort`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/ports/outbound/connector_catalog_port.py)
+- **Port Definition**: [`ip.engine.ports.outbound.connector_catalog_port.ConnectorCatalogRegistryPort`](apps/ip/packages/ip/src/ip/engine/ports/outbound/connector_catalog_port.py)
 - **Responsibilities**:
   - Exposes metadata blueprints (`ConnectorSpecDTO`) for UI catalog discovery.
   - Dynamically provisions connector instances (`universal_simulator`, `sftp`, `http`).
   - Executes protocol-level interactions (`discover()`, `pull()`, `fetch()`, `write()`).
 
 ### 2.4 `WorkflowDefinitionRegistryPort` (L4 Stitch DAGs)
-- **Port Definition**: [`ip.engine.ports.outbound.stitch_port.WorkflowDefinitionRegistryPort`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/ports/outbound/stitch_port.py)
+- **Port Definition**: [`ip.engine.ports.outbound.stitch_port.WorkflowDefinitionRegistryPort`](apps/ip/packages/ip/src/ip/engine/ports/outbound/stitch_port.py)
 - **Responsibilities**:
   - Registers declarative DAG workflows (`WorkflowDefinition`).
   - Executes post-normalization event-driven pipelines (e.g., dispatching SAP work orders or emitting webhooks).
@@ -172,7 +172,7 @@ FROM ip.transformations;
 
 | connection_id | stream_name | transformation_id | transformation_version | mode |
 | :--- | :--- | :--- | :--- | :--- |
-| `conn_itron_live` | `meter_readings` | `itron.meter_reading` | `1` | `ACTIVE` |
+| `conn_itron_live` | `meter_readings` | `energy.itron_meter_reading` | `1` | `ACTIVE` |
 | `conn_sap_nightly` | `meter_readings` | `sap_isu.meter_reading` | `1` | `ACTIVE` |
 | `conn_sandbox_sim` | `meter_readings` | `energy.ami_meter_reading` | `2` | `ACTIVE` |
 

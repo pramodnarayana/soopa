@@ -173,10 +173,14 @@ flowchart TD
     style GEAR2 fill:#fff3e0,stroke:#e65100
 ```
 
-### 4.3 Implementation Details
-1. **S3 Object Drop**: Telemetry drops directly into S3/MinIO as compressed Parquet files (50,000 rows per file).
-2. **In-Memory Vectorized SIMD Pipeline**: `ip-telemetry-worker` reads Parquet files into Rust Polars dataframes, performing in-memory deduplication and unit conversions (`Wh` $\to$ `kWh`) using CPU SIMD instructions in `< 15ms`.
-3. **Direct Arrow IPC Streaming**: Ingestion into ClickHouse uses native Apache Arrow IPC buffers at $> 200{,}000\text{ rows/second}$.
+### 4.3 Implementation Details (Current Implementation vs. Target Capabilities)
+1. **S3 Object Drop**: Telemetry drops directly into S3/MinIO as raw macro-batches (JSON or Parquet) and claim-check pointers.
+2. **In-Memory Vectorized Pipeline**:
+   - *Current Implementation*: `VectorizedIntervalBatchNormalizerAdapter` executes zero-loss intra-batch deduplication, baseline median calculation, and VEE spike quarantine in Python memory.
+   - *Target Capability*: Compiled Rust Polars SIMD dataframe execution for processing $50{,}000+$ row Parquet files in $< 15\text{ms}$.
+3. **Columnar Streaming Storage**:
+   - *Current Implementation*: `ColumnarIntervalRollupRepositoryAdapter` manages the physical DDL contracts (`ip_intervals.interval_readings_15m` and materialized views) with unit/integration testing executed against in-memory or PostgreSQL test harnesses.
+   - *Target Capability*: Direct Apache Arrow IPC streaming into ClickHouse columnar clusters at $> 200{,}000\text{ rows/second}$.
 4. **Materialized Aggregations**: ClickHouse `AggregatingMergeTree` tables compute real-time hourly and daily rollups on write.
 
 ---

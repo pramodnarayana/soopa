@@ -97,10 +97,10 @@ flowchart TD
 | **Typical Use Cases** | Move-in/Move-out final reads, customer care dispute pings, monthly billing reconciliation snapshots, work order verification reads. | 15-minute / 5-minute automated interval collection, DER solar generation monitoring, EV charging telemetry, sub-minute transformer load profiling. |
 | **Ingress Modality (L1)** | Direct HTTP REST/Webhook or Pull Poller $\to$ `public.inbound_records` journal table in PostgreSQL. | Stateless Streaming Ingress Edge $\to$ S3/MinIO raw Zstd/Parquet macro-batch ($50{,}000$ intervals/file) + SQS Claim-Check pointer. |
 | **Deduplication (L2)** | Row-level SHA-256 hash match against `public.replica_records` in PostgreSQL. | Vectorized composite key `(source_meter_id, channel_id, interval_end_utc)` in-memory deduplication via Rust Polars. |
-| **Normalization (L3)** | [`ProcessInboundRangeUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/normalization/process_inbound_range_use_case.py) maps raw JSON into [`NormalizedRecordModel`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/adapters/outbound/database/models/data_plane.py) and typed [`MdmMeterReadingRecord`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/solutions/domains/energy/models/meter_reading.py) in PostgreSQL. | Fused in-memory Apache Arrow pass: IEC-61968 CIM unit scaling (`Wh` $\to$ `kWh`), Global Entity Model (GEM) dictionary hash-join, and PyOD / rolling MAD spike quarantine. |
-| **Storage Destination** | **PostgreSQL** tenant shard (`mdm_meter_readings` table with B-Tree indexes). | **ClickHouse** cluster (`telemetry.meter_interval_readings_local` with `ReplicatedReplacingMergeTree`). |
+| **Normalization (L3)** | [`ProcessInboundRangeUseCase`](apps/ip/packages/ip/src/ip/engine/application/use_cases/normalization/process_inbound_range_use_case.py) maps raw JSON into [`NormalizedRecordModel`](apps/ip/packages/ip/src/ip/engine/adapters/outbound/database/models/data_plane.py) and typed [`MdmMeterReadingRecord`](apps/ip/packages/ip/src/ip/solutions/domains/energy/models/meter_reading.py) in PostgreSQL. | Fused in-memory Apache Arrow pass: IEC-61968 CIM unit scaling (`Wh` $\to$ `kWh`), Global Entity Model (GEM) dictionary hash-join, and PyOD / rolling MAD spike quarantine. |
+| **Storage Destination** | **PostgreSQL** tenant shard (`mdm_meter_readings` table with B-Tree indexes). | **ClickHouse** cluster (`ip_intervals.interval_readings_15m` with `ReplacingMergeTree`). |
 | **Routing / Orchestration (L4)** | **Stitch DAGs**: In-memory task workflows evaluated per event (`prepare_erp_dispatch` $\to$ `dispatch_erp_reading`). | **Completeness Gates & TOU Materialized Views**: ClickHouse `AggregatingMergeTree` computes 96-slot completeness heatmaps and TOU billing buckets in real time. |
-| **Outbound Delivery (L5)** | [`DeliverOutboundRecordUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/delivery/deliver_outbound_record_use_case.py): Single HTTP mutations to NetSuite/SAP with per-record idempotency key deduplication. | Bulk Parquet exports to MDMS/Snowflake or chunked ($500$-meter) OData `$batch` requests to SAP S/4HANA CIS. |
+| **Outbound Delivery (L5)** | [`DeliverOutboundRecordUseCase`](apps/ip/packages/ip/src/ip/engine/application/use_cases/delivery/deliver_outbound_record_use_case.py): Single HTTP mutations to NetSuite/SAP with per-record idempotency key deduplication. | Bulk Parquet exports to MDMS/Snowflake or chunked ($500$-meter) OData `$batch` requests to SAP S/4HANA CIS. |
 | **Throughput Capacity** | $100$ to $2{,}000$ records / sec per worker. | **$> 2{,}000{,}000$ intervals / sec per worker core** (SIMD compiled). |
 | **Query Latency** | $5\text{ms} - 25\text{ms}$ (B-Tree indexed single-row lookup). | **$< 20\text{ms}$ across billions of intervals** (ClickHouse zone-maps and sparse primary index). |
 
@@ -134,29 +134,30 @@ In Gear 1, each reading is a self-contained, strongly-typed JSON document evalua
 
 ---
 
-### 4.2 Gear 2: Columnar Apache Arrow / Parquet Schema
-In Gear 2, readings are **never stored or processed as individual JSON dictionaries**. They are streamed as contiguous vectors in Apache Arrow columnar memory:
+### 4.2 Gear 2: Columnar Apache Arrow / Parquet Schema (Target Architecture)
+In the target Gear 2 architecture, readings are **never unpacked into individual row-level Python dicts**. Instead, they are streamed as contiguous vectors in Apache Arrow columnar memory directly from Parquet into ClickHouse:
 
 ```
 +--------------------------------------------------------------------------------------------------------------------------------+
 | Column Name            | Arrow Data Type              | ClickHouse Column Type                  | Compression Codec           |
 +------------------------+------------------------------+-----------------------------------------+-----------------------------+
-| tenant_id              | pa.binary(16) / UUID         | UUID                                    | None (Sort Key Prefix)      |
-| gem_device_id          | pa.binary(16) / UUID         | UUID                                    | None (Sort Key)             |
-| source_meter_id        | pa.string()                  | LowCardinality(String)                  | Dict Encoding               |
-| feeder_id              | pa.string()                  | LowCardinality(String)                  | Dict Encoding               |
-| tariff_bucket          | pa.int8()                    | Enum8('PEAK'=1, 'SHOULDER'=2, 'OFF'=3)  | T64                         |
-| quality_status         | pa.int8()                    | Enum8('VALID'=1, 'ESTIMATED'=2, ...)    | T64                         |
+| tenant_id              | pa.binary(16) / UUID         | LowCardinality(String)                  | ZSTD(1)                     |
+| connection_id          | pa.binary(16) / UUID         | LowCardinality(String)                  | ZSTD(1)                     |
+| gem_device_id          | pa.binary(16) / UUID         | LowCardinality(String)                  | ZSTD(1)                     |
+| source_meter_id        | pa.string()                  | LowCardinality(String)                  | ZSTD(1)                     |
+| feeder_id              | pa.string()                  | LowCardinality(String)                  | ZSTD(1)                     |
+| tariff_bucket          | pa.string()                  | LowCardinality(String)                  | ZSTD(1)                     |
+| quality_status         | pa.string()                  | LowCardinality(String)                  | ZSTD(1)                     |
 | interval_end_utc       | pa.timestamp('ms', 'UTC')    | DateTime64(3, 'UTC')                    | DoubleDelta                 |
-| scaled_kwh_delivered   | pa.decimal128(18, 6)         | Decimal64(6)                            | ZSTD(3)                     |
-| scaled_kwh_received    | pa.decimal128(18, 6)         | Decimal64(6)                            | ZSTD(3)                     |
-| voltage_v              | pa.decimal128(10, 3)         | Decimal32(3)                            | ZSTD(3)                     |
-| source_batch_id        | pa.binary(16) / UUID         | UUID                                    | None                        |
+| scaled_kwh_delivered   | pa.decimal128(18, 4)         | Decimal64(4)                            | ZSTD(3)                     |
+| scaled_kwh_received    | pa.decimal128(18, 4)         | Decimal64(4)                            | ZSTD(3)                     |
+| voltage_v              | pa.float32()                 | Float32                                 | ZSTD(3)                     |
+| source_batch_id        | pa.string()                  | LowCardinality(String)                  | ZSTD(1)                     |
 | updated_at_utc         | pa.timestamp('ms', 'UTC')    | DateTime64(3, 'UTC')                    | DoubleDelta (Deduplication) |
 +--------------------------------------------------------------------------------------------------------------------------------+
 ```
 
-* **Why Zero JSON Dictionaries in Gear 2:** Unpacking 50,000 rows into Python dicts creates 350,000 heap allocations, triggering heavy GC pauses and dropping processing speed by $133\times$. Gear 2 keeps data in contiguous C++ Arrow buffers from S3 Parquet read to ClickHouse `client.insert_arrow()`.
+* **Current Implementation Note:** In the current implementation, `VectorizedIntervalBatchNormalizerAdapter` parses JSON macro-batches into internal records and converts Parquet inputs via `table.to_pydict()` iterating over rows in Python memory for zero-loss deduplication and VEE validation. The target architecture replaces this loop with zero-copy C++ Arrow vector operations and Polars SIMD expressions.
 
 ---
 
