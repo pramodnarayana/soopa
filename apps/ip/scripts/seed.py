@@ -87,26 +87,25 @@ async def seed_ip_domain() -> None:
                 await session.execute(stmt_shard)
                 logger.info("ip_seed_shard_registered", shard_id=IP_SHARD_ID)
 
-                tenant_exists = await session.execute(
-                    select(Tenant.id).where(Tenant.id == PLATFORM_TENANT_ID)
-                )
-                if tenant_exists.scalar_one_or_none() is not None:
+                tenants_res = await session.execute(select(Tenant.id))
+                tenant_ids = set(tenants_res.scalars().all())
+                tenant_ids.add(PLATFORM_TENANT_ID)
+                for t_id in tenant_ids:
                     stmt_binding = (
                         pg_insert(ShardRegistry)
                         .values(
-                            tenant_id=PLATFORM_TENANT_ID,
+                            tenant_id=t_id,
                             app_id=actual_app_id,
                             shard_id=IP_SHARD_ID,
                         )
-                        .on_conflict_do_update(
+                        .on_conflict_do_nothing(
                             index_elements=[ShardRegistry.tenant_id, ShardRegistry.app_id],
-                            set_={"shard_id": IP_SHARD_ID},
                         )
                     )
                     await session.execute(stmt_binding)
                     logger.info(
-                        "ip_seed_platform_tenant_shard_bound",
-                        tenant_id=PLATFORM_TENANT_ID,
+                        "ip_seed_tenant_shard_bound",
+                        tenant_id=t_id,
                         shard_id=IP_SHARD_ID,
                     )
             else:

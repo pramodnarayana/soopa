@@ -1,5 +1,6 @@
 from typing import Protocol
 
+from ucp.application.dto.shard_allocation import ShardCandidateDTO
 from ucp.domain.tenant import Tenant
 
 
@@ -44,4 +45,18 @@ class TenantRepositoryPort(Protocol):
 
     async def update_shard_status(self, tenant_id: str, app_id: str, status: str) -> None:
         """Updates the status of a database shard allocation"""
+        ...
+
+    async def get_allocated_shard(self, tenant_id: str, app_id: str) -> str | None:
+        """Returns the currently allocated shard_id for (tenant_id, app_id) or None."""
+        ...
+
+    async def get_retained_shard(self, tenant_id: str, app_id: str) -> str | None:
+        """Returns any existing shard allocation for (tenant_id, app_id) regardless of active/inactive status."""
+        ...
+
+    async def list_active_candidate_shards(
+        self, app_slug: str, app_id: str
+    ) -> list[ShardCandidateDTO]:
+        """Returns all active database shards matching the app slug with their current tenant counts."""
         ...

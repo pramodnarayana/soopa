@@ -275,7 +275,14 @@ apps/ip/packages/ip/src/ip/
         │   ├── models.py                     # SQLAlchemy ORM Models (mdm_meter_readings)
         │   ├── ports.py                      # Energy Canonical Repository Ports
         │   ├── repository.py                 # Concrete Data Plane Persistence
-        │   └── transformers.py               # Vendor Payloads -> Canonical Mappings
+        │   └── transformers/                 # Dedicated Per-Vendor/App Pure Normalizers
+        │       ├── common.py                 # Pure Validation Utilities
+        │       ├── ami/                      # AMI / Universal Simulator Transformers
+        │       │   ├── meter_reading.py
+        │       │   └── service_point.py
+        │       └── itron/                    # Itron OpenWay / ChoiceConnect Transformers
+        │           ├── meter_reading.py
+        │           └── service_point.py
         │
         └── tms/                              # Logistics & Freight Solution
             ├── canonical.py                  # Domain Dataclasses (Shipment, Stop)

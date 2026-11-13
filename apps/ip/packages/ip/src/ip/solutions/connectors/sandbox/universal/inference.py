@@ -533,6 +533,18 @@ def parse_simulator_connection_config(public_config: JsonDict) -> SimulatorConne
     )
 
 
+DEFAULT_SIMULATOR_TRANSFORMATIONS: Mapping[str, tuple[str, int]] = {
+    "meter_readings": ("energy.ami_meter_reading", 2),
+    "meter_reading": ("energy.ami_meter_reading", 2),
+    "service_points": ("energy.ami_service_point", 1),
+    "service_point": ("energy.ami_service_point", 1),
+    "loads": ("tms.mercury_gate_load", 2),
+    "load": ("tms.mercury_gate_load", 2),
+    "carriers": ("tms.mercury_gate_carrier", 1),
+    "carrier": ("tms.mercury_gate_carrier", 1),
+}
+
+
 def extract_stream_schema_dto(spec: SimulatorStreamSpec) -> StreamSchemaDTO:
     """Translates a `SimulatorStreamSpec` into a `StreamSchemaDTO` for catalog discovery."""
     raw_props = spec.json_schema.get("properties")
@@ -570,16 +582,23 @@ def extract_stream_schema_dto(spec: SimulatorStreamSpec) -> StreamSchemaDTO:
             )
         )
 
+    default_trans = DEFAULT_SIMULATOR_TRANSFORMATIONS.get(spec.stream_name)
+    default_trans_id = default_trans[0] if default_trans is not None else None
+    default_trans_ver = default_trans[1] if default_trans is not None else 1
+
     return StreamSchemaDTO(
         name=spec.stream_name,
         fields=tuple(fields),
         primary_key=(spec.primary_key_field,),
         cursor_field=spec.cursor_field,
         supported_sync_modes=("FULL_REFRESH", "INCREMENTAL"),
+        default_transformation_id=default_trans_id,
+        default_transformation_version=default_trans_ver,
     )
 
 
 __all__ = [
+    "DEFAULT_SIMULATOR_TRANSFORMATIONS",
     "ValidatedEntityBlueprint",
     "build_validated_entity_blueprint",
     "extract_stream_schema_dto",

@@ -7,13 +7,15 @@ from database.models.identity import Tenant as DbTenant
 from database.models.webhooks import Webhook
 from database.outbox_serializer import serialize_domain_event
 from seedwork.utils import generate_id
-from sqlalchemy import delete, select, update
+from sharding.domain.constants import DatabaseShardStatus, ShardRoutingStrategy
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import UcpOutbox
-from ucp_models.sharding import ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import AppSubscription
 
+from ucp.application.dto.shard_allocation import ShardCandidateDTO
 from ucp.domain.constants import LifecycleStatus, SubscriptionTier
 from ucp.domain.tenant import Tenant, TenantSubscription
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
@@ -281,6 +283,62 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort):
             .values(status=status)
         )
         await self.session.execute(stmt)
+
+    async def get_allocated_shard(self, tenant_id: str, app_id: str) -> str | None:
+        stmt = select(ShardRegistry.shard_id).where(
+            ShardRegistry.tenant_id == tenant_id,
+            ShardRegistry.app_id == app_id,
+            ShardRegistry.status == LifecycleStatus.ACTIVE.value,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_retained_shard(self, tenant_id: str, app_id: str) -> str | None:
+        stmt = select(ShardRegistry.shard_id).where(
+            ShardRegistry.tenant_id == tenant_id,
+            ShardRegistry.app_id == app_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def list_active_candidate_shards(
+        self, app_slug: str, app_id: str
+    ) -> list[ShardCandidateDTO]:
+        escaped_slug = app_slug.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        slug_pattern = f"{escaped_slug}\\_%"
+
+        stmt = (
+            select(
+                DatabaseShard.id,
+                DatabaseShard.name,
+                DatabaseShard.status,
+                func.count(ShardRegistry.tenant_id).label("tenant_count"),
+            )
+            .outerjoin(
+                ShardRegistry,
+                (DatabaseShard.id == ShardRegistry.shard_id)
+                & (ShardRegistry.app_id == app_id)
+                & (ShardRegistry.status == LifecycleStatus.ACTIVE.value),
+            )
+            .where(
+                DatabaseShard.status == DatabaseShardStatus.ACTIVE.value,
+                DatabaseShard.routing_strategy == ShardRoutingStrategy.TENANT_REGISTRY.value,
+                DatabaseShard.id.ilike(slug_pattern, escape="\\"),
+            )
+            .group_by(DatabaseShard.id, DatabaseShard.name, DatabaseShard.status)
+            .order_by(func.count(ShardRegistry.tenant_id).asc(), DatabaseShard.id.asc())
+        )
+        result = await self.session.execute(stmt)
+        rows = result.all()
+        return [
+            ShardCandidateDTO(
+                shard_id=str(row[0]),
+                shard_name=str(row[1]),
+                status=str(row[2]),
+                current_tenant_count=int(row[3]),
+            )
+            for row in rows
+        ]
 
     async def _load_subscription_ids(self, tenant_id: str) -> list[TenantSubscription]:
         stmt = select(AppSubscription.app_id, AppSubscription.status).where(

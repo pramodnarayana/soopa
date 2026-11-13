@@ -18,6 +18,7 @@ from ip.engine.domain.connection.enums import (
     AuthType,
     ConnectionStatus,
 )
+from ip.engine.domain.constants import WRAPPED_SCALAR_KEY
 from ip.engine.domain.exceptions import (
     DuplicateConnectionFingerprintError,
     PayloadNotFoundError,
@@ -66,7 +67,7 @@ from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkPort,
 )
 from security.ports.cipher_port import CipherPort
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonDict, JsonValue
 
 
 class FakeConnectionRepository(ConnectionRepositoryPort):
@@ -316,11 +317,19 @@ class FakeTieredStorageAdapter(TieredStoragePort):
         tenant_id: str,
         trace_id: str,
         payload_bytes: bytes,
-        parsed_payload: JsonDict | None = None,
+        parsed_payload: JsonValue | None = None,
     ) -> TieredStorageResultDTO:
+        raw: JsonDict | None
+        if parsed_payload is not None:
+            if isinstance(parsed_payload, dict):
+                raw = dict(parsed_payload)
+            else:
+                raw = {WRAPPED_SCALAR_KEY: parsed_payload}
+        else:
+            raw = None
         return TieredStorageResultDTO(
             is_inlined=True,
-            raw_payload=parsed_payload,
+            raw_payload=raw,
             s3_key=None,
             payload_size_bytes=len(payload_bytes),
             payload_sha256=hashlib.sha256(payload_bytes).hexdigest(),

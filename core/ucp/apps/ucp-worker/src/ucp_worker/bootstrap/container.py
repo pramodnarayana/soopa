@@ -6,6 +6,9 @@ from database.provider import DatabaseProvider
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
+from ucp.adapters.outbound.database.least_loaded_shard_allocator import (
+    LeastLoadedPooledShardStrategy,
+)
 from ucp.application.use_cases.app_subscription_manager import AppSubscriptionManager
 from ucp.application.use_cases.tenants.tenant_deleted_handler import TenantDeletedEventHandler
 from ucp.bootstrap.container import create_ucp_uow
@@ -53,7 +56,8 @@ class WorkerContainer:
             async with self.session_factory() as session:
                 yield create_ucp_uow(session)
 
-        provisioner = AppSubscriptionManager(uow_factory)
+        shard_allocator = LeastLoadedPooledShardStrategy()
+        provisioner = AppSubscriptionManager(uow_factory, shard_allocator)
         tenant_deleted_handler = TenantDeletedEventHandler(uow_factory)
 
         self.events_dispatcher = UcpEventDispatcher()

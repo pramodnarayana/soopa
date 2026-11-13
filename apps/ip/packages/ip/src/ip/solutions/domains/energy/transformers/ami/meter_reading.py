@@ -1,8 +1,6 @@
-"""Pure L3 canonical transformers for the Energy Smart Grid domain (`mdm_meter_readings`, `mdm_service_points`)."""
+"""Pure L3 canonical transformers for AMI interval meter readings (`energy.ami_meter_reading`)."""
 
 from __future__ import annotations
-
-from datetime import datetime
 
 from ip.engine.domain.normalization.enums import NormalizationRejectionReason
 from ip.engine.domain.normalization.transformation import (
@@ -17,22 +15,14 @@ from ip.engine.ports.outbound.transformer_port import TransformerPort
 from ip.solutions.domains.energy.canonical import (
     EnergyEntityType,
     MeterReadingQualityFlag,
-    ServicePointStatus,
 )
+from ip.solutions.domains.energy.transformers.common import is_valid_iso_timestamp
 from ip.solutions.domains.numeric import (
     is_non_finite_number,
     to_finite_float,
     to_finite_int,
     to_optional_finite_float,
 )
-
-
-def _is_valid_iso_timestamp(val: str) -> bool:
-    try:
-        datetime.fromisoformat(val.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    return True
 
 
 class AmiMeterReadingTransformerV1(TransformerPort):
@@ -54,37 +44,31 @@ class AmiMeterReadingTransformerV1(TransformerPort):
         self, replica: ReplicaSnapshot, context: TransformationContext
     ) -> TransformationResult:
         payload = replica.data
-        meter_serial = str(
-            payload.get("meter_serial")
-            or payload.get("serial_number")
-            or payload.get("meter_id")
-            or payload.get("id")
-            or ""
-        ).strip()
+        meter_serial = str(payload.get("meter_serial") or payload.get("meter_id") or "").strip()
         if not meter_serial:
             return TransformationResult(
                 rejections=(
                     TransformationRejection(
                         reason=NormalizationRejectionReason.MISSING_REQUIRED_FIELD,
                         field_path="meter_serial",
-                        detail="Missing required meter_serial / meter_id field.",
+                        detail="Missing required meter_serial or meter_id field.",
                     ),
                 )
             )
 
-        raw_ts = payload.get("timestamp") or payload.get("last_reading_time")
+        raw_ts = payload.get("timestamp")
         if not raw_ts or not str(raw_ts).strip():
             return TransformationResult(
                 rejections=(
                     TransformationRejection(
                         reason=NormalizationRejectionReason.MISSING_REQUIRED_FIELD,
                         field_path="timestamp",
-                        detail="Missing required timestamp / last_reading_time field.",
+                        detail="Missing required timestamp field.",
                     ),
                 )
             )
-        normalized_ts = str(raw_ts).strip()
-        if not _is_valid_iso_timestamp(normalized_ts):
+        validated_ts = str(raw_ts).strip()
+        if not is_valid_iso_timestamp(validated_ts):
             return TransformationResult(
                 rejections=(
                     TransformationRejection(
@@ -128,11 +112,11 @@ class AmiMeterReadingTransformerV1(TransformerPort):
             drafts=(
                 CanonicalDraft(
                     canonical_type=EnergyEntityType.MDM_METER_READING.value,
-                    source_id=replica.record_key or f"{meter_serial}:{normalized_ts}",
+                    source_id=replica.record_key or f"{meter_serial}:{validated_ts}",
                     fields={
                         "meter_serial_number": meter_serial,
                         "service_point_id": sp_id,
-                        "reading_timestamp": normalized_ts,
+                        "reading_timestamp": validated_ts,
                         "interval_minutes": interval_minutes,
                         "kwh_delivered": kwh_delivered,
                         "kwh_received": kwh_received,
@@ -188,61 +172,3 @@ class AmiMeterReadingTransformerV2(TransformerPort):
                 ),
             )
         )
-
-
-class AmiServicePointTransformerV1(TransformerPort):
-    """Version 1 pure transformer for AMI Smart Grid service points."""
-
-    @property
-    def transformation_id(self) -> str:
-        return "energy.ami_service_point"
-
-    @property
-    def transformation_version(self) -> int:
-        return 1
-
-    @property
-    def target_types(self) -> tuple[str, ...]:
-        return (EnergyEntityType.MDM_SERVICE_POINT.value,)
-
-    def transform(
-        self, replica: ReplicaSnapshot, context: TransformationContext
-    ) -> TransformationResult:
-        payload = replica.data
-        sp_id = str(
-            payload.get("service_point_id") or payload.get("id") or replica.record_key or ""
-        ).strip()
-        if not sp_id:
-            return TransformationResult(
-                rejections=(
-                    TransformationRejection(
-                        reason=NormalizationRejectionReason.MISSING_REQUIRED_FIELD,
-                        field_path="id",
-                        detail="Missing required service point identifier.",
-                    ),
-                )
-            )
-        return TransformationResult(
-            drafts=(
-                CanonicalDraft(
-                    canonical_type=EnergyEntityType.MDM_SERVICE_POINT.value,
-                    source_id=sp_id,
-                    fields={
-                        "service_point_external_id": sp_id,
-                        "meter_serial_number": payload.get("meter_serial")
-                        or payload.get("meter_id"),
-                        "customer_external_id": payload.get("customer_id"),
-                        "service_address": payload.get("service_address") or payload.get("address"),
-                        "grid_region": payload.get("grid_region"),
-                        "status": str(payload.get("status") or ServicePointStatus.ACTIVE.value),
-                    },
-                ),
-            )
-        )
-
-
-__all__ = [
-    "AmiMeterReadingTransformerV1",
-    "AmiMeterReadingTransformerV2",
-    "AmiServicePointTransformerV1",
-]

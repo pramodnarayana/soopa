@@ -12,7 +12,9 @@ from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
 from seedwork.domain.types import JsonDict
 
+from ucp.application.dto.shard_allocation import ShardCandidateDTO
 from ucp.domain.app import App
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.tenant import Tenant
 from ucp.domain.webhook import Webhook
 from ucp.ports.outbound.app_repository_port import AppRepositoryPort
@@ -29,6 +31,7 @@ class FakeTenantRepository(TenantRepositoryPort):
         self.allocations: list[tuple[str, str, str]] = []
         self.subscriptions: dict[tuple[str, str], str] = {}
         self.shard_statuses: dict[tuple[str, str], str] = {}
+        self.candidate_shards: list[ShardCandidateDTO] | None = None
 
     async def save(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         self.saved_tenants.append(tenant)
@@ -60,12 +63,48 @@ class FakeTenantRepository(TenantRepositoryPort):
 
     async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
         self.allocations.append((tenant_id, app_id, shard_id))
+        self.shard_statuses[(tenant_id, app_id)] = LifecycleStatus.ACTIVE.value
 
     async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
         self.subscriptions[(tenant_id, app_id)] = status
 
     async def update_shard_status(self, tenant_id: str, app_id: str, status: str) -> None:
         self.shard_statuses[(tenant_id, app_id)] = status
+
+    async def get_allocated_shard(self, tenant_id: str, app_id: str) -> str | None:
+        for t_id, a_id, s_id in reversed(self.allocations):
+            if (
+                t_id == tenant_id
+                and a_id == app_id
+                and self.shard_statuses.get((t_id, a_id), LifecycleStatus.ACTIVE.value)
+                == LifecycleStatus.ACTIVE.value
+            ):
+                return s_id
+        return None
+
+    async def get_retained_shard(self, tenant_id: str, app_id: str) -> str | None:
+        for t_id, a_id, s_id in reversed(self.allocations):
+            if t_id == tenant_id and a_id == app_id:
+                return s_id
+        return None
+
+    async def list_active_candidate_shards(
+        self, app_slug: str, app_id: str
+    ) -> list[ShardCandidateDTO]:
+        if self.candidate_shards is not None:
+            return [
+                c
+                for c in self.candidate_shards
+                if c.status == "active" and c.shard_id.startswith(f"{app_slug}_")
+            ]
+        return [
+            ShardCandidateDTO(
+                shard_id=f"{app_slug}_shard_1",
+                shard_name=f"{app_slug.upper()} Primary Shard",
+                current_tenant_count=0,
+                status="active",
+            )
+        ]
 
 
 class FakeUserRepository(UserRepositoryPort):

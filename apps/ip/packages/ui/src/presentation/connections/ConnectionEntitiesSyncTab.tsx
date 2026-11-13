@@ -65,8 +65,8 @@ import {
   TransformationMode,
 } from '../../domain/enums';
 import type { SyncRun } from '../../domain/sync-run';
+import { NormalizedEntityDataTable } from '../records/NormalizedEntityDataTable';
 import { ConnectionSyncRunsSection } from './ConnectionSyncRunsSection';
-import { SubscribedEntitySchemaPanel } from './SubscribedEntitySchemaPanel';
 
 const EntityRowLocalStatus = {
   UNSYNCED: 'UNSYNCED',
@@ -86,6 +86,7 @@ export interface ConnectionEntitiesSyncTabProps {
   readonly onInspectEntity?: (entityName: string) => void;
   readonly onOpenTrace: (traceId: string) => void;
   readonly onProblem: (problem: ApiProblem | null) => void;
+  readonly initialExpandedEntity?: string | null;
 }
 
 const SCHEDULE_OPTIONS: readonly {
@@ -158,10 +159,19 @@ export function ConnectionEntitiesSyncTab({
   onInspectEntity,
   onOpenTrace,
   onProblem,
+  initialExpandedEntity,
 }: ConnectionEntitiesSyncTabProps) {
   const [search, setSearch] = useState('');
   const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [expandedStreams, setExpandedStreams] = useState<Set<string>>(new Set());
+  const [expandedStreams, setExpandedStreams] = useState<Set<string>>(() =>
+    initialExpandedEntity ? new Set([initialExpandedEntity]) : new Set(),
+  );
+
+  useEffect(() => {
+    if (initialExpandedEntity) {
+      setExpandedStreams((prev) => new Set([...prev, initialExpandedEntity]));
+    }
+  }, [initialExpandedEntity]);
 
   const isAuthPending = connection?.status === ConnectionStatus.PENDING_AUTH;
 
@@ -726,18 +736,24 @@ export function ConnectionEntitiesSyncTab({
                 <Play aria-hidden="true" className="h-3 w-3" />
                 <span>Sync</span>
               </Button>
-              {onInspectEntity ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onInspectEntity(row.original.streamName)}
-                  className="h-7 gap-1 text-xs text-primary font-medium"
-                >
-                  <Database aria-hidden="true" className="h-3 w-3" />
-                  <span>Data</span>
-                </Button>
-              ) : null}
+              <Button
+                type="button"
+                variant={expandedStreams.has(row.original.streamName) ? 'secondary' : 'ghost'}
+                size="sm"
+                aria-expanded={expandedStreams.has(row.original.streamName)}
+                aria-label={`Inspect data for ${row.original.streamName}`}
+                onClick={() => {
+                  const willExpand = !expandedStreams.has(row.original.streamName);
+                  toggleRowExpanded(row.original.streamName);
+                  if (willExpand && onInspectEntity) {
+                    onInspectEntity(row.original.streamName);
+                  }
+                }}
+                className="h-7 gap-1 text-xs text-primary font-medium"
+              >
+                <Database aria-hidden="true" className="h-3 w-3" />
+                <span>Data</span>
+              </Button>
               {canResetCheckpoint ? (
                 <Button
                   type="button"
@@ -929,12 +945,17 @@ export function ConnectionEntitiesSyncTab({
                     ))}
                   </TableRow>
                   {expandedStreams.has(row.original.streamName) ? (
-                    <TableRow className="bg-muted/30 border-b border-border hover:bg-muted/30">
-                      <TableCell colSpan={entityColumns.length} className="py-3 px-8 text-xs">
-                        <SubscribedEntitySchemaPanel
-                          primaryKey={row.original.primaryKey}
-                          fields={row.original.fields}
-                        />
+                    <TableRow className="bg-muted/15 border-b border-border hover:bg-muted/15">
+                      <TableCell colSpan={entityColumns.length} className="py-3 px-6 text-xs">
+                        <div className="rounded-xl border border-border/80 bg-background/95 p-4 shadow-xs">
+                          <NormalizedEntityDataTable
+                            connectionId={connectionId}
+                            streamName={row.original.streamName}
+                            fields={row.original.fields}
+                            primaryKey={row.original.primaryKey}
+                            onOpenTrace={onOpenTrace}
+                          />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : null}

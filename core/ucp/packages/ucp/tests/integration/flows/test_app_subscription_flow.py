@@ -20,6 +20,9 @@ from ucp_models.sharding import ShardRegistry
 from ucp_models.subscriptions import App, AppSubscription
 
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
+from ucp.adapters.outbound.database.least_loaded_shard_allocator import (
+    LeastLoadedPooledShardStrategy,
+)
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.application.use_cases.app_subscription_manager import AppSubscriptionManager
 from ucp.application.use_cases.provision_tenant_use_case import (
@@ -119,7 +122,11 @@ async def test_app_subscription_flow(
     async def fake_uow_factory() -> AsyncIterator[SqlAlchemyUcpUnitOfWork]:
         yield create_ucp_uow(session=db_session)
 
-    provisioner = AppSubscriptionManager(uow_factory=fake_uow_factory)
+    shard_allocator = LeastLoadedPooledShardStrategy()
+    provisioner = AppSubscriptionManager(
+        uow_factory=fake_uow_factory,
+        shard_allocator=shard_allocator,
+    )
     dispatcher.subscribe(UcpEventType.APP_SUBSCRIBED.value, provisioner.handle_app_subscribed)
     dispatcher.subscribe(UcpEventType.APP_UNSUBSCRIBED.value, provisioner.handle_app_unsubscribed)
 

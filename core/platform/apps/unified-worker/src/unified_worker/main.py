@@ -40,8 +40,27 @@ async def main(stop_event: asyncio.Event | None = None) -> None:
 
     worker_modules_env = os.environ.get("WORKER_MODULES", "")
     if not worker_modules_env:
-        logger.error("No WORKER_MODULES environment variable provided. Exiting with failure.")
-        sys.exit(1)
+        enabled_apps_raw = os.environ.get("ENABLED_APPS", "")
+        tokens = {app.strip().lower() for app in enabled_apps_raw.split(",") if app.strip()}
+        accumulated_modules: list[str] = []
+        if "ip" in tokens:
+            accumulated_modules.extend(
+                ["ip-orchestrator-worker", "ip-delivery-worker", "ip-dp-jobs-worker"]
+            )
+        if "edi" in tokens:
+            accumulated_modules.extend(
+                [
+                    "edi-orchestrator-worker",
+                    "edi-delivery-worker",
+                    "edi-compute-worker",
+                    "edi-dp-jobs-worker",
+                ]
+            )
+        if accumulated_modules:
+            worker_modules_env = ",".join(accumulated_modules)
+        else:
+            logger.error("No WORKER_MODULES or valid ENABLED_APPS provided. Exiting with failure.")
+            sys.exit(1)
 
     module_names = [name.strip() for name in worker_modules_env.split(",") if name.strip()]
     if not module_names:

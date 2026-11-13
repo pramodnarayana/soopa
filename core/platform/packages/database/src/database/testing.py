@@ -7,7 +7,8 @@ fail-closed DSN guards ensuring tests never connect to live development database
 
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import aclosing, asynccontextmanager
+from types import TracebackType
 from typing import cast
 
 from seedwork.infra.config_models import PlatformDatabaseSettings
@@ -58,6 +59,44 @@ def assert_test_database_url(url: str) -> str:
     return url
 
 
+class _AsyncReentrantLock:
+    """Reentrant asyncio lock supporting nested session acquisition within the same task."""
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._owner: asyncio.Task[object] | None = None
+        self._depth = 0
+
+    async def acquire(self) -> None:
+        current_task = asyncio.current_task()
+        if self._owner is not None and self._owner == current_task:
+            self._depth += 1
+            return
+        await self._lock.acquire()
+        self._owner = current_task
+        self._depth = 1
+
+    def release(self) -> None:
+        current_task = asyncio.current_task()
+        if self._owner != current_task:
+            raise RuntimeError("Cannot release _AsyncReentrantLock from a non-owner task.")
+        self._depth -= 1
+        if self._depth == 0:
+            self._owner = None
+            self._lock.release()
+
+    async def __aenter__(self) -> None:
+        await self.acquire()
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.release()
+
+
 class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
     """
     Test implementation of the Database Router.
@@ -77,8 +116,8 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
         self.shard_conn = shard_conn
         self.global_url = global_url
         self.shard_url = shard_url
-        self.global_db_lock = asyncio.Lock()
-        self.shard_db_lock = asyncio.Lock()
+        self.global_db_lock = _AsyncReentrantLock()
+        self.shard_db_lock = _AsyncReentrantLock()
 
     async def get_global_session(self) -> AsyncGenerator[GlobalSession, None]:
         async with self.global_db_lock:
@@ -94,8 +133,10 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
 
     @asynccontextmanager
     async def global_session_scope(self) -> AsyncIterator[GlobalSession]:
-        async for session in self.get_global_session():
-            yield session
+        agen = self.get_global_session()
+        async with aclosing(agen):
+            async for session in agen:
+                yield session
 
     async def get_tenant_session(
         self, tenant_id: str, shard_key: str, shard_url: str
@@ -108,6 +149,11 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
                 join_transaction_mode="create_savepoint",
             )
 
+            prev_setting_res = await self.shard_conn.execute(
+                text("SELECT current_setting('platform.current_tenant_id', true)")
+            )
+            prev_tenant_id = prev_setting_res.scalar() or ""
+
             try:
                 async with factory() as session:
                     await session.execute(
@@ -117,9 +163,11 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
                     session.info["session_type"] = "tenant"
                     yield cast(TenantSession, session)
             finally:
-                await self.shard_conn.execute(
-                    text("SELECT set_config('platform.current_tenant_id', '', true)")
-                )
+                if not self.shard_conn.closed:
+                    await self.shard_conn.execute(
+                        text("SELECT set_config('platform.current_tenant_id', :tenant_id, true)"),
+                        {"tenant_id": prev_tenant_id},
+                    )
 
     async def get_tenant_read_session(
         self,
@@ -135,6 +183,10 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
                 class_=AsyncSession,
                 join_transaction_mode="create_savepoint",
             )
+            prev_setting_res = await self.shard_conn.execute(
+                text("SELECT current_setting('platform.current_tenant_id', true)")
+            )
+            prev_tenant_id = prev_setting_res.scalar() or ""
             try:
                 async with factory() as session:
                     await session.execute(text("SET LOCAL TRANSACTION READ ONLY"))
@@ -145,9 +197,11 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
                     session.info["session_type"] = "tenant_read"
                     yield cast(TenantReadSession, session)
             finally:
-                await self.shard_conn.execute(
-                    text("SELECT set_config('platform.current_tenant_id', '', true)")
-                )
+                if not self.shard_conn.closed:
+                    await self.shard_conn.execute(
+                        text("SELECT set_config('platform.current_tenant_id', :tenant_id, true)"),
+                        {"tenant_id": prev_tenant_id},
+                    )
 
     async def get_shard_session(
         self, shard_key: str, shard_url: str

@@ -437,6 +437,21 @@ class ProcessInboundRangeUseCase:
                 )
         return Result.ok((tuple(candidates), tuple(rejections)))
 
+    async def _resolve_stream_definition(
+        self, command: ProcessInboundRangeCommand
+    ) -> StreamDefinition:
+        if command.stream_definition is not None:
+            return command.stream_definition
+        subscribed_entity = await self._control_plane_uow.entities.get_by_stream(
+            command.tenant_id, command.connection_id, command.stream
+        )
+        if subscribed_entity is not None:
+            return subscribed_entity.to_stream_definition()
+        return StreamDefinition(
+            stream=command.stream,
+            primary_key=(("id",),),
+        )
+
     async def execute(
         self, command: ProcessInboundRangeCommand
     ) -> Result[ProcessInboundRangeResultDTO, IpError]:
@@ -462,10 +477,7 @@ class ProcessInboundRangeUseCase:
             return Result.err(shard_info_res.unwrap_err())
 
         shard_id, shard_dsn = shard_info_res.unwrap()
-        stream_def = command.stream_definition or StreamDefinition(
-            stream=command.stream,
-            primary_key=(("id",),),
-        )
+        stream_def = await self._resolve_stream_definition(command)
         extractor = self._extractor_registry.get(stream_def.extractor_id)
 
         merge_results: list[MergeResult] = []

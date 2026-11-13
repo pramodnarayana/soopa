@@ -659,14 +659,12 @@ class RunSyncUseCase:
             )
             return Result.fail(err)
 
-        parsed_dict: JsonDict | None = {"records": page_payload}
-
         # 1. Store raw payload in Data Plane (Tiered Storage)
         storage_result = await self._tiered_storage.store(
             tenant_id=tenant_id,
             trace_id=trace_id,
             payload_bytes=page_bytes,
-            parsed_payload=parsed_dict,
+            parsed_payload=page_payload,
         )
 
         # 2. Create InboundRecord aggregate root (emits InboundRecordCreatedEvent)

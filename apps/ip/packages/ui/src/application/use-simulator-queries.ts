@@ -153,12 +153,17 @@ export function useSimulatePushMutation(connectionId: string) {
         count: variables.count ?? 1,
       });
       if (res.ok) {
-        void queryClient.invalidateQueries({
-          queryKey: ipQueryKeys.traces.all(tenantId),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: ipQueryKeys.records.all(tenantId),
-        });
+        const invalidate = () => {
+          void queryClient.invalidateQueries({
+            queryKey: ipQueryKeys.traces.all(tenantId),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ipQueryKeys.records.all(tenantId),
+          });
+        };
+        invalidate();
+        setTimeout(invalidate, 500);
+        setTimeout(invalidate, 1500);
       }
     },
   });

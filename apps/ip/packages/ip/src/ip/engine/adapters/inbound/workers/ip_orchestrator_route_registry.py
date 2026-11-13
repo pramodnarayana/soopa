@@ -264,98 +264,119 @@ class IpOrchestratorRouteRegistry:
             return IpWorkerResultDispositionHandler.to_consumer_action(envelope, parsed_res)
         dto = parsed_res.unwrap()
 
-        async def _execute_chunk(shard_id: str, shard_dsn: str) -> ConsumerAction:
-            sem = asyncio.Semaphore(self._max_chunk_concurrency)
-            stream_def = (
-                self._stream_definition_resolver(dto.tenant_id, dto.connection_id, dto.stream_name)
-                if self._stream_definition_resolver is not None
-                else None
+        return await self._run_with_idempotency(
+            envelope,
+            dto.tenant_id,
+            lambda s_id, s_dsn: self._execute_inbound_record_created_chunk(
+                envelope, dto, s_id, s_dsn
+            ),
+        )
+
+    async def _execute_inbound_record_created_chunk(
+        self,
+        envelope: EventEnvelope,
+        dto: IpInboundRecordChunkPayloadDTO,
+        shard_id: str,
+        shard_dsn: str,
+    ) -> ConsumerAction:
+        sem = asyncio.Semaphore(self._max_chunk_concurrency)
+        stream_def = (
+            self._stream_definition_resolver(dto.tenant_id, dto.connection_id, dto.stream_name)
+            if self._stream_definition_resolver is not None
+            else None
+        )
+
+        if self._auto_bind_transformation_use_case is not None:
+            auto_bind_res = await self._auto_bind_transformation_use_case.execute(
+                AutoBindDefaultTransformationCommand(
+                    tenant_id=dto.tenant_id,
+                    connection_id=dto.connection_id,
+                    stream_name=dto.stream_name,
+                )
+            )
+            if auto_bind_res.is_err and auto_bind_res.unwrap_err().is_retryable:
+                return IpWorkerResultDispositionHandler.to_consumer_action(envelope, auto_bind_res)
+
+        if self._process_inbound_range_use_case is not None:
+            range_res = await self._process_inbound_range_use_case.execute(
+                ProcessInboundRangeCommand(
+                    tenant_id=dto.tenant_id,
+                    connection_id=dto.connection_id,
+                    stream=dto.stream_name,
+                    batch_id=dto.batch_id,
+                    range_start=dto.range_start,
+                    range_end=dto.range_end,
+                    record_ids=dto.record_ids,
+                    count=dto.count,
+                    generation_id=dto.generation_id,
+                    sync_id=dto.sync_run_id or dto.batch_id or dto.range_start,
+                    trace_id=dto.trace_id,
+                    correlation_id=dto.correlation_id,
+                    causation_depth=dto.causation_depth,
+                    stream_definition=stream_def,
+                )
+            )
+            if range_res.is_err:
+                return IpWorkerResultDispositionHandler.to_consumer_action(envelope, range_res)
+            range_dto = range_res.unwrap()
+            if not range_dto.canonical_changes or self._stitch_dispatcher is None:
+                return ConsumerAction.ACK
+            if dto.causation_depth >= self._max_causation_depth:
+                logger.info(
+                    "ip_orchestrator_stitch_dispatch_suppressed_causation_depth",
+                    event_id=envelope.id,
+                    tenant_id=dto.tenant_id,
+                    causation_depth=dto.causation_depth,
+                    max_causation_depth=self._max_causation_depth,
+                )
+                return ConsumerAction.ACK
+            return await self._dispatch_canonical_changes_in_memory(
+                envelope=envelope,
+                tenant_id=dto.tenant_id,
+                causation_depth=dto.causation_depth,
+                changes=range_dto.canonical_changes,
+                sem=sem,
             )
 
-            if self._process_inbound_range_use_case is not None:
-                range_res = await self._process_inbound_range_use_case.execute(
-                    ProcessInboundRangeCommand(
+        if not dto.record_ids:
+            logger.error(
+                "ip_orchestrator_range_event_without_range_executor_rejected",
+                event_id=envelope.id,
+                tenant_id=dto.tenant_id,
+                stream_name=dto.stream_name,
+                batch_id=dto.batch_id,
+                range_start=dto.range_start,
+            )
+            return ConsumerAction.DLQ
+
+        async def _replicate_one(
+            inbound_record_id: str,
+        ) -> Result[ReplicationSummary, IpError]:
+            async with (
+                sem,
+                self._dp_uow_provider.get_data_plane_uow(dto.tenant_id, shard_id, shard_dsn) as uow,
+            ):
+                use_case = ReplicateRecordsUseCase(
+                    uow=uow,
+                    extractor_registry=self._extractor_registry,
+                    tiered_storage=self._tiered_storage,
+                )
+                return await use_case.execute(
+                    ReplicateRecordsCommand(
                         tenant_id=dto.tenant_id,
                         connection_id=dto.connection_id,
                         stream=dto.stream_name,
-                        batch_id=dto.batch_id,
-                        range_start=dto.range_start,
-                        range_end=dto.range_end,
-                        record_ids=dto.record_ids,
-                        count=dto.count,
+                        inbound_record_id=inbound_record_id,
                         generation_id=dto.generation_id,
-                        sync_id=dto.sync_run_id or dto.batch_id or dto.range_start,
+                        sync_id=dto.sync_run_id or inbound_record_id,
                         trace_id=dto.trace_id,
                         correlation_id=dto.correlation_id,
-                        causation_depth=dto.causation_depth,
                         stream_definition=stream_def,
                     )
                 )
-                if range_res.is_err:
-                    return IpWorkerResultDispositionHandler.to_consumer_action(envelope, range_res)
-                range_dto = range_res.unwrap()
-                if not range_dto.canonical_changes or self._stitch_dispatcher is None:
-                    return ConsumerAction.ACK
-                if dto.causation_depth >= self._max_causation_depth:
-                    logger.info(
-                        "ip_orchestrator_stitch_dispatch_suppressed_causation_depth",
-                        event_id=envelope.id,
-                        tenant_id=dto.tenant_id,
-                        causation_depth=dto.causation_depth,
-                        max_causation_depth=self._max_causation_depth,
-                    )
-                    return ConsumerAction.ACK
-                return await self._dispatch_canonical_changes_in_memory(
-                    envelope=envelope,
-                    tenant_id=dto.tenant_id,
-                    causation_depth=dto.causation_depth,
-                    changes=range_dto.canonical_changes,
-                    sem=sem,
-                )
 
-            if not dto.record_ids:
-                logger.error(
-                    "ip_orchestrator_range_event_without_range_executor_rejected",
-                    event_id=envelope.id,
-                    tenant_id=dto.tenant_id,
-                    stream_name=dto.stream_name,
-                    batch_id=dto.batch_id,
-                    range_start=dto.range_start,
-                )
-                return ConsumerAction.DLQ
-
-            async def _replicate_one(
-                inbound_record_id: str,
-            ) -> Result[ReplicationSummary, IpError]:
-                async with (
-                    sem,
-                    self._dp_uow_provider.get_data_plane_uow(
-                        dto.tenant_id, shard_id, shard_dsn
-                    ) as uow,
-                ):
-                    use_case = ReplicateRecordsUseCase(
-                        uow=uow,
-                        extractor_registry=self._extractor_registry,
-                        tiered_storage=self._tiered_storage,
-                    )
-                    return await use_case.execute(
-                        ReplicateRecordsCommand(
-                            tenant_id=dto.tenant_id,
-                            connection_id=dto.connection_id,
-                            stream=dto.stream_name,
-                            inbound_record_id=inbound_record_id,
-                            generation_id=dto.generation_id,
-                            sync_id=dto.sync_run_id or inbound_record_id,
-                            trace_id=dto.trace_id,
-                            correlation_id=dto.correlation_id,
-                            stream_definition=stream_def,
-                        )
-                    )
-
-            outcomes = await asyncio.gather(*(_replicate_one(rec_id) for rec_id in dto.record_ids))
-            return IpWorkerResultDispositionHandler.to_chunk_consumer_action(envelope, outcomes)
-
-        return await self._run_with_idempotency(envelope, dto.tenant_id, _execute_chunk)
+        outcomes = await asyncio.gather(*(_replicate_one(rec_id) for rec_id in dto.record_ids))
+        return IpWorkerResultDispositionHandler.to_chunk_consumer_action(envelope, outcomes)
 
     async def _dispatch_canonical_changes_in_memory(
         self,
@@ -733,6 +754,7 @@ class IpOrchestratorRouteRegistry:
                 merged = _sanitize_json_dict(latest.canonical_data)
                 merged.setdefault("source_id", source_id)
                 merged.setdefault("canonical_type", canonical_type)
+                merged.setdefault("connection_id", latest.connection_id)
                 return merged
         merged_fallback = dict(fallback_payload)
         merged_fallback.setdefault("source_id", source_id)
@@ -757,6 +779,7 @@ class IpOrchestratorRouteRegistry:
                 merged = _sanitize_json_dict(record.canonical_data)
                 merged.setdefault("source_id", record.source_id)
                 merged.setdefault("canonical_type", record.canonical_type)
+                merged.setdefault("connection_id", record.connection_id)
                 return merged
         return dict(fallback_payload)
 
