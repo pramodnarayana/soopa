@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ip.engine.domain.normalization.normalized_record import NormalizedRecord
 
 
@@ -20,7 +18,7 @@ class CanonicalReaderPort(Protocol):
 
     async def get_by_id(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         record_id: str,
@@ -30,7 +28,7 @@ class CanonicalReaderPort(Protocol):
 
     async def get_by_trace_id(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         trace_id: str,
@@ -40,7 +38,7 @@ class CanonicalReaderPort(Protocol):
 
     async def list_records(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         connection_id: str | None = None,

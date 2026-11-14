@@ -79,6 +79,14 @@ def _service_point_to_normalized_record(orm: MdmServicePointRecord) -> Normalize
     )
 
 
+def _require_async_session(session: object) -> AsyncSession:
+    if not isinstance(session, AsyncSession):
+        raise TypeError(
+            f"SqlAlchemyCanonicalReader requires AsyncSession, got {type(session).__name__}"
+        )
+    return session
+
+
 class SqlAlchemyMeterReadingCanonicalReader(CanonicalReaderPort):
     """Reads normalized `MDM_METER_READING` entities directly from `public.mdm_meter_readings`."""
 
@@ -88,11 +96,12 @@ class SqlAlchemyMeterReadingCanonicalReader(CanonicalReaderPort):
 
     async def get_by_id(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         record_id: str,
     ) -> NormalizedRecord | None:
+        async_session = _require_async_session(session)
         stmt = (
             select(MdmMeterReadingRecord)
             .where(
@@ -102,17 +111,18 @@ class SqlAlchemyMeterReadingCanonicalReader(CanonicalReaderPort):
             .order_by(MdmMeterReadingRecord.reading_timestamp.desc())
             .limit(1)
         )
-        res = await session.execute(stmt)
+        res = await async_session.execute(stmt)
         orm = res.scalars().first()
         return _meter_reading_to_normalized_record(orm) if orm is not None else None
 
     async def get_by_trace_id(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         trace_id: str,
     ) -> Sequence[NormalizedRecord]:
+        async_session = _require_async_session(session)
         stmt = (
             select(MdmMeterReadingRecord)
             .where(
@@ -121,18 +131,19 @@ class SqlAlchemyMeterReadingCanonicalReader(CanonicalReaderPort):
             )
             .order_by(MdmMeterReadingRecord.reading_timestamp.asc())
         )
-        res = await session.execute(stmt)
+        res = await async_session.execute(stmt)
         return [_meter_reading_to_normalized_record(r) for r in res.scalars().all()]
 
     async def list_records(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         connection_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> Sequence[NormalizedRecord]:
+        async_session = _require_async_session(session)
         stmt = select(MdmMeterReadingRecord).where(MdmMeterReadingRecord.tenant_id == tenant_id)
         if connection_id is not None:
             stmt = stmt.where(MdmMeterReadingRecord.source_connection_id == connection_id)
@@ -144,7 +155,7 @@ class SqlAlchemyMeterReadingCanonicalReader(CanonicalReaderPort):
             .offset(offset)
             .limit(limit)
         )
-        res = await session.execute(stmt)
+        res = await async_session.execute(stmt)
         return [_meter_reading_to_normalized_record(r) for r in res.scalars().all()]
 
 
@@ -157,26 +168,28 @@ class SqlAlchemyServicePointCanonicalReader(CanonicalReaderPort):
 
     async def get_by_id(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         record_id: str,
     ) -> NormalizedRecord | None:
+        async_session = _require_async_session(session)
         stmt = select(MdmServicePointRecord).where(
             MdmServicePointRecord.tenant_id == tenant_id,
             MdmServicePointRecord.id == record_id,
         )
-        res = await session.execute(stmt)
+        res = await async_session.execute(stmt)
         orm = res.scalar_one_or_none()
         return _service_point_to_normalized_record(orm) if orm is not None else None
 
     async def get_by_trace_id(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         trace_id: str,
     ) -> Sequence[NormalizedRecord]:
+        async_session = _require_async_session(session)
         stmt = (
             select(MdmServicePointRecord)
             .where(
@@ -185,18 +198,19 @@ class SqlAlchemyServicePointCanonicalReader(CanonicalReaderPort):
             )
             .order_by(MdmServicePointRecord.updated_at.asc())
         )
-        res = await session.execute(stmt)
+        res = await async_session.execute(stmt)
         return [_service_point_to_normalized_record(sp) for sp in res.scalars().all()]
 
     async def list_records(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         connection_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> Sequence[NormalizedRecord]:
+        async_session = _require_async_session(session)
         stmt = select(MdmServicePointRecord).where(MdmServicePointRecord.tenant_id == tenant_id)
         if connection_id is not None:
             stmt = stmt.where(MdmServicePointRecord.source_connection_id == connection_id)
@@ -208,7 +222,7 @@ class SqlAlchemyServicePointCanonicalReader(CanonicalReaderPort):
             .offset(offset)
             .limit(limit)
         )
-        res = await session.execute(stmt)
+        res = await async_session.execute(stmt)
         return [_service_point_to_normalized_record(sp) for sp in res.scalars().all()]
 
 
@@ -249,11 +263,12 @@ class SqlAlchemyBillingReadingCanonicalReader(CanonicalReaderPort):
 
     async def get_by_id(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         record_id: str,
     ) -> NormalizedRecord | None:
+        async_session = _require_async_session(session)
         stmt = (
             select(MdmBillingReadingRecord)
             .where(
@@ -263,17 +278,18 @@ class SqlAlchemyBillingReadingCanonicalReader(CanonicalReaderPort):
             .order_by(MdmBillingReadingRecord.reading_timestamp.desc())
             .limit(1)
         )
-        res = await session.execute(stmt)
+        res = await async_session.execute(stmt)
         orm = res.scalars().first()
         return _billing_reading_to_normalized_record(orm) if orm is not None else None
 
     async def get_by_trace_id(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         trace_id: str,
     ) -> Sequence[NormalizedRecord]:
+        async_session = _require_async_session(session)
         stmt = (
             select(MdmBillingReadingRecord)
             .where(
@@ -282,18 +298,19 @@ class SqlAlchemyBillingReadingCanonicalReader(CanonicalReaderPort):
             )
             .order_by(MdmBillingReadingRecord.recorded_at.asc())
         )
-        res = await session.execute(stmt)
+        res = await async_session.execute(stmt)
         return [_billing_reading_to_normalized_record(r) for r in res.scalars().all()]
 
     async def list_records(
         self,
-        session: AsyncSession,
+        session: object,
         *,
         tenant_id: str,
         connection_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> Sequence[NormalizedRecord]:
+        async_session = _require_async_session(session)
         stmt = select(MdmBillingReadingRecord).where(MdmBillingReadingRecord.tenant_id == tenant_id)
         if connection_id is not None:
             stmt = stmt.where(MdmBillingReadingRecord.source_connection_id == connection_id)
@@ -305,7 +322,7 @@ class SqlAlchemyBillingReadingCanonicalReader(CanonicalReaderPort):
             .offset(offset)
             .limit(limit)
         )
-        res = await session.execute(stmt)
+        res = await async_session.execute(stmt)
         return [_billing_reading_to_normalized_record(r) for r in res.scalars().all()]
 
 

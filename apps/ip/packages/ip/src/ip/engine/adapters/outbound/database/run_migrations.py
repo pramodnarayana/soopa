@@ -220,14 +220,32 @@ async def reconcile_global_webhook_ingress_schema(global_url: str) -> None:
                         updated_at TIMESTAMPTZ NOT NULL,
                         CONSTRAINT uq_tenant_endpoint_slug UNIQUE (tenant_id, endpoint_slug)
                     );
+                    """
+                )
+            )
 
+            await session.execute(
+                text(
+                    """
                     CREATE INDEX IF NOT EXISTS idx_webhook_slug_lookup
                     ON ip.webhook_endpoints (tenant_id, endpoint_slug)
                     WHERE is_active = TRUE;
+                    """
+                )
+            )
 
+            await session.execute(
+                text(
+                    """
                     CREATE INDEX IF NOT EXISTS ix_ip_webhook_endpoints_tenant_id
                     ON ip.webhook_endpoints (tenant_id);
+                    """
+                )
+            )
 
+            await session.execute(
+                text(
+                    """
                     CREATE TABLE IF NOT EXISTS ip.webhook_event_routes (
                         id VARCHAR(64) PRIMARY KEY,
                         endpoint_id VARCHAR(64) NOT NULL REFERENCES ip.webhook_endpoints(id) ON DELETE CASCADE,
@@ -240,7 +258,13 @@ async def reconcile_global_webhook_ingress_schema(global_url: str) -> None:
                         created_at TIMESTAMPTZ NOT NULL,
                         CONSTRAINT uq_endpoint_event_pattern UNIQUE (endpoint_id, event_pattern)
                     );
+                    """
+                )
+            )
 
+            await session.execute(
+                text(
+                    """
                     CREATE INDEX IF NOT EXISTS idx_event_route_lookup
                     ON ip.webhook_event_routes (endpoint_id, priority)
                     WHERE is_active = TRUE;
