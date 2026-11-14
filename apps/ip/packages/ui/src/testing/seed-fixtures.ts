@@ -28,7 +28,7 @@ import type {
   IntervalLineageTrace,
   IntervalWindowCompleteness,
 } from '../domain/intervals';
-import { type SimulatorEntity, SimulatorVelocityMode } from '../domain/simulator';
+import { PushCadenceMode, type SimulatorEntity, SimulatorVelocityMode } from '../domain/simulator';
 import type { Stitch, StitchDefinition, StitchRun } from '../domain/stitch';
 import type { SyncRun } from '../domain/sync-run';
 import type { IpTrace, IpTraceLineageItem } from '../domain/trace';
@@ -133,6 +133,12 @@ export const SEED_SIMULATOR_ENTITY: SimulatorEntity = {
   entityName: 'orders',
   primaryKeyField: 'order_id',
   cursorField: 'updated_at',
+  pushMode: PushCadenceMode.RANDOM_BURST,
+  pushConfig: {
+    min_batch: 1,
+    max_batch: 10,
+    interval_seconds: 5,
+  },
   recordsPerPull: 25,
   cursorStepSeconds: 60,
   velocityMode: SimulatorVelocityMode.ENTITY_TRANSACTIONAL,

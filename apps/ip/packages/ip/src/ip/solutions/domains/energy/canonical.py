@@ -12,6 +12,7 @@ class EnergyEntityType(StrEnum):
 
     MDM_METER_READING = "MDM_METER_READING"
     MDM_SERVICE_POINT = "MDM_SERVICE_POINT"
+    MDM_BILLING_READING = "MDM_BILLING_READING"
 
 
 class EnergyIdPrefix(StrEnum):
@@ -19,6 +20,7 @@ class EnergyIdPrefix(StrEnum):
 
     MDM_READING = "ip_mdmr"
     MDM_SERVICE_POINT = "ip_mdms"
+    MDM_BILLING_READING = "ip_mdmb"
 
 
 class MeterReadingQualityFlag(StrEnum):
@@ -80,6 +82,30 @@ class CanonicalServicePointDTO:
     status: str
     updated_at: datetime
     transformation_id: str = "energy.ami_service_point"
+    transformation_version: int = 1
+    correlation_id: str | None = None
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
+    replay_count: int = 0
+
+
+@dataclass(frozen=True)
+class CanonicalBillingReadingDTO:
+    """Canonical representation of an Energy utility billing determinant / register reading."""
+
+    id: str
+    tenant_id: str
+    trace_id: str
+    source_connection_id: str
+    source_replica_id: str
+    reading_id: str
+    meter_serial_number: str
+    reading_timestamp: datetime
+    kwh_delivered: float
+    recorded_at: datetime
+    service_point_id: str | None = None
+    quality_flag: str = MeterReadingQualityFlag.VALIDATED.value
+    transformation_id: str = "energy.sap_billing_reading"
     transformation_version: int = 1
     correlation_id: str | None = None
     parent_trace_id: str | None = None

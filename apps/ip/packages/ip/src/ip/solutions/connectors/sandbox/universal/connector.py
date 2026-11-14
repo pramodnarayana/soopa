@@ -13,7 +13,6 @@ from ip.engine.domain.connection.enums import (
     AuthType,
     CatalogCategory,
     ConnectorArchitectureType,
-    PropertyType,
 )
 from ip.engine.domain.exceptions import (
     InvalidConnectionConfigError,
@@ -25,7 +24,6 @@ from ip.engine.ports.outbound.catalog_registry_port import CatalogAppSummaryDTO
 from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
     ConnectionCheckResultDTO,
-    ConnectorPropertyDTO,
     DiscoveredCatalogDTO,
     RecordEnvelopeDTO,
     StreamSchemaDTO,
@@ -33,6 +31,7 @@ from ip.engine.ports.outbound.connector_port import (
     WriteResultDTO,
 )
 from ip.solutions.connectors.sandbox.universal.dto import entity_dto_to_stream_spec
+from ip.solutions.connectors.sandbox.universal.extraction import PullQueryEngine
 from ip.solutions.connectors.sandbox.universal.inference import (
     extract_stream_schema_dto,
     parse_simulator_connection_config,
@@ -40,8 +39,13 @@ from ip.solutions.connectors.sandbox.universal.inference import (
 from ip.solutions.connectors.sandbox.universal.ports import SimulatorEntityReaderPort
 from ip.solutions.connectors.sandbox.universal.spec import (
     SimulatorConnectionConfig,
+    SimulatorStreamSpec,
     SimulatorSubmissionStatus,
     SimulatorWriteFailureCategory,
+)
+from ip.solutions.connectors.sandbox.universal.strategies import (
+    ExtractionQuery,
+    PaginatedSliceDTO,
 )
 from ip.solutions.connectors.sandbox.universal.synthesizer import JsonSchemaRecordSynthesizer
 from seedwork.domain.types import JsonDict
@@ -59,9 +63,11 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         *,
         entity_reader: SimulatorEntityReaderPort | None = None,
         synthesizer: JsonSchemaRecordSynthesizer | None = None,
+        query_engine: PullQueryEngine | None = None,
     ) -> None:
         self._entity_reader = entity_reader
         self._synthesizer = synthesizer or JsonSchemaRecordSynthesizer()
+        self._query_engine = query_engine or PullQueryEngine(self._synthesizer)
 
     @classmethod
     def default_catalog_summary(cls) -> CatalogAppSummaryDTO:
@@ -79,31 +85,14 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         return self.APP_ID
 
     def spec(self) -> AppSpecDTO:
-        """Exposes optional `seed` and `records_per_pull` parameters (`NO_AUTH`)."""
+        """Domain-agnostic JSON-Schema-driven simulation sandbox (`NO_AUTH`)."""
         return AppSpecDTO(
             app_id=self.APP_ID,
             display_name="Universal Schema Simulator",
             auth_type=AuthType.NO_AUTH,
             category=CatalogCategory.SANDBOX,
-            description=None,
-            properties=(
-                ConnectorPropertyDTO(
-                    name="seed",
-                    label="Seed",
-                    type=PropertyType.NUMBER,
-                    required=False,
-                    default=42,
-                    description=None,
-                ),
-                ConnectorPropertyDTO(
-                    name="records_per_pull",
-                    label="Records per Pull",
-                    type=PropertyType.NUMBER,
-                    required=False,
-                    default=25,
-                    description=None,
-                ),
-            ),
+            description="Domain-agnostic JSON-Schema-driven simulation sandbox.",
+            properties=(),
         )
 
     def _resolve_connection_scope(
@@ -113,9 +102,9 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         connection_id: str,
         public_config: JsonDict,
     ) -> Result[tuple[str, str, SimulatorConnectionConfig, SimulatorEntityReaderPort], IpError]:
-        cfg = parse_simulator_connection_config(public_config)
         cleaned_tenant_id = tenant_id.strip()
         cleaned_conn_id = connection_id.strip()
+        cfg = parse_simulator_connection_config(public_config, connection_id=cleaned_conn_id)
         if self._entity_reader is None:
             return Result.fail(
                 InvalidConnectionConfigError(
@@ -261,7 +250,7 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             spec,
             seed=cfg.seed,
             cursor=cursor,
-            limit=min(max(1, limit), spec.records_per_pull),
+            limit=max(1, limit),
         )
         object_ids = tuple(env.record_id for env in batch)
         logger.info(
@@ -336,7 +325,7 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             return
 
         spec = entity_dto_to_stream_spec(entity)
-        effective_limit = min(max(1, limit), spec.records_per_pull)
+        effective_limit = max(1, limit)
         batch = self._synthesizer.synthesize_batch(
             spec,
             seed=cfg.seed,
@@ -353,6 +342,15 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         )
         for env in batch:
             yield env
+
+    def query_slice(
+        self,
+        spec: SimulatorStreamSpec,
+        seed: int,
+        query: ExtractionQuery,
+    ) -> Result[PaginatedSliceDTO, IpError]:
+        """Executes an advanced extraction strategy query against the simulated stream."""
+        return self._query_engine.execute(spec, seed=seed, query=query)
 
     async def fetch_record(
         self,

@@ -12,6 +12,7 @@ from ip.engine.adapters.outbound.database.models.base import IpTenantBase
 from ip.engine.domain.enums import IpIdPrefix
 from ip.solutions.domains.energy import models as _energy_models
 from ip.solutions.domains.energy.canonical import (
+    CanonicalBillingReadingDTO,
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,
     EnergyIdPrefix,
@@ -97,6 +98,30 @@ def test_ip_solution_domain_repositories_have_explicit_bidirectional_mappers() -
     )
     sp_orm = SqlAlchemyEnergyDomainRepository._to_service_point_orm(sp_dto, resolved_id=sp_id)
     assert SqlAlchemyEnergyDomainRepository._to_service_point_dto(sp_orm) == sp_dto
+
+    br_id = generate_id(EnergyIdPrefix.MDM_BILLING_READING.value)
+    billing_dto = CanonicalBillingReadingDTO(
+        id=br_id,
+        tenant_id=tenant_id,
+        trace_id=trace_id,
+        correlation_id=None,
+        parent_trace_id=None,
+        original_trace_id=None,
+        replay_count=0,
+        source_connection_id=connection_id,
+        source_replica_id=replica_id,
+        reading_id="BILL-1001",
+        meter_serial_number="MTR-100",
+        service_point_id=sp_id,
+        reading_timestamp=now,
+        kwh_delivered=14.5,
+        quality_flag="VALIDATED",
+        recorded_at=now,
+        transformation_id=tx_id,
+        transformation_version=1,
+    )
+    br_orm = SqlAlchemyEnergyDomainRepository._to_billing_reading_orm(billing_dto)
+    assert SqlAlchemyEnergyDomainRepository._to_billing_reading_dto(br_orm) == billing_dto
 
     load_dto = CanonicalLoadDTO(
         id=load_id,

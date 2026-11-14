@@ -31,6 +31,7 @@ _ALLOWED_SOLUTION_TEST_PREFIXES: tuple[str, ...] = (
     "integration/solutions/",
     "integration/database/test_tenant_domain_migrations.py",
     "e2e/test_energy_pipeline_e2e.py",
+    "e2e/test_sap_billing_reading_e2e.py",
     "e2e/test_tms_pipeline_e2e.py",
     "unit/engine/test_engine_domain_purity.py",
 )

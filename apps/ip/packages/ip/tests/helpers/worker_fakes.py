@@ -400,7 +400,8 @@ class FakeReplicaRecordRepo(ReplicaRecordRepositoryPort):
             )
             cursor_kind = (
                 CursorKind(cand.cursor_kind)
-                if cand.cursor_kind in CursorKind.__members__.values()
+                if cand.cursor_kind is not None
+                and cand.cursor_kind in CursorKind.__members__.values()
                 else CursorKind.STRING
             )
             outcome = ReplicaMergePolicy.evaluate(

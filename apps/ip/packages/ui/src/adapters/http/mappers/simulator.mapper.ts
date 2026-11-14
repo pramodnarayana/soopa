@@ -18,6 +18,8 @@ export function mapSimulatorEntityFromWire(wire: SimulatorEntityWire): Simulator
     entityName: wire.entity_name,
     primaryKeyField: wire.primary_key_field,
     cursorField: wire.cursor_field,
+    pushMode: wire.push_mode,
+    pushConfig: wire.push_config,
     recordsPerPull: wire.records_per_pull,
     cursorStepSeconds: wire.cursor_step_seconds,
     velocityMode: wire.velocity_mode,
@@ -38,6 +40,8 @@ export function mapCreateSimulatorEntityToWire(
     sample_blueprint: input.sampleBlueprint,
     primary_key_field: input.primaryKeyField ?? null,
     cursor_field: input.cursorField ?? null,
+    push_mode: input.pushMode ?? 'RANDOM_BURST',
+    push_config: input.pushConfig ?? {},
     records_per_pull: input.recordsPerPull ?? SIMULATOR_STREAM_LIMITS.DEFAULT_RECORDS_PER_PULL,
     cursor_step_seconds:
       input.cursorStepSeconds ?? SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_STEP_SECONDS,
@@ -61,6 +65,12 @@ export function mapUpdateSimulatorEntityToWire(
   }
   if (input.cursorField !== undefined) {
     payload.cursor_field = input.cursorField;
+  }
+  if (input.pushMode !== undefined) {
+    payload.push_mode = input.pushMode;
+  }
+  if (input.pushConfig !== undefined) {
+    payload.push_config = input.pushConfig;
   }
   if (input.recordsPerPull !== undefined) {
     payload.records_per_pull = input.recordsPerPull;

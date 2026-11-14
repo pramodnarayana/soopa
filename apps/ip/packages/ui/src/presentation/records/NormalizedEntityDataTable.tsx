@@ -74,6 +74,54 @@ const INTERNAL_METADATA_KEYS = new Set([
   'canonical_id',
 ]);
 
+export function isRecordMatchingStream(record: NormalizedRecord, streamName: string): boolean {
+  if (!streamName) return true;
+  const sNorm = streamName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cNorm = record.canonicalType.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!sNorm || !cNorm) return true;
+
+  // 1. Direct equality or substring match
+  if (sNorm === cNorm || cNorm.includes(sNorm) || sNorm.includes(cNorm)) {
+    return true;
+  }
+
+  // 2. Singular stem match (handles plurals: entity_items vs CANONICAL_ENTITY_ITEM)
+  const sStem = sNorm.replace(/s$/, '');
+  const cStem = cNorm.replace(/s$/, '');
+  if (
+    sStem &&
+    cStem &&
+    (cNorm.includes(sStem) ||
+      sNorm.includes(cStem) ||
+      cStem.includes(sStem) ||
+      sStem.includes(cStem))
+  ) {
+    return true;
+  }
+
+  // 3. Transformation ID match (e.g. "domain.entity_transform" contains "entity_transform")
+  const transformId =
+    record.canonicalData && typeof record.canonicalData === 'object'
+      ? String(
+          (record.canonicalData as Record<string, unknown>).transformation_id ?? '',
+        ).toLowerCase()
+      : '';
+  if (transformId && (transformId.includes(sNorm) || (sStem && transformId.includes(sStem)))) {
+    return true;
+  }
+
+  // 4. Source ID fallback
+  if (
+    record.sourceId &&
+    (record.sourceId.toLowerCase().includes(sNorm) ||
+      (sStem && record.sourceId.toLowerCase().includes(sStem)))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function NormalizedEntityDataTable({
   connectionId,
   streamName,
@@ -92,17 +140,7 @@ export function NormalizedEntityDataTable({
     const allRecords = normalizedQuery.data ?? [];
     if (!allRecords.length) return [];
 
-    const sNameNorm = streamName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const filtered = allRecords.filter((r) => {
-      const cTypeNorm = r.canonicalType.toLowerCase().replace(/[^a-z0-9]/g, '');
-      return (
-        cTypeNorm.includes(sNameNorm) ||
-        sNameNorm.includes(cTypeNorm) ||
-        r.sourceId.toLowerCase().includes(sNameNorm)
-      );
-    });
-
-    return filtered;
+    return allRecords.filter((r) => isRecordMatchingStream(r, streamName));
   }, [normalizedQuery.data, streamName]);
 
   // Client-side search across all fields of the record

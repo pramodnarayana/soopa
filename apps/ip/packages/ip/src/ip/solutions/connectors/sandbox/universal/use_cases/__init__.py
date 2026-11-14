@@ -12,6 +12,10 @@ from ip.solutions.connectors.sandbox.universal.use_cases.list_simulator_entities
     ListSimulatorEntitiesQuery,
     ListSimulatorEntitiesUseCase,
 )
+from ip.solutions.connectors.sandbox.universal.use_cases.pull_simulator_records_use_case import (
+    PullSimulatorRecordsCommand,
+    PullSimulatorRecordsUseCase,
+)
 from ip.solutions.connectors.sandbox.universal.use_cases.update_simulator_entity_use_case import (
     UpdateSimulatorEntityCommand,
     UpdateSimulatorEntityUseCase,
@@ -24,6 +28,8 @@ __all__ = [
     "DeleteSimulatorEntityUseCase",
     "ListSimulatorEntitiesQuery",
     "ListSimulatorEntitiesUseCase",
+    "PullSimulatorRecordsCommand",
+    "PullSimulatorRecordsUseCase",
     "UpdateSimulatorEntityCommand",
     "UpdateSimulatorEntityUseCase",
 ]

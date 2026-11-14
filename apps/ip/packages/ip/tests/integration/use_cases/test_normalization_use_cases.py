@@ -92,6 +92,9 @@ class _RecordingCanonicalWriter(CanonicalWriterPort):
         replica_id: str,
         replica_version: int,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         self.rows_by_source_id[source_id] = dict(fields)
 
@@ -104,6 +107,9 @@ class _RecordingCanonicalWriter(CanonicalWriterPort):
         source_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         self.soft_deleted.append(source_id)
         self.rows_by_source_id.pop(source_id, None)

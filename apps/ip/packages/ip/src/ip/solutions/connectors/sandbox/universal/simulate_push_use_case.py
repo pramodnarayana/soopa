@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -24,6 +24,7 @@ from ip.engine.domain.exceptions import (
     Result,
 )
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
+from ip.solutions.connectors.sandbox.universal.cadence import resolve_push_cadence_strategy
 from ip.solutions.connectors.sandbox.universal.dto import entity_dto_to_stream_spec
 from ip.solutions.connectors.sandbox.universal.inference import (
     parse_simulator_connection_config,
@@ -35,10 +36,12 @@ from ip.solutions.connectors.sandbox.universal.spec import (
     MIN_SIMULATED_PUSH_COUNT,
     SimulatorStreamSpec,
 )
+from ip.solutions.connectors.sandbox.universal.strategies import CadenceState, PushCadenceMode
 from ip.solutions.connectors.sandbox.universal.synthesizer import JsonSchemaRecordSynthesizer
 from ip.solutions.connectors.sandbox.universal.use_cases.connection_guard import (
     validate_simulator_app_id,
 )
+from seedwork.domain.types import JsonValue
 
 logger = structlog.get_logger(__name__)
 
@@ -60,6 +63,8 @@ class TriggerSimulatedPushCommand:
     count: int = DEFAULT_SIMULATED_PUSH_COUNT
     delivery_style: SimulatedPushDeliveryStyle = SimulatedPushDeliveryStyle.FULL_PAYLOAD
     correlation_id: str | None = None
+    cadence_mode: PushCadenceMode | None = None
+    cadence_config: Mapping[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True)
@@ -111,13 +116,16 @@ class TriggerSimulatedPushUseCase:
         if app_err is not None:
             return Result.fail(app_err)
 
-        cfg = parse_simulator_connection_config(dict(resolved.public_config))
+        cfg = parse_simulator_connection_config(
+            dict(resolved.public_config),
+            connection_id=command.connection_id,
+        )
         entity_res = await self._entity_reader.get_entity_by_name(
             command.tenant_id, command.connection_id, command.stream_name
         )
         if entity_res.is_err:
             return Result.fail(entity_res.unwrap_err())
-        entity = entity_res.unwrap()
+        entity = entity_res.value
         if entity is None:
             return Result.fail(
                 IpError(
@@ -147,7 +155,46 @@ class TriggerSimulatedPushUseCase:
             return Result.fail(err)
         app_id, seed, spec = resolved_res.unwrap()
 
-        bounded_count = max(MIN_SIMULATED_PUSH_COUNT, min(command.count, MAX_SIMULATED_PUSH_COUNT))
+        effective_cadence_mode = command.cadence_mode or spec.push_mode
+        effective_cadence_config = (
+            command.cadence_config if command.cadence_config is not None else spec.push_config
+        )
+        is_thin = (
+            command.delivery_style == SimulatedPushDeliveryStyle.THIN_PING
+            or effective_cadence_mode == PushCadenceMode.THIN_PUSH
+        )
+
+        strategy = resolve_push_cadence_strategy(effective_cadence_mode, effective_cadence_config)
+        now_dt = datetime.now(UTC)
+        cadence_state = CadenceState(
+            cycle_index=0,
+            elapsed_seconds=0.0,
+            total_emitted=0,
+            last_emitted_at=now_dt,
+        )
+        if not strategy.should_emit(cadence_state):
+            logger.info(
+                "universal_simulator_push_emission_skipped_by_strategy",
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
+                cadence_mode=effective_cadence_mode.value,
+            )
+            return Result.ok(
+                SimulatePushResultDTO(
+                    connection_id=command.connection_id,
+                    stream_name=command.stream_name,
+                    records_pushed=0,
+                    record_ids=(),
+                    trace_ids=(),
+                )
+            )
+
+        if command.count != DEFAULT_SIMULATED_PUSH_COUNT:
+            target_count = command.count
+        else:
+            target_count = strategy.compute_batch_size(cadence_state)
+
+        bounded_count = max(MIN_SIMULATED_PUSH_COUNT, min(target_count, MAX_SIMULATED_PUSH_COUNT))
         now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         nonce_offset = (int.from_bytes(os.urandom(2), "big") % 50_000) + 1
         synthesized = self._synthesizer.synthesize_batch(
@@ -172,7 +219,6 @@ class TriggerSimulatedPushUseCase:
 
         ingested_record_ids: list[str] = []
         trace_ids: list[str] = []
-        is_thin = command.delivery_style == SimulatedPushDeliveryStyle.THIN_PING
 
         async with self._dp_uow_provider.get_data_plane_uow(
             tenant_id=command.tenant_id,

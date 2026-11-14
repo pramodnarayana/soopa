@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from identity.domain.identity_context import IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
     get_effective_ucp_tenant_id,
@@ -56,6 +56,12 @@ from ip.solutions.connectors.sandbox.universal.spec import (
     SimulatorSubmissionStatus,
     StreamVelocityMode,
 )
+from ip.solutions.connectors.sandbox.universal.strategies import (
+    ExtractionQuery,
+    PullExtractionMode,
+    PushCadenceMode,
+)
+from ip.solutions.connectors.sandbox.universal.synthesizer import _parse_iso_cursor
 from ip.solutions.connectors.sandbox.universal.use_cases import (
     CreateSimulatorEntityCommand,
     CreateSimulatorEntityUseCase,
@@ -63,6 +69,8 @@ from ip.solutions.connectors.sandbox.universal.use_cases import (
     DeleteSimulatorEntityUseCase,
     ListSimulatorEntitiesQuery,
     ListSimulatorEntitiesUseCase,
+    PullSimulatorRecordsCommand,
+    PullSimulatorRecordsUseCase,
     UpdateSimulatorEntityCommand,
     UpdateSimulatorEntityUseCase,
 )
@@ -155,6 +163,17 @@ def get_trigger_simulated_push_use_case(
     )
 
 
+def get_pull_simulator_records_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    entity_reader: Annotated[SimulatorEntityReaderPort, Depends(get_simulator_entity_reader)],
+) -> PullSimulatorRecordsUseCase:
+    """Resolves `PullSimulatorRecordsUseCase` via request-scoped DI."""
+    return PullSimulatorRecordsUseCase(
+        cp_uow=cp_uow,
+        entity_reader=entity_reader,
+    )
+
+
 class CreateSimulatorEntityHttpRequest(BaseModel):
     """HTTP request payload to configure a new entity inside a Simulator connection."""
 
@@ -162,6 +181,8 @@ class CreateSimulatorEntityHttpRequest(BaseModel):
     sample_blueprint: JsonValue
     primary_key_field: str | None = Field(default=None, max_length=128)
     cursor_field: str | None = Field(default=None, max_length=128)
+    push_mode: PushCadenceMode = Field(default=PushCadenceMode.RANDOM_BURST)
+    push_config: dict[str, JsonValue] | None = None
     records_per_pull: int = Field(
         default=DEFAULT_SIMULATOR_RECORDS_PER_PULL,
         ge=MIN_SIMULATOR_RECORDS_PER_PULL,
@@ -183,6 +204,8 @@ class UpdateSimulatorEntityHttpRequest(BaseModel):
     sample_blueprint: JsonValue | None = None
     primary_key_field: str | None = Field(default=None, max_length=128)
     cursor_field: str | None = Field(default=None, max_length=128)
+    push_mode: PushCadenceMode | None = None
+    push_config: dict[str, JsonValue] | None = None
     records_per_pull: int | None = Field(
         default=None,
         ge=MIN_SIMULATOR_RECORDS_PER_PULL,
@@ -206,6 +229,8 @@ class SimulatorEntityHttpResponse(BaseModel):
     entity_name: str
     primary_key_field: str
     cursor_field: str
+    push_mode: PushCadenceMode
+    push_config: dict[str, JsonValue]
     records_per_pull: int
     cursor_step_seconds: int
     velocity_mode: StreamVelocityMode
@@ -230,6 +255,8 @@ class SimulatePushHttpRequest(BaseModel):
         default=SimulatedPushDeliveryStyle.FULL_PAYLOAD
     )
     correlation_id: str | None = Field(default=None, max_length=128)
+    cadence_mode: PushCadenceMode | None = Field(default=None)
+    cadence_config: dict[str, JsonValue] | None = Field(default=None)
 
 
 class SimulatePushHttpResponse(BaseModel):
@@ -243,6 +270,33 @@ class SimulatePushHttpResponse(BaseModel):
     status: SimulatorSubmissionStatus = SimulatorSubmissionStatus.ACCEPTED
 
 
+class PaginatedSliceRecordHttpResponse(BaseModel):
+    """Single record envelope representation inside a paginated query response."""
+
+    record_id: str
+    emitted_at: str
+    cursor_value: str | None
+    data: dict[str, JsonValue]
+
+
+class PaginatedSlicePageInfoHttpResponse(BaseModel):
+    """Pagination and continuation metadata for stream slicing."""
+
+    next_cursor: str | None
+    next_offset: int | None
+    continuation_token: str | None
+    has_more: bool
+    total_estimated: int | None
+
+
+class PaginatedSliceHttpResponse(BaseModel):
+    """Standardized response envelope returned by simulator pull queries."""
+
+    stream_name: str
+    records: list[PaginatedSliceRecordHttpResponse]
+    page_info: PaginatedSlicePageInfoHttpResponse
+
+
 def _map_entity_response(dto: SimulatorEntityDTO) -> SimulatorEntityHttpResponse:
     return SimulatorEntityHttpResponse(
         id=dto.id,
@@ -251,6 +305,8 @@ def _map_entity_response(dto: SimulatorEntityDTO) -> SimulatorEntityHttpResponse
         entity_name=dto.entity_name,
         primary_key_field=dto.primary_key_field,
         cursor_field=dto.cursor_field,
+        push_mode=dto.push_mode,
+        push_config=dict(dto.push_config),
         records_per_pull=dto.records_per_pull,
         cursor_step_seconds=dto.cursor_step_seconds,
         velocity_mode=dto.velocity_mode,
@@ -304,6 +360,8 @@ async def create_simulator_entity(
             sample_blueprint=body.sample_blueprint,
             primary_key_field=body.primary_key_field,
             cursor_field=body.cursor_field,
+            push_mode=body.push_mode,
+            push_config=body.push_config,
             records_per_pull=body.records_per_pull,
             cursor_step_seconds=body.cursor_step_seconds,
             velocity_mode=body.velocity_mode,
@@ -399,6 +457,8 @@ async def update_simulator_entity(
             sample_blueprint=body.sample_blueprint,
             primary_key_field=body.primary_key_field,
             cursor_field=body.cursor_field,
+            push_mode=body.push_mode,
+            push_config=body.push_config,
             records_per_pull=body.records_per_pull,
             cursor_step_seconds=body.cursor_step_seconds,
             velocity_mode=body.velocity_mode,
@@ -486,6 +546,7 @@ async def simulate_push(
         stream_name=body.stream_name,
         count=body.count,
         delivery_style=body.delivery_style.value,
+        cadence_mode=body.cadence_mode.value if body.cadence_mode else None,
     )
     log.info("ip_simulate_push_http.received")
     res = await use_case.execute(
@@ -496,6 +557,8 @@ async def simulate_push(
             count=body.count,
             delivery_style=body.delivery_style,
             correlation_id=body.correlation_id,
+            cadence_mode=body.cadence_mode,
+            cadence_config=body.cadence_config,
         )
     )
     if res.is_err:
@@ -518,8 +581,112 @@ async def simulate_push(
     )
 
 
+@router.get(
+    "/{connection_id}/simulator/streams/{stream_name}/records",
+    response_model=PaginatedSliceHttpResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"model": ApiErrorHttpResponse},
+        status.HTTP_401_UNAUTHORIZED: {"model": ApiErrorHttpResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+        status.HTTP_429_TOO_MANY_REQUESTS: {"model": ApiErrorHttpResponse},
+    },
+)
+async def pull_simulator_records(
+    connection_id: str,
+    stream_name: str,
+    _context: Annotated[IdentityContext, Depends(require_flows_read)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[PullSimulatorRecordsUseCase, Depends(get_pull_simulator_records_use_case)],
+    mode: PullExtractionMode = PullExtractionMode.BOUNDED_TIME_WINDOW,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    cursor: str | None = None,
+    offset: int | None = None,
+    limit: Annotated[
+        int,
+        Query(
+            ge=MIN_SIMULATOR_RECORDS_PER_PULL,
+            le=MAX_SIMULATOR_RECORDS_PER_PULL,
+            description="Maximum records to return per page.",
+        ),
+    ] = DEFAULT_SIMULATOR_RECORDS_PER_PULL,
+    token: str | None = None,
+    since_version: int | None = None,
+) -> PaginatedSliceHttpResponse | Response:
+    """Extracts a slice of deterministic synthetic records from a Simulator entity stream."""
+    log = logger.bind(
+        tenant_id=effective_tenant_id,
+        connection_id=connection_id,
+        stream_name=stream_name,
+        mode=mode.value,
+    )
+    log.info("ip_pull_simulator_records_http.received")
+
+    parsed_start = _parse_iso_cursor(start_time) if start_time else None
+    parsed_end = _parse_iso_cursor(end_time) if end_time else None
+
+    query = ExtractionQuery(
+        stream_name=stream_name,
+        mode=mode,
+        start_time=parsed_start,
+        end_time=parsed_end,
+        cursor=cursor,
+        offset=offset,
+        limit=limit,
+        token=token,
+        since_version=since_version,
+    )
+
+    res = await use_case.execute(
+        PullSimulatorRecordsCommand(
+            tenant_id=effective_tenant_id,
+            connection_id=connection_id,
+            stream_name=stream_name,
+            query=query,
+        )
+    )
+    if res.is_err:
+        err = res.unwrap_err()
+        log.error(
+            "ip_pull_simulator_records_http.failed",
+            error_code=err.code.value,
+            http_status=err.http_status,
+        )
+        return from_ip_error(err)
+
+    slice_dto = res.unwrap()
+    log.info(
+        "ip_pull_simulator_records_http.completed",
+        record_count=len(slice_dto.records),
+        has_more=slice_dto.has_more,
+    )
+    return PaginatedSliceHttpResponse(
+        stream_name=stream_name,
+        records=[
+            PaginatedSliceRecordHttpResponse(
+                record_id=r.record_id,
+                emitted_at=r.emitted_at,
+                cursor_value=r.cursor_value,
+                data=dict(r.data),
+            )
+            for r in slice_dto.records
+        ],
+        page_info=PaginatedSlicePageInfoHttpResponse(
+            next_cursor=slice_dto.next_cursor,
+            next_offset=slice_dto.next_offset,
+            continuation_token=slice_dto.continuation_token,
+            has_more=slice_dto.has_more,
+            total_estimated=slice_dto.total_estimated,
+        ),
+    )
+
+
 __all__ = [
     "CreateSimulatorEntityHttpRequest",
+    "PaginatedSliceHttpResponse",
+    "PaginatedSlicePageInfoHttpResponse",
+    "PaginatedSliceRecordHttpResponse",
     "SimulatePushHttpRequest",
     "SimulatePushHttpResponse",
     "SimulatorEntityHttpResponse",
@@ -527,9 +694,11 @@ __all__ = [
     "get_create_simulator_entity_use_case",
     "get_delete_simulator_entity_use_case",
     "get_list_simulator_entities_use_case",
+    "get_pull_simulator_records_use_case",
     "get_simulator_entity_reader",
     "get_simulator_uow",
     "get_trigger_simulated_push_use_case",
     "get_update_simulator_entity_use_case",
+    "pull_simulator_records",
     "router",
 ]

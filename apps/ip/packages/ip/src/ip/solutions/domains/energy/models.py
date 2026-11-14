@@ -104,3 +104,46 @@ class MdmServicePointRecord(IpTenantBase):
         default=ServicePointStatus.ACTIVE.value,
     )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MdmBillingReadingRecord(IpTenantBase):
+    """Dedicated canonical domain table for utility billing determinants."""
+
+    __tablename__ = "mdm_billing_readings"
+    __table_args__ = (
+        PrimaryKeyConstraint("id", "reading_timestamp"),
+        Index(
+            "idx_mdm_billing_meter_ts",
+            "tenant_id",
+            "meter_serial_number",
+            "reading_timestamp",
+        ),
+        Index("idx_mdm_billing_sp", "tenant_id", "service_point_id"),
+        Index("idx_mdm_billing_trace", "tenant_id", "trace_id"),
+        Index("idx_mdm_billing_reading_id", "tenant_id", "reading_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    parent_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    original_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    replay_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_replica_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    transformation_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="energy.sap_billing_reading"
+    )
+    transformation_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    reading_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    meter_serial_number: Mapped[str] = mapped_column(String(128), nullable=False)
+    service_point_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    reading_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    kwh_delivered: Mapped[float] = mapped_column(Float, nullable=False)
+    quality_flag: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=MeterReadingQualityFlag.VALIDATED.value,
+    )
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

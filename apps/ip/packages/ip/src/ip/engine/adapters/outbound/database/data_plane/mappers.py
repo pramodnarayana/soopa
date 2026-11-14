@@ -70,6 +70,9 @@ def replica_record_to_domain(orm: ReplicaRecordModel) -> ReplicaRecord:
         tenant_id=orm.tenant_id,
         trace_id=orm.trace_id,
         correlation_id=orm.correlation_id,
+        parent_trace_id=orm.parent_trace_id,
+        original_trace_id=orm.original_trace_id,
+        replay_count=orm.replay_count,
         connection_id=orm.connection_id,
         stream=orm.stream,
         record_key=orm.record_key,
@@ -101,6 +104,10 @@ def replica_rejection_to_domain(orm: ReplicaRejectionModel) -> ReplicaRejection:
         reason=orm.reason,
         detail=orm.detail,
         trace_id=orm.trace_id,
+        correlation_id=orm.correlation_id,
+        parent_trace_id=orm.parent_trace_id,
+        original_trace_id=orm.original_trace_id,
+        replay_count=orm.replay_count,
         created_at=orm.created_at,
     )
 

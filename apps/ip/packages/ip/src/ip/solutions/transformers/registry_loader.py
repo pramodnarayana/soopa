@@ -20,6 +20,9 @@ from ip.solutions.domains.energy.transformers.itron.meter_reading import (
 from ip.solutions.domains.energy.transformers.itron.service_point import (
     ItronServicePointTransformerV1,
 )
+from ip.solutions.domains.energy.transformers.sap.billing_reading import (
+    SapBillingReadingTransformer,
+)
 from ip.solutions.domains.tms.transformers import (
     MercuryGateCarrierTransformerV1,
     MercuryGateLoadTransformerV1,
@@ -32,6 +35,7 @@ _DEFAULT_ENERGY_TRANSFORMERS: tuple[TransformerPort, ...] = (
     AmiServicePointTransformerV1(),
     ItronMeterReadingTransformerV1(),
     ItronServicePointTransformerV1(),
+    SapBillingReadingTransformer(),
 )
 
 _DEFAULT_TMS_TRANSFORMERS: tuple[TransformerPort, ...] = (
@@ -63,6 +67,7 @@ __all__ = [
     "MercuryGateCarrierTransformerV1",
     "MercuryGateLoadTransformerV1",
     "MercuryGateLoadTransformerV2",
+    "SapBillingReadingTransformer",
     "create_default_transformer_registry",
     "register_default_transformers",
 ]

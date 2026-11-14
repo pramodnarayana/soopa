@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+from ip.solutions.connectors.sandbox.universal.cadence import (
+    ChaosFaultCadenceStrategy,
+    ConstantPacedCadenceStrategy,
+    CronBatchCadenceStrategy,
+    DiurnalWaveCadenceStrategy,
+    PoissonJitterCadenceStrategy,
+    RandomBurstCadenceStrategy,
+    ThinPushCadenceStrategy,
+    resolve_push_cadence_strategy,
+)
 from ip.solutions.connectors.sandbox.universal.chaos import (
     SimulatedFaultType,
     SimulatorChaosPolicy,
@@ -13,6 +23,16 @@ from ip.solutions.connectors.sandbox.universal.dto import (
     SIMULATOR_ENTITY_ID_PREFIX,
     SimulatorEntityDTO,
     entity_dto_to_stream_spec,
+)
+from ip.solutions.connectors.sandbox.universal.extraction import (
+    BoundedTimeWindowExtractionStrategy,
+    DeltaCdcExtractionStrategy,
+    HighWatermarkExtractionStrategy,
+    OffsetLimitExtractionStrategy,
+    OpaqueTokenExtractionStrategy,
+    PullQueryEngine,
+    RateLimited429ExtractionStrategy,
+    StreamedChunkedExtractionStrategy,
 )
 from ip.solutions.connectors.sandbox.universal.inference import (
     ValidatedEntityBlueprint,
@@ -50,6 +70,15 @@ from ip.solutions.connectors.sandbox.universal.spec import (
     SimulatorWriteFailureCategory,
     StreamVelocityMode,
 )
+from ip.solutions.connectors.sandbox.universal.strategies import (
+    CadenceState,
+    ExtractionQuery,
+    PaginatedSliceDTO,
+    PullExtractionMode,
+    PullExtractionStrategy,
+    PushCadenceMode,
+    PushCadenceStrategy,
+)
 from ip.solutions.connectors.sandbox.universal.synthesizer import (
     JsonSchemaRecordSynthesizer,
 )
@@ -60,6 +89,8 @@ from ip.solutions.connectors.sandbox.universal.use_cases import (
     DeleteSimulatorEntityUseCase,
     ListSimulatorEntitiesQuery,
     ListSimulatorEntitiesUseCase,
+    PullSimulatorRecordsCommand,
+    PullSimulatorRecordsUseCase,
     UpdateSimulatorEntityCommand,
     UpdateSimulatorEntityUseCase,
 )
@@ -69,14 +100,36 @@ __all__ = [
     "MAX_SIMULATOR_ENTITIES_PER_CONNECTION",
     "SIMULATOR_ENTITY_ID_PREFIX",
     "UNIVERSAL_SIMULATOR_APP_ID",
+    "BoundedTimeWindowExtractionStrategy",
+    "CadenceState",
+    "ChaosFaultCadenceStrategy",
+    "ConstantPacedCadenceStrategy",
     "CreateSimulatorEntityCommand",
     "CreateSimulatorEntityUseCase",
+    "CronBatchCadenceStrategy",
     "DeleteSimulatorEntityCommand",
     "DeleteSimulatorEntityUseCase",
+    "DeltaCdcExtractionStrategy",
+    "DiurnalWaveCadenceStrategy",
     "DuplicateSimulatorEntityError",
+    "ExtractionQuery",
+    "HighWatermarkExtractionStrategy",
     "JsonSchemaRecordSynthesizer",
     "ListSimulatorEntitiesQuery",
     "ListSimulatorEntitiesUseCase",
+    "OffsetLimitExtractionStrategy",
+    "OpaqueTokenExtractionStrategy",
+    "PaginatedSliceDTO",
+    "PoissonJitterCadenceStrategy",
+    "PullExtractionMode",
+    "PullExtractionStrategy",
+    "PullQueryEngine",
+    "PullSimulatorRecordsCommand",
+    "PullSimulatorRecordsUseCase",
+    "PushCadenceMode",
+    "PushCadenceStrategy",
+    "RandomBurstCadenceStrategy",
+    "RateLimited429ExtractionStrategy",
     "SessionScopedSimulatorEntityReader",
     "SimulatePushResultDTO",
     "SimulatedFaultType",
@@ -94,6 +147,8 @@ __all__ = [
     "SimulatorUnitOfWorkPort",
     "SimulatorWriteFailureCategory",
     "StreamVelocityMode",
+    "StreamedChunkedExtractionStrategy",
+    "ThinPushCadenceStrategy",
     "TriggerSimulatedPushCommand",
     "TriggerSimulatedPushUseCase",
     "UniversalSchemaSimulatorConnector",
@@ -105,5 +160,6 @@ __all__ = [
     "extract_stream_schema_dto",
     "infer_json_schema_from_sample",
     "parse_simulator_connection_config",
+    "resolve_push_cadence_strategy",
     "validate_entity_name",
 ]

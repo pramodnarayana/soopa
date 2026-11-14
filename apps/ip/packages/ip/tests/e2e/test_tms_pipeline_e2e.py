@@ -44,16 +44,16 @@ from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import AuthType
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.normalization.transformation import ReplicaSnapshot, TransformationContext
 from ip.engine.domain.replication.replica_record import compute_record_key
 from ip.engine.domain.replication.stream_definition import StreamDefinition
 from ip.engine.domain.trace.enums import IpTraceEventType
-from ip.engine.ports.outbound.transformer_hook_port import ReplicaSnapshotDTO
 from ip.solutions.domains.tms.canonical import (
     CanonicalLoadDTO,
     TmsEntityType,
 )
 from ip.solutions.domains.tms.repository import SqlAlchemyTmsDomainRepository
-from ip.solutions.transformers.tms.mercury_gate import MercuryGateTransformer
+from ip.solutions.domains.tms.transformers import MercuryGateLoadTransformerV1
 from seedwork.domain.types import JsonDict
 from sqlalchemy import select
 
@@ -137,23 +137,32 @@ async def test_full_l1_to_l5_tms_pipeline_vertical_slice_on_postgres(
     )
     assert replica is not None
 
-    transformer = MercuryGateTransformer()
-    replica_snapshot = ReplicaSnapshotDTO(
+    transformer = MercuryGateLoadTransformerV1()
+    replica_snapshot = ReplicaSnapshot(
+        id=replica.id,
+        connection_id=conn.id,
         stream=replica.stream,
         record_key=replica.record_key,
+        version=replica.version,
         data=replica.data,
-        primary_key_values=replica.primary_key_values,
     )
-    normalized_dto = transformer.normalize(replica_snapshot)
-    assert normalized_dto is not None
+    ctx = TransformationContext(
+        tenant_id=seeded_ip_tenant,
+        connection_id=conn.id,
+        stream=replica.stream,
+        trace_id=trace_id,
+    )
+    transform_res = transformer.transform(replica_snapshot, ctx)
+    assert len(transform_res.drafts) == 1
+    draft = transform_res.drafts[0]
 
     norm_repo = SqlAlchemyNormalizedRecordRepository(tenant_session)
     norm_record = NormalizedRecord.create(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        canonical_type=normalized_dto.canonical_type,
-        source_id=normalized_dto.source_id,
-        canonical_data=normalized_dto.data,
+        canonical_type=draft.canonical_type,
+        source_id=draft.source_id,
+        canonical_data=draft.fields,
         trace_id=trace_id,
         correlation_id="CORR-TMS-8800",
     )
@@ -167,13 +176,13 @@ async def test_full_l1_to_l5_tms_pipeline_vertical_slice_on_postgres(
         correlation_id="CORR-TMS-8800",
         source_connection_id=conn.id,
         source_replica_id=replica.id,
-        load_reference_number=str(normalized_dto.data["load_reference_number"]),
-        carrier_scac=str(normalized_dto.data["carrier_scac"]),
-        origin_city=str(normalized_dto.data["origin_city"]),
-        origin_state=str(normalized_dto.data["origin_state"]),
-        destination_city=str(normalized_dto.data["destination_city"]),
-        destination_state=str(normalized_dto.data["destination_state"]),
-        status=str(normalized_dto.data["status"]),
+        load_reference_number=str(draft.fields["load_reference_number"]),
+        carrier_scac=str(draft.fields["carrier_scac"]),
+        origin_city=str(draft.fields["origin_city"]),
+        origin_state=str(draft.fields["origin_state"]),
+        destination_city=str(draft.fields["destination_city"]),
+        destination_state=str(draft.fields["destination_state"]),
+        status=str(draft.fields["status"]),
         total_weight_lbs=41200.0,
         freight_charge_usd=Decimal("2950.00"),
         pickup_scheduled_at=now,

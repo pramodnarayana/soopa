@@ -38,6 +38,7 @@ import type {
 } from '../domain/intervals';
 import {
   type CreateSimulatorEntityInput,
+  PushCadenceMode,
   SIMULATOR_STREAM_LIMITS,
   type SimulatePushInput,
   type SimulatePushResult,
@@ -198,6 +199,12 @@ export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
       entityName: cleanName,
       primaryKeyField: input.primaryKeyField?.trim() || 'id',
       cursorField: input.cursorField?.trim() || SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_FIELD,
+      pushMode: input.pushMode ?? PushCadenceMode.RANDOM_BURST,
+      pushConfig: input.pushConfig ?? {
+        min_batch: 1,
+        max_batch: 10,
+        interval_seconds: 5,
+      },
       recordsPerPull: input.recordsPerPull ?? SIMULATOR_STREAM_LIMITS.DEFAULT_RECORDS_PER_PULL,
       cursorStepSeconds:
         input.cursorStepSeconds ?? SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_STEP_SECONDS,
@@ -249,6 +256,12 @@ export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
       sampleBlueprint: input.sampleBlueprint ?? existing.sampleBlueprint,
       primaryKeyField: input.primaryKeyField?.trim() || existing.primaryKeyField,
       cursorField: input.cursorField?.trim() || existing.cursorField,
+      pushMode:
+        input.pushMode !== undefined ? (input.pushMode ?? existing.pushMode) : existing.pushMode,
+      pushConfig:
+        input.pushConfig !== undefined
+          ? (input.pushConfig ?? existing.pushConfig)
+          : existing.pushConfig,
       recordsPerPull: input.recordsPerPull ?? existing.recordsPerPull,
       cursorStepSeconds: input.cursorStepSeconds ?? existing.cursorStepSeconds,
       velocityMode: input.velocityMode ?? existing.velocityMode,

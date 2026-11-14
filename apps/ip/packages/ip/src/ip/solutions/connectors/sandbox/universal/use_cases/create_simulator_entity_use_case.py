@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import structlog
 from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
+from ip.solutions.connectors.sandbox.universal.cadence import validate_push_cadence_config
 from ip.solutions.connectors.sandbox.universal.chaos import SimulatorChaosPolicy
 from ip.solutions.connectors.sandbox.universal.dto import (
     SIMULATOR_ENTITY_ID_PREFIX,
@@ -25,6 +26,7 @@ from ip.solutions.connectors.sandbox.universal.spec import (
     DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS,
     DEFAULT_SIMULATOR_RECORDS_PER_PULL,
     MAX_SIMULATOR_ENTITIES_PER_CONNECTION,
+    PushCadenceMode,
     StreamVelocityMode,
 )
 from ip.solutions.connectors.sandbox.universal.use_cases.connection_guard import (
@@ -47,6 +49,8 @@ class CreateSimulatorEntityCommand:
     sample_blueprint: JsonValue
     primary_key_field: str | None = None
     cursor_field: str | None = None
+    push_mode: PushCadenceMode = PushCadenceMode.RANDOM_BURST
+    push_config: Mapping[str, JsonValue] | None = None
     records_per_pull: int = DEFAULT_SIMULATOR_RECORDS_PER_PULL
     cursor_step_seconds: int = DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS
     velocity_mode: StreamVelocityMode = StreamVelocityMode.ENTITY_TRANSACTIONAL
@@ -78,6 +82,10 @@ class CreateSimulatorEntityUseCase:
         if bounds_err is not None:
             return Result.fail(bounds_err)
 
+        cadence_err = validate_push_cadence_config(command.push_mode, command.push_config)
+        if cadence_err is not None:
+            return Result.fail(cadence_err)
+
         validated_res = build_validated_entity_blueprint(
             entity_name=command.entity_name,
             sample_blueprint=command.sample_blueprint,
@@ -105,6 +113,8 @@ class CreateSimulatorEntityUseCase:
             entity_name=validated.entity_name,
             primary_key_field=validated.primary_key_field,
             cursor_field=validated.cursor_field,
+            push_mode=command.push_mode,
+            push_config=dict(command.push_config or {}),
             records_per_pull=command.records_per_pull,
             cursor_step_seconds=command.cursor_step_seconds,
             velocity_mode=command.velocity_mode,

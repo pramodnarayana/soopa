@@ -213,6 +213,9 @@ class _PipelineCanonicalWriter(CanonicalWriterPort):
         replica_id: str,
         replica_version: int,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         self.rows[source_id] = dict(fields)
 
@@ -225,6 +228,9 @@ class _PipelineCanonicalWriter(CanonicalWriterPort):
         source_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         self.rows.pop(source_id, None)
 

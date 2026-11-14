@@ -245,9 +245,10 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     );
     expect(simulatorSectionHtml).toContain('Simulator Entities');
     expect(simulatorSectionHtml).toContain('Create Entity');
-    expect(simulatorSectionHtml).toContain('Records per Pull');
+    expect(simulatorSectionHtml).toContain('Push Cadence');
+    expect(simulatorSectionHtml).not.toContain('Records per Pull');
     expect(simulatorSectionHtml).toContain('orders');
-    expect(simulatorSectionHtml).toContain('Simulate Push');
+    expect(simulatorSectionHtml).toContain('Simulate Data');
     expect(simulatorSectionHtml).toContain('Edit');
     expect(simulatorSectionHtml).toContain('Delete');
     expect(simulatorSectionHtml).toContain('role="region"');
@@ -269,7 +270,7 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(entitiesHtml).toContain('Discover Entities...');
     expect(entitiesHtml).not.toContain('<span>Discover Entities</span>');
     expect(entitiesHtml).not.toContain('Webhook');
-    expect(entitiesHtml).not.toContain('Simulate Push');
+    expect(entitiesHtml).not.toContain('Simulate Data');
   });
 
   it('renders ActiveConnectionCard with Copy Webhook button plus readable-prefix ingress URL helper', () => {
@@ -460,8 +461,10 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(html).toContain('Entity Name *');
     expect(html).toContain('Entity Blueprint (JSON) *');
     expect(html).toContain('Primary Key');
-    expect(html).toContain('Cursor');
-    expect(html).toContain('Records per Pull');
+    expect(html).not.toContain('Cursor Field');
+    expect(html).toContain('Push Delivery Options');
+    expect(html).toContain('Push Emission Mode');
+    expect(html).not.toContain('Records per Pull');
     expect(html).toContain('Stream Velocity Mode');
     expect(html).toContain('name="velocity_mode"');
     expect(html).toContain('Upload .json');
