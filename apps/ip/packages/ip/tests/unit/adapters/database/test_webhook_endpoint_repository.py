@@ -19,10 +19,10 @@ def test_webhook_endpoint_record_to_domain_model_mapping() -> None:
     route_rec = WebhookEventRouteRecord(
         id="ip_wrt_01",
         endpoint_id="ip_whk_01",
-        event_pattern="meter.reading",
+        event_pattern="order.created",
         payload_semantic="DATA",
         target_pipeline_or_workflow_id="pipe_01",
-        description="AMI meter reading route",
+        description="Order created route",
         priority=100,
         is_active=True,
         created_at=now,
@@ -30,9 +30,9 @@ def test_webhook_endpoint_record_to_domain_model_mapping() -> None:
     rec = WebhookEndpointRecord(
         id="ip_whk_01",
         tenant_id="ten_01",
-        endpoint_slug="itron-ami",
-        name="Itron AMI Ingress",
-        description="Passive smart meter push endpoint",
+        endpoint_slug="partner-ingest",
+        name="Partner Ingress",
+        description="Passive partner push endpoint",
         verification_strategy="HMAC_SHA256",
         primary_secret_hash="hash_primary_123",
         secondary_secret_hash="hash_secondary_456",
@@ -48,9 +48,9 @@ def test_webhook_endpoint_record_to_domain_model_mapping() -> None:
 
     assert domain.id == "ip_whk_01"
     assert domain.tenant_id == "ten_01"
-    assert domain.endpoint_slug == "itron-ami"
-    assert domain.name == "Itron AMI Ingress"
-    assert domain.description == "Passive smart meter push endpoint"
+    assert domain.endpoint_slug == "partner-ingest"
+    assert domain.name == "Partner Ingress"
+    assert domain.description == "Passive partner push endpoint"
     assert domain.verification_strategy == VerificationStrategy.HMAC_SHA256
     assert domain.primary_secret_hash == "hash_primary_123"
     assert domain.secondary_secret_hash == "hash_secondary_456"
@@ -59,6 +59,6 @@ def test_webhook_endpoint_record_to_domain_model_mapping() -> None:
     assert domain.is_active is True
     assert len(domain.event_routes) == 1
     assert domain.event_routes[0].id == "ip_wrt_01"
-    assert domain.event_routes[0].event_pattern == "meter.reading"
+    assert domain.event_routes[0].event_pattern == "order.created"
     assert domain.event_routes[0].payload_semantic == PayloadSemantic.DATA
     assert domain.event_routes[0].target_pipeline_or_workflow_id == "pipe_01"

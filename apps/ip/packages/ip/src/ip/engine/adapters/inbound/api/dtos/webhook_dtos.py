@@ -14,7 +14,7 @@ class CreateWebhookEndpointHttpRequest(BaseModel):
         ...,
         min_length=2,
         max_length=128,
-        description="Clean, brandable URL slug (e.g. 'itron-mdm', 'shopify').",
+        description="Clean, brandable URL slug (e.g. 'orders-hub', 'shopify').",
     )
     name: str = Field(..., min_length=2, max_length=255, description="Human-readable name.")
     description: str = Field(default="", max_length=1000)
@@ -56,7 +56,7 @@ class AddWebhookEventRouteHttpRequest(BaseModel):
         ...,
         min_length=1,
         max_length=128,
-        description="Event pattern (e.g. 'meter_readings.batch', 'historical_extract.request', '*').",
+        description="Event pattern (e.g. 'orders.created', 'historical_extract.request', '*').",
     )
     payload_semantic: str = Field(
         default="DATA",

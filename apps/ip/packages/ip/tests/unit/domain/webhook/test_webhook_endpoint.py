@@ -14,15 +14,15 @@ from ip.engine.domain.webhook.route import WebhookEventRoute
 
 def test_create_webhook_endpoint_aggregate() -> None:
     endpoint = WebhookEndpoint.create(
-        tenant_id="tenant_ercot",
-        endpoint_slug="itron-mdm",
-        name="Itron MDM Webhook",
+        tenant_id="tenant_partner",
+        endpoint_slug="partner-webhook",
+        name="Partner Webhook",
         primary_secret_hash="whsec_12345",
         verification_strategy=VerificationStrategy.SHARED_HEADER_SECRET,
     )
 
     assert endpoint.id.startswith("ip_whk_")
-    assert endpoint.endpoint_slug == "itron-mdm"
+    assert endpoint.endpoint_slug == "partner-webhook"
     assert endpoint.is_active is True
     assert endpoint.primary_secret_hash == "whsec_12345"
     assert endpoint.secondary_secret_hash is None
@@ -30,14 +30,14 @@ def test_create_webhook_endpoint_aggregate() -> None:
     events = endpoint.domain_events
     assert len(events) == 1
     assert isinstance(events[0], WebhookEndpointCreatedEvent)
-    assert events[0].endpoint_slug == "itron-mdm"
+    assert events[0].endpoint_slug == "partner-webhook"
 
 
-def test_match_route_priority_and_patterns() -> None:
+def test_match_route_priority_with_patterns() -> None:
     endpoint = WebhookEndpoint.create(
-        tenant_id="tenant_ercot",
-        endpoint_slug="itron-mdm",
-        name="Itron MDM",
+        tenant_id="tenant_partner",
+        endpoint_slug="partner-webhook",
+        name="Partner Webhook",
         primary_secret_hash="sec",
     )
 
@@ -46,15 +46,15 @@ def test_match_route_priority_and_patterns() -> None:
         endpoint_id=endpoint.id,
         event_pattern="historical_extract.request",
         payload_semantic=PayloadSemantic.COMMAND,
-        target_pipeline_or_workflow_id="hes_pull_dag",
+        target_pipeline_or_workflow_id="command_pull_dag",
         priority=10,
     )
     route_data_prefix = WebhookEventRoute(
         id="ip_wrt_2",
         endpoint_id=endpoint.id,
-        event_pattern="meter_readings.*",
+        event_pattern="telemetry.*",
         payload_semantic=PayloadSemantic.DATA,
-        target_pipeline_or_workflow_id="ami_cim_pipeline",
+        target_pipeline_or_workflow_id="stream_pipeline",
         priority=50,
     )
     route_wildcard = WebhookEventRoute(
@@ -77,7 +77,7 @@ def test_match_route_priority_and_patterns() -> None:
     assert m1.payload_semantic == PayloadSemantic.COMMAND
 
     # 2. Prefix wildcard match
-    m2 = endpoint.match_route("meter_readings.batch")
+    m2 = endpoint.match_route("telemetry.batch")
     assert m2 is not None
     assert m2.id == "ip_wrt_2"
     assert m2.payload_semantic == PayloadSemantic.DATA

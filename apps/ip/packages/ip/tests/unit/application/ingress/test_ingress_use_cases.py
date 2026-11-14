@@ -158,18 +158,18 @@ async def test_create_webhook_endpoint_use_case() -> None:
 
     cmd = CreateWebhookEndpointCommand(
         tenant_id="tenant_walmart",
-        endpoint_slug="itron-mdm",
-        name="Itron MDM Ingress",
-        description="Receives AMI meter telemetry",
+        endpoint_slug="partner-ingress",
+        name="Partner Ingress",
+        description="Receives partner telemetry",
         verification_strategy=VerificationStrategy.SHARED_HEADER_SECRET,
     )
 
     res = await use_case.execute(cmd)
     assert res.is_ok
     data = res.unwrap()
-    assert data.endpoint_slug == "itron-mdm"
+    assert data.endpoint_slug == "partner-ingress"
     assert data.secret_token.startswith("whsec_")
-    assert "/api/v1/ingress/tenant_walmart/itron-mdm" in data.permanent_url_path
+    assert "/api/v1/ingress/tenant_walmart/partner-ingress" in data.permanent_url_path
 
     # Check that default wildcard route was added
     ep = await uow.webhook_endpoints.get_by_id(data.endpoint_id)
@@ -184,35 +184,48 @@ async def test_create_webhook_endpoint_use_case() -> None:
 
 
 @pytest.mark.asyncio
-async def test_add_webhook_event_route_and_rotate_secret() -> None:
+async def test_add_webhook_event_route() -> None:
     uow = _FakeControlPlaneUoW()
     create_uc = CreateWebhookEndpointUseCase(uow)
     add_route_uc = AddWebhookEventRouteUseCase(uow)
-    rotate_uc = RotateWebhookSecretUseCase(uow)
 
     create_res = await create_uc.execute(
         CreateWebhookEndpointCommand(
             tenant_id="tenant_walmart",
-            endpoint_slug="itron-mdm",
-            name="Itron MDM",
+            endpoint_slug="partner-ingress",
+            name="Partner Ingress",
         )
     )
     endpoint_id = create_res.unwrap().endpoint_id
 
-    # Add Command Route
     route_cmd = AddWebhookEventRouteCommand(
         tenant_id="tenant_walmart",
         endpoint_id=endpoint_id,
         event_pattern="historical_extract.request",
         payload_semantic=PayloadSemantic.COMMAND,
-        target_pipeline_or_workflow_id="hes_slicer_dag",
+        target_pipeline_or_workflow_id="batch_slicer_dag",
         priority=10,
     )
     route_res = await add_route_uc.execute(route_cmd)
     assert route_res.is_ok
     assert route_res.unwrap().payload_semantic == "COMMAND"
 
-    # Rotate Secret
+
+@pytest.mark.asyncio
+async def test_rotate_webhook_secret() -> None:
+    uow = _FakeControlPlaneUoW()
+    create_uc = CreateWebhookEndpointUseCase(uow)
+    rotate_uc = RotateWebhookSecretUseCase(uow)
+
+    create_res = await create_uc.execute(
+        CreateWebhookEndpointCommand(
+            tenant_id="tenant_walmart",
+            endpoint_slug="partner-ingress",
+            name="Partner Ingress",
+        )
+    )
+    endpoint_id = create_res.unwrap().endpoint_id
+
     rot_res = await rotate_uc.execute(
         RotateWebhookSecretCommand(
             tenant_id="tenant_walmart",
@@ -235,9 +248,9 @@ async def test_receive_webhook_push_data_vs_command() -> None:
 
     create_res = await create_uc.execute(
         CreateWebhookEndpointCommand(
-            tenant_id="tenant_ercot",
-            endpoint_slug="itron-mdm",
-            name="Itron MDM",
+            tenant_id="tenant_enterprise",
+            endpoint_slug="partner-ingress",
+            name="Partner Ingress",
             primary_secret="whsec_test_secret",
             verification_strategy=VerificationStrategy.SHARED_HEADER_SECRET,
         )
@@ -247,23 +260,23 @@ async def test_receive_webhook_push_data_vs_command() -> None:
     # Add COMMAND route for historical_extract
     await add_route_uc.execute(
         AddWebhookEventRouteCommand(
-            tenant_id="tenant_ercot",
+            tenant_id="tenant_enterprise",
             endpoint_id=endpoint_id,
             event_pattern="historical_extract.request",
             payload_semantic=PayloadSemantic.COMMAND,
-            target_pipeline_or_workflow_id="multi_hes_dag",
+            target_pipeline_or_workflow_id="multi_orchestration_dag",
             priority=10,
         )
     )
 
-    # Add DATA route for meter_readings.batch
+    # Add DATA route for telemetry.batch
     await add_route_uc.execute(
         AddWebhookEventRouteCommand(
-            tenant_id="tenant_ercot",
+            tenant_id="tenant_enterprise",
             endpoint_id=endpoint_id,
-            event_pattern="meter_readings.batch",
+            event_pattern="telemetry.batch",
             payload_semantic=PayloadSemantic.DATA,
-            target_pipeline_or_workflow_id="cim_pipeline",
+            target_pipeline_or_workflow_id="event_pipeline",
             priority=20,
         )
     )
@@ -275,8 +288,8 @@ async def test_receive_webhook_push_data_vs_command() -> None:
 
     # 1. Test COMMAND delivery
     cmd_push = ReceiveWebhookPushCommand(
-        tenant_id="tenant_ercot",
-        endpoint_slug="itron-mdm",
+        tenant_id="tenant_enterprise",
+        endpoint_slug="partner-ingress",
         raw_payload=b'{"range":"2026-01-01"}',
         headers={
             "X-Webhook-Token": "whsec_test_secret",
@@ -289,13 +302,13 @@ async def test_receive_webhook_push_data_vs_command() -> None:
     data_cmd = res_cmd.unwrap()
     assert data_cmd.status == "ACCEPTED"
     assert data_cmd.semantic == "COMMAND"
-    assert data_cmd.target_pipeline_or_workflow_id == "multi_hes_dag"
+    assert data_cmd.target_pipeline_or_workflow_id == "multi_orchestration_dag"
 
     # 2. Test DATA delivery via Tier 2 body inspection
     data_push = ReceiveWebhookPushCommand(
-        tenant_id="tenant_ercot",
-        endpoint_slug="itron-mdm",
-        raw_payload=b'{"event_type":"meter_readings.batch","readings":[1,2,3]}',
+        tenant_id="tenant_enterprise",
+        endpoint_slug="partner-ingress",
+        raw_payload=b'{"event_type":"telemetry.batch","records":[1,2,3]}',
         headers={"X-Webhook-Token": "whsec_test_secret"},
         query_params={},
     )
@@ -304,15 +317,15 @@ async def test_receive_webhook_push_data_vs_command() -> None:
     data_res = res_data.unwrap()
     assert data_res.status == "ACCEPTED"
     assert data_res.semantic == "DATA"
-    assert data_res.target_pipeline_or_workflow_id == "cim_pipeline"
+    assert data_res.target_pipeline_or_workflow_id == "event_pipeline"
 
     # Verify L1 record was saved in Data Plane
     assert len(dp_uow.inbound_records.records) == 2
 
     # 3. Test verification failure (wrong secret)
     bad_auth_push = ReceiveWebhookPushCommand(
-        tenant_id="tenant_ercot",
-        endpoint_slug="itron-mdm",
+        tenant_id="tenant_enterprise",
+        endpoint_slug="partner-ingress",
         raw_payload=b"{}",
         headers={"X-Webhook-Token": "invalid_token"},
         query_params={},
