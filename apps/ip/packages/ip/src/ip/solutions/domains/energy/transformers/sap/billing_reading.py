@@ -93,7 +93,17 @@ class SapBillingReadingTransformer(TransformerPort):
             )
 
         kwh_val = payload.get("kwh_delivered")
-        if kwh_val is not None and is_non_finite_number(kwh_val):
+        if kwh_val is None or (isinstance(kwh_val, str) and not kwh_val.strip()):
+            return TransformationResult(
+                rejections=(
+                    TransformationRejection(
+                        reason=NormalizationRejectionReason.MISSING_REQUIRED_FIELD,
+                        field_path="kwh_delivered",
+                        detail="Missing required field 'kwh_delivered'.",
+                    ),
+                )
+            )
+        if is_non_finite_number(kwh_val):
             return TransformationResult(
                 rejections=(
                     TransformationRejection(

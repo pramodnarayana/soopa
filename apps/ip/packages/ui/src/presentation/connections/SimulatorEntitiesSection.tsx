@@ -8,7 +8,11 @@ import {
   useSimulatePushMutation,
   useSimulatorEntitiesQuery,
 } from '../../application/use-simulator-queries';
-import type { SimulatorEntity } from '../../domain/simulator';
+import {
+  PushCadenceMode,
+  type PushCadenceModeValue,
+  type SimulatorEntity,
+} from '../../domain/simulator';
 import { CreateSimulatorEntityModal } from './CreateSimulatorEntityModal';
 
 export interface SimulatorEntitiesSectionProps {
@@ -16,23 +20,23 @@ export interface SimulatorEntitiesSectionProps {
   readonly onProblem: (problem: ApiProblem | null) => void;
 }
 
-function formatPushModeLabel(mode: string | undefined): string {
+function formatPushModeLabel(mode: PushCadenceModeValue | string | undefined): string {
   switch (mode) {
-    case 'MANUAL':
+    case PushCadenceMode.MANUAL:
       return 'Manual (On-Demand)';
-    case 'RANDOM_BURST':
+    case PushCadenceMode.RANDOM_BURST:
       return 'Random Burst';
-    case 'CONSTANT_PACED':
+    case PushCadenceMode.CONSTANT_PACED:
       return 'Constant Paced';
-    case 'POISSON_JITTER':
+    case PushCadenceMode.POISSON_JITTER:
       return 'Poisson Jitter';
-    case 'CRON_BATCH':
+    case PushCadenceMode.CRON_BATCH:
       return 'Cron Batch';
-    case 'CHAOS_FAULT':
+    case PushCadenceMode.CHAOS_FAULT:
       return 'Chaos Fault';
-    case 'DIURNAL_WAVE':
+    case PushCadenceMode.DIURNAL_WAVE:
       return 'Diurnal Wave';
-    case 'THIN_PUSH':
+    case PushCadenceMode.THIN_PUSH:
       return 'Thin Push';
     default:
       return mode || 'Manual (On-Demand)';
@@ -40,47 +44,47 @@ function formatPushModeLabel(mode: string | undefined): string {
 }
 
 function formatPushCadenceSummary(entity: SimulatorEntity): string {
-  const mode = entity.pushMode ?? 'MANUAL';
+  const mode = entity.pushMode ?? PushCadenceMode.MANUAL;
   const cfg = (entity.pushConfig ?? {}) as Record<string, unknown>;
   switch (mode) {
-    case 'MANUAL': {
+    case PushCadenceMode.MANUAL: {
       const records =
         typeof cfg.records_per_push === 'number' && cfg.records_per_push >= 1
           ? cfg.records_per_push
           : 1;
       return `${records} msg${records === 1 ? '' : 's'} / click`;
     }
-    case 'RANDOM_BURST': {
+    case PushCadenceMode.RANDOM_BURST: {
       const minB = cfg.min_batch ?? 1;
       const maxB = cfg.max_batch ?? 10;
       const intv = cfg.interval_seconds ?? 5;
       return `${minB}–${maxB} msgs / ${intv}s`;
     }
-    case 'CONSTANT_PACED': {
+    case PushCadenceMode.CONSTANT_PACED: {
       const rate = cfg.messages_per_second ?? 1;
       return `${rate} msg/s`;
     }
-    case 'POISSON_JITTER': {
+    case PushCadenceMode.POISSON_JITTER: {
       const minD = cfg.min_delay_seconds ?? 1;
       const maxD = cfg.max_delay_seconds ?? 10;
       const minB = cfg.min_batch ?? 1;
       const maxB = cfg.max_batch ?? 5;
       return `${minB}–${maxB} msgs (${minD}–${maxD}s)`;
     }
-    case 'CRON_BATCH': {
+    case PushCadenceMode.CRON_BATCH: {
       const expr = cfg.cron_expression ?? '*/5 * * * *';
-      const b = cfg.batch_size ?? 500;
+      const b = cfg.batch_size ?? 100;
       return `${b} msgs (${expr})`;
     }
-    case 'CHAOS_FAULT': {
+    case PushCadenceMode.CHAOS_FAULT: {
       const drop = cfg.drop_rate_percent ?? 20;
       return `${drop}% drops`;
     }
-    case 'DIURNAL_WAVE': {
+    case PushCadenceMode.DIURNAL_WAVE: {
       const peak = cfg.peak_multiplier ?? 5;
       return `Circadian (${peak}x peak)`;
     }
-    case 'THIN_PUSH': {
+    case PushCadenceMode.THIN_PUSH: {
       const intv = cfg.interval_seconds ?? 2;
       return `Ping / ${intv}s`;
     }
@@ -90,39 +94,47 @@ function formatPushCadenceSummary(entity: SimulatorEntity): string {
 }
 
 function formatSimulateDataButtonLabel(entity: SimulatorEntity): string {
-  const mode = entity.pushMode ?? 'MANUAL';
+  const mode = entity.pushMode ?? PushCadenceMode.MANUAL;
   const cfg = (entity.pushConfig ?? {}) as Record<string, unknown>;
   switch (mode) {
-    case 'MANUAL': {
+    case PushCadenceMode.MANUAL: {
       const count =
         typeof cfg.records_per_push === 'number' && cfg.records_per_push >= 1
-          ? cfg.records_per_push
+          ? Math.min(100, Math.trunc(cfg.records_per_push))
           : 1;
       return `Simulate Data (${count})`;
     }
-    case 'RANDOM_BURST': {
+    case PushCadenceMode.RANDOM_BURST: {
       const minB = cfg.min_batch ?? 1;
       const maxB = cfg.max_batch ?? 10;
       return `Simulate Data (${minB}–${maxB})`;
     }
-    case 'CRON_BATCH': {
-      const b = cfg.batch_size ?? 500;
+    case PushCadenceMode.CRON_BATCH: {
+      const b = Math.min(
+        100,
+        typeof cfg.batch_size === 'number' && cfg.batch_size >= 1
+          ? Math.trunc(cfg.batch_size)
+          : 100,
+      );
       return `Simulate Data (${b})`;
     }
-    case 'CHAOS_FAULT': {
-      const b = cfg.batch_size ?? 5;
+    case PushCadenceMode.CHAOS_FAULT: {
+      const b = Math.min(
+        100,
+        typeof cfg.batch_size === 'number' && cfg.batch_size >= 1 ? Math.trunc(cfg.batch_size) : 5,
+      );
       return `Simulate Data (${b})`;
     }
-    case 'CONSTANT_PACED':
+    case PushCadenceMode.CONSTANT_PACED:
       return 'Simulate Data (1)';
-    case 'THIN_PUSH':
+    case PushCadenceMode.THIN_PUSH:
       return 'Simulate Data (Ping)';
-    case 'POISSON_JITTER': {
+    case PushCadenceMode.POISSON_JITTER: {
       const minB = cfg.min_batch ?? 1;
       const maxB = cfg.max_batch ?? 5;
       return `Simulate Data (${minB}–${maxB})`;
     }
-    case 'DIURNAL_WAVE':
+    case PushCadenceMode.DIURNAL_WAVE:
       return 'Simulate Data (Wave)';
     default:
       return 'Simulate Data';
@@ -130,42 +142,50 @@ function formatSimulateDataButtonLabel(entity: SimulatorEntity): string {
 }
 
 function resolveEntityPushBatchCount(entity: SimulatorEntity): number {
-  const mode = entity.pushMode ?? 'MANUAL';
+  const mode = entity.pushMode ?? PushCadenceMode.MANUAL;
   const cfg = (entity.pushConfig ?? {}) as Record<string, unknown>;
+  let count = 1;
   switch (mode) {
-    case 'MANUAL':
-      return typeof cfg.records_per_push === 'number' && cfg.records_per_push >= 1
-        ? Math.trunc(cfg.records_per_push)
-        : 1;
-    case 'CRON_BATCH':
-      return typeof cfg.batch_size === 'number' && cfg.batch_size >= 1
-        ? Math.trunc(cfg.batch_size)
-        : 500;
-    case 'CHAOS_FAULT':
-      return typeof cfg.batch_size === 'number' && cfg.batch_size >= 1
-        ? Math.trunc(cfg.batch_size)
-        : 5;
-    case 'CONSTANT_PACED':
-      return 1;
-    case 'THIN_PUSH':
-      return 1;
-    case 'RANDOM_BURST': {
+    case PushCadenceMode.MANUAL:
+      count =
+        typeof cfg.records_per_push === 'number' && cfg.records_per_push >= 1
+          ? Math.trunc(cfg.records_per_push)
+          : 1;
+      break;
+    case PushCadenceMode.CRON_BATCH:
+      count =
+        typeof cfg.batch_size === 'number' && cfg.batch_size >= 1
+          ? Math.trunc(cfg.batch_size)
+          : 100;
+      break;
+    case PushCadenceMode.CHAOS_FAULT:
+      count =
+        typeof cfg.batch_size === 'number' && cfg.batch_size >= 1 ? Math.trunc(cfg.batch_size) : 5;
+      break;
+    case PushCadenceMode.CONSTANT_PACED:
+    case PushCadenceMode.THIN_PUSH:
+      count = 1;
+      break;
+    case PushCadenceMode.RANDOM_BURST: {
       const minB = typeof cfg.min_batch === 'number' && cfg.min_batch >= 1 ? cfg.min_batch : 1;
       const maxB = typeof cfg.max_batch === 'number' && cfg.max_batch >= 1 ? cfg.max_batch : 10;
       const low = Math.min(minB, maxB);
       const high = Math.max(minB, maxB);
-      return Math.floor(Math.random() * (high - low + 1)) + low;
+      count = Math.floor(Math.random() * (high - low + 1)) + low;
+      break;
     }
-    case 'POISSON_JITTER': {
+    case PushCadenceMode.POISSON_JITTER: {
       const minB = typeof cfg.min_batch === 'number' && cfg.min_batch >= 1 ? cfg.min_batch : 1;
       const maxB = typeof cfg.max_batch === 'number' && cfg.max_batch >= 1 ? cfg.max_batch : 5;
       const low = Math.min(minB, maxB);
       const high = Math.max(minB, maxB);
-      return Math.floor(Math.random() * (high - low + 1)) + low;
+      count = Math.floor(Math.random() * (high - low + 1)) + low;
+      break;
     }
     default:
-      return 1;
+      count = 1;
   }
+  return Math.min(100, Math.max(1, count));
 }
 
 export function SimulatorEntitiesSection({
@@ -259,13 +279,6 @@ export function SimulatorEntitiesSection({
               {formatPushCadenceSummary(row.original)}
             </span>
           </div>
-        ),
-      },
-      {
-        accessorKey: 'velocityMode',
-        header: 'Velocity',
-        cell: ({ row }) => (
-          <StatusBadge label={row.original.velocityMode} tone={StatusTone.NEUTRAL} />
         ),
       },
       {

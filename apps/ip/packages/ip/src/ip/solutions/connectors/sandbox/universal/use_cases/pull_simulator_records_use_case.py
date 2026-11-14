@@ -60,7 +60,9 @@ class PullSimulatorRecordsUseCase:
             return Result.fail(conn_res.unwrap_err())
 
         connection = conn_res.unwrap()
-        cfg = parse_simulator_connection_config(connection.public_config)
+        cfg = parse_simulator_connection_config(
+            connection.public_config, connection_id=command.connection_id
+        )
 
         entity_res = await self._entity_reader.get_entity_by_name(
             command.tenant_id, command.connection_id, command.stream_name

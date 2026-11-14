@@ -40,6 +40,9 @@ class EnergyDomainRepositoryPort(Protocol):
         service_point_external_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None: ...
 
     async def soft_delete_meter_reading_by_id(
@@ -48,9 +51,31 @@ class EnergyDomainRepositoryPort(Protocol):
         reading_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None: ...
 
     async def update_meter_reading_service_point(
+        self,
+        tenant_id: str,
+        reading_id: str,
+        service_point_id: str,
+        trace_id: str,
+    ) -> None: ...
+
+    async def soft_delete_billing_reading_by_id(
+        self,
+        tenant_id: str,
+        reading_id: str,
+        trace_id: str,
+        correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
+    ) -> None: ...
+
+    async def update_billing_reading_service_point(
         self,
         tenant_id: str,
         reading_id: str,

@@ -200,11 +200,7 @@ export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
       primaryKeyField: input.primaryKeyField?.trim() || 'id',
       cursorField: input.cursorField?.trim() || SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_FIELD,
       pushMode: input.pushMode ?? PushCadenceMode.RANDOM_BURST,
-      pushConfig: input.pushConfig ?? {
-        min_batch: 1,
-        max_batch: 10,
-        interval_seconds: 5,
-      },
+      pushConfig: input.pushConfig ? JSON.parse(JSON.stringify(input.pushConfig)) : {},
       recordsPerPull: input.recordsPerPull ?? SIMULATOR_STREAM_LIMITS.DEFAULT_RECORDS_PER_PULL,
       cursorStepSeconds:
         input.cursorStepSeconds ?? SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_STEP_SECONDS,
@@ -250,18 +246,32 @@ export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
         conflictProblem(`Entity "${nextName}" already exists in connection ${connectionId}.`),
       );
     }
+    const effectivePushMode =
+      input.pushMode !== undefined ? (input.pushMode ?? existing.pushMode) : existing.pushMode;
+    const effectivePushConfig =
+      input.pushConfig !== undefined
+        ? input.pushConfig
+          ? (JSON.parse(JSON.stringify(input.pushConfig)) as Record<string, unknown>)
+          : {}
+        : existing.pushConfig;
+
+    if (
+      effectivePushMode === PushCadenceMode.RANDOM_BURST &&
+      effectivePushConfig &&
+      typeof (effectivePushConfig as Record<string, unknown>).min_batch === 'number' &&
+      Number((effectivePushConfig as Record<string, unknown>).min_batch) < 1
+    ) {
+      return err(validationProblem('min_batch must be a positive integer.'));
+    }
+
     const updated: SimulatorEntity = {
       ...existing,
       entityName: nextName,
       sampleBlueprint: input.sampleBlueprint ?? existing.sampleBlueprint,
       primaryKeyField: input.primaryKeyField?.trim() || existing.primaryKeyField,
       cursorField: input.cursorField?.trim() || existing.cursorField,
-      pushMode:
-        input.pushMode !== undefined ? (input.pushMode ?? existing.pushMode) : existing.pushMode,
-      pushConfig:
-        input.pushConfig !== undefined
-          ? (input.pushConfig ?? existing.pushConfig)
-          : existing.pushConfig,
+      pushMode: effectivePushMode,
+      pushConfig: effectivePushConfig,
       recordsPerPull: input.recordsPerPull ?? existing.recordsPerPull,
       cursorStepSeconds: input.cursorStepSeconds ?? existing.cursorStepSeconds,
       velocityMode: input.velocityMode ?? existing.velocityMode,

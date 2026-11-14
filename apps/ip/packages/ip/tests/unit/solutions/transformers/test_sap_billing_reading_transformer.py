@@ -146,3 +146,25 @@ def test_sap_transformer_rejects_nan_kwh() -> None:
     assert len(result.rejections) == 1
     assert result.rejections[0].reason == NormalizationRejectionReason.QUALITY_RULE_REJECTED
     assert result.rejections[0].field_path == "kwh_delivered"
+
+
+def test_sap_transformer_rejects_missing_kwh() -> None:
+    transformer = SapBillingReadingTransformer()
+    snapshot = ReplicaSnapshot(
+        id="rep_1",
+        connection_id="conn_sap_1",
+        stream="billing_readings",
+        record_key="BILL-1001",
+        version=1,
+        data={
+            "reading_id": "BILL-1001",
+            "meter_serial": "MTR-5001",
+            "reading_timestamp": "2026-11-13T10:00:00Z",
+        },
+    )
+
+    result = transformer.transform(snapshot, _make_context())
+    assert len(result.drafts) == 0
+    assert len(result.rejections) == 1
+    assert result.rejections[0].reason == NormalizationRejectionReason.MISSING_REQUIRED_FIELD
+    assert result.rejections[0].field_path == "kwh_delivered"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 import structlog
@@ -28,6 +29,7 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
 from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
     ReceivePushExecutorFactory,
 )
+from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
@@ -44,7 +46,6 @@ from ip.solutions.connectors.sandbox.universal.simulate_push_use_case import (
     TriggerSimulatedPushUseCase,
 )
 from ip.solutions.connectors.sandbox.universal.spec import (
-    DEFAULT_SIMULATED_PUSH_COUNT,
     DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS,
     DEFAULT_SIMULATOR_RECORDS_PER_PULL,
     MAX_SIMULATED_PUSH_COUNT,
@@ -61,7 +62,6 @@ from ip.solutions.connectors.sandbox.universal.strategies import (
     PullExtractionMode,
     PushCadenceMode,
 )
-from ip.solutions.connectors.sandbox.universal.synthesizer import _parse_iso_cursor
 from ip.solutions.connectors.sandbox.universal.use_cases import (
     CreateSimulatorEntityCommand,
     CreateSimulatorEntityUseCase,
@@ -246,8 +246,8 @@ class SimulatePushHttpRequest(BaseModel):
     """HTTP request payload to trigger a simulated webhook push for an entity stream."""
 
     stream_name: str = Field(..., min_length=1, max_length=128)
-    count: int = Field(
-        default=DEFAULT_SIMULATED_PUSH_COUNT,
+    count: int | None = Field(
+        default=None,
         ge=MIN_SIMULATED_PUSH_COUNT,
         le=MAX_SIMULATED_PUSH_COUNT,
     )
@@ -581,6 +581,26 @@ async def simulate_push(
     )
 
 
+def _parse_strict_iso_param(raw: str, param_name: str) -> Result[datetime, IpError]:
+    cleaned = raw.strip()
+    if cleaned.endswith("Z"):
+        cleaned = f"{cleaned[:-1]}+00:00"
+    try:
+        dt = datetime.fromisoformat(cleaned)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return Result.ok(dt.astimezone(UTC))
+    except (ValueError, TypeError):
+        return Result.fail(
+            IpError(
+                code=IpErrorCode.VALIDATION_FAILED,
+                message=f"Invalid ISO-8601 datetime format for query parameter '{param_name}': '{raw}'.",
+                http_status=400,
+                details={"parameter": param_name, "value": raw},
+            )
+        )
+
+
 @router.get(
     "/{connection_id}/simulator/streams/{stream_name}/records",
     response_model=PaginatedSliceHttpResponse,
@@ -623,8 +643,19 @@ async def pull_simulator_records(
     )
     log.info("ip_pull_simulator_records_http.received")
 
-    parsed_start = _parse_iso_cursor(start_time) if start_time else None
-    parsed_end = _parse_iso_cursor(end_time) if end_time else None
+    parsed_start: datetime | None = None
+    if start_time:
+        start_res = _parse_strict_iso_param(start_time, "start_time")
+        if start_res.is_err:
+            return from_ip_error(start_res.unwrap_err())
+        parsed_start = start_res.unwrap()
+
+    parsed_end: datetime | None = None
+    if end_time:
+        end_res = _parse_strict_iso_param(end_time, "end_time")
+        if end_res.is_err:
+            return from_ip_error(end_res.unwrap_err())
+        parsed_end = end_res.unwrap()
 
     query = ExtractionQuery(
         stream_name=stream_name,

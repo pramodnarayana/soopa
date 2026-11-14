@@ -216,6 +216,9 @@ class SqlAlchemyMeterReadingCanonicalWriter(CanonicalWriterPort):
                 reading_id=gem.canonical_id,
                 trace_id=trace_id,
                 correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
             )
             logger.info(
                 "energy_meter_reading_canonical_soft_deleted",
@@ -374,6 +377,9 @@ class SqlAlchemyServicePointCanonicalWriter(CanonicalWriterPort):
                 service_point_external_id=source_id,
                 trace_id=trace_id,
                 correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
             )
             logger.info(
                 "energy_service_point_canonical_soft_deleted",
@@ -518,12 +524,30 @@ class SqlAlchemyBillingReadingCanonicalWriter(CanonicalWriterPort):
         original_trace_id: str | None = None,
         replay_count: int = 0,
     ) -> None:
-        logger.info(
-            "energy_billing_reading_canonical_soft_deleted_noop",
+        gem = await uow.entity_maps.get_by_source(
             tenant_id=tenant_id,
-            source_id=source_id,
-            trace_id=trace_id,
+            entity_domain=self.canonical_type,
+            source_connection_id=connection_id,
+            source_entity_id=source_id,
         )
+        repo = self._repo_factory(uow)
+        if gem is not None and repo is not None:
+            await repo.soft_delete_billing_reading_by_id(
+                tenant_id=tenant_id,
+                reading_id=gem.canonical_id,
+                trace_id=trace_id,
+                correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
+            )
+            logger.info(
+                "energy_billing_reading_canonical_soft_deleted",
+                tenant_id=tenant_id,
+                canonical_id=gem.canonical_id,
+                source_id=source_id,
+                trace_id=trace_id,
+            )
 
     async def resolve_id(
         self,
@@ -554,7 +578,30 @@ class SqlAlchemyBillingReadingCanonicalWriter(CanonicalWriterPort):
         target_id: str,
         trace_id: str,
     ) -> None:
-        return None
+        if field_name != "service_point_id":
+            return
+        gem = await uow.entity_maps.get_by_source(
+            tenant_id=tenant_id,
+            entity_domain=self.canonical_type,
+            source_connection_id=connection_id,
+            source_entity_id=source_id,
+        )
+        repo = self._repo_factory(uow)
+        if gem is not None and repo is not None:
+            await repo.update_billing_reading_service_point(
+                tenant_id=tenant_id,
+                reading_id=gem.canonical_id,
+                service_point_id=target_id,
+                trace_id=trace_id,
+            )
+            logger.info(
+                "energy_billing_reading_reference_resolved",
+                tenant_id=tenant_id,
+                canonical_id=gem.canonical_id,
+                field_name=field_name,
+                target_id=target_id,
+                trace_id=trace_id,
+            )
 
 
 def register_energy_canonical_writers(

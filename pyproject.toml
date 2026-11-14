@@ -62,6 +62,7 @@ members = [
     "core/platform/packages/strace",
     "core/platform/packages/cache",
     "core/platform/packages/sharding",
+    "core/platform/packages/webhooks",
     "apps/ip/packages/ip",
 ]
 exclude = ["apps/edi/packages/ui"]
@@ -89,6 +90,7 @@ cache = { workspace = true }
 sharding = { workspace = true }
 ip = { workspace = true }
 shttp = { workspace = true }
+webhooks = { workspace = true }
 pykcs11 = { path = "tools/dummy-pykcs11" }
 
 [tool.pytest.ini_options]
@@ -103,6 +105,7 @@ pythonpath = [
     "core/platform/packages/cache/src",
     "core/platform/packages/sharding/src",
     "core/platform/packages/notification/src",
+    "core/platform/packages/webhooks/src",
     "apps/ip/packages/ip/src",
     "apps/ip/packages/ip/tests",
     "apps/ip",

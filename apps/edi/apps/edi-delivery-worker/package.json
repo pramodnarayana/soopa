@@ -23,6 +23,7 @@
     "@soopa/identity": "workspace:*",
     "@soopa/database": "workspace:*",
     "@soopa/observability": "workspace:*",
-    "@soopa/sharding": "workspace:*"
+    "@soopa/sharding": "workspace:*",
+    "@soopa/webhooks": "workspace:*"
   }
 }

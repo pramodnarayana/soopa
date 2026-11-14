@@ -32,7 +32,6 @@ import {
   type SimulatorBlueprintJson,
   type SimulatorEntity,
   SimulatorVelocityMode,
-  type SimulatorVelocityModeValue,
 } from '../../domain/simulator';
 
 export interface CreateSimulatorEntityModalProps {
@@ -160,9 +159,6 @@ export function CreateSimulatorEntityForm({
   const [entityName, setEntityName] = useState<string>(editingEntity?.entityName ?? '');
   const [primaryKeyField, setPrimaryKeyField] = useState<string>(
     editingEntity?.primaryKeyField ?? '',
-  );
-  const [velocityMode, setVelocityMode] = useState<SimulatorVelocityModeValue>(
-    editingEntity?.velocityMode ?? SimulatorVelocityMode.ENTITY_TRANSACTIONAL,
   );
   const [jsonContent, setJsonContent] = useState<string>(() =>
     editingEntity ? JSON.stringify(editingEntity.sampleBlueprint, null, 2) : DEFAULT_SAMPLE_JSON,
@@ -452,6 +448,14 @@ export function CreateSimulatorEntityForm({
     const normalizedPrimaryKey = primaryKeyField.trim() || null;
     const existingCursor = editingEntity?.cursorField ?? null;
 
+    const effectivePushConfig =
+      editingEntity && editingEntity.pushMode === pushMode
+        ? { ...editingEntity.pushConfig, ...pushOutcome.config }
+        : pushOutcome.config;
+
+    const effectiveVelocityMode =
+      editingEntity?.velocityMode ?? SimulatorVelocityMode.ENTITY_TRANSACTIONAL;
+
     const res = editingEntity
       ? await updateMutation.mutateAsync({
           entityId: editingEntity.id,
@@ -461,8 +465,8 @@ export function CreateSimulatorEntityForm({
             primaryKeyField: normalizedPrimaryKey,
             cursorField: existingCursor,
             pushMode,
-            pushConfig: pushOutcome.config,
-            velocityMode,
+            pushConfig: effectivePushConfig,
+            velocityMode: effectiveVelocityMode,
           },
         })
       : await createMutation.mutateAsync({
@@ -472,7 +476,7 @@ export function CreateSimulatorEntityForm({
           cursorField: null,
           pushMode,
           pushConfig: pushOutcome.config,
-          velocityMode,
+          velocityMode: effectiveVelocityMode,
         });
 
     if (!res.ok) {
@@ -669,7 +673,7 @@ export function CreateSimulatorEntityForm({
               <Input
                 id="sim-burst-interval"
                 type="number"
-                step="0.1"
+                step="any"
                 min={0.01}
                 value={randomInterval}
                 onChange={(e) => {
@@ -692,7 +696,7 @@ export function CreateSimulatorEntityForm({
               <Input
                 id="sim-paced-rate"
                 type="number"
-                step="0.1"
+                step="any"
                 min={0.001}
                 value={constantRate}
                 onChange={(e) => {
@@ -717,7 +721,7 @@ export function CreateSimulatorEntityForm({
               <Input
                 id="sim-poisson-mindelay"
                 type="number"
-                step="0.1"
+                step="any"
                 min={0}
                 value={poissonMinDelay}
                 onChange={(e) => {
@@ -734,7 +738,7 @@ export function CreateSimulatorEntityForm({
               <Input
                 id="sim-poisson-maxdelay"
                 type="number"
-                step="0.1"
+                step="any"
                 min={0.1}
                 value={poissonMaxDelay}
                 onChange={(e) => {
@@ -847,7 +851,7 @@ export function CreateSimulatorEntityForm({
               <Input
                 id="sim-chaos-interval"
                 type="number"
-                step="0.1"
+                step="any"
                 min={0.01}
                 value={chaosInterval}
                 onChange={(e) => {
@@ -885,7 +889,7 @@ export function CreateSimulatorEntityForm({
               <Input
                 id="sim-diurnal-base"
                 type="number"
-                step="0.1"
+                step="any"
                 min={0.01}
                 value={diurnalBaseRate}
                 onChange={(e) => {
@@ -941,7 +945,7 @@ export function CreateSimulatorEntityForm({
               <Input
                 id="sim-thin-interval"
                 type="number"
-                step="0.1"
+                step="any"
                 min={0.01}
                 value={thinInterval}
                 onChange={(e) => {
@@ -956,34 +960,6 @@ export function CreateSimulatorEntityForm({
             </div>
           </div>
         ) : null}
-      </fieldset>
-
-      <fieldset className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-        <legend className="px-1 text-xs font-medium text-foreground">Stream Velocity Mode</legend>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card p-2.5 text-xs">
-            <input
-              type="radio"
-              name="velocity_mode"
-              value={SimulatorVelocityMode.ENTITY_TRANSACTIONAL}
-              checked={velocityMode === SimulatorVelocityMode.ENTITY_TRANSACTIONAL}
-              onChange={() => setVelocityMode(SimulatorVelocityMode.ENTITY_TRANSACTIONAL)}
-              className="accent-primary"
-            />
-            <span className="font-semibold text-foreground">Transactional Entity</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card p-2.5 text-xs">
-            <input
-              type="radio"
-              name="velocity_mode"
-              value={SimulatorVelocityMode.TIMESERIES_COLUMNAR}
-              checked={velocityMode === SimulatorVelocityMode.TIMESERIES_COLUMNAR}
-              onChange={() => setVelocityMode(SimulatorVelocityMode.TIMESERIES_COLUMNAR)}
-              className="accent-primary"
-            />
-            <span className="font-semibold text-foreground">Time-Series Columnar</span>
-          </label>
-        </div>
       </fieldset>
 
       <div className="space-y-1.5">

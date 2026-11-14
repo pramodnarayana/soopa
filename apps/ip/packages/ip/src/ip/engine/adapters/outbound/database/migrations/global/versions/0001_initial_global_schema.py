@@ -375,9 +375,103 @@ def upgrade() -> None:
         schema="ip",
     )
 
+    op.create_table(
+        "webhook_endpoints",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=64), nullable=False),
+        sa.Column("endpoint_slug", sa.String(length=128), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("description", sa.Text(), nullable=False, server_default=""),
+        sa.Column(
+            "verification_strategy",
+            sa.String(length=32),
+            server_default="SHARED_HEADER_SECRET",
+            nullable=False,
+        ),
+        sa.Column("primary_secret_hash", sa.String(length=255), nullable=False),
+        sa.Column("secondary_secret_hash", sa.String(length=255), nullable=True),
+        sa.Column("secret_rotated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("bound_connection_id", sa.String(length=64), nullable=True),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["bound_connection_id"],
+            ["ip.connections.id"],
+            ondelete="SET NULL",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("tenant_id", "endpoint_slug", name="uq_tenant_endpoint_slug"),
+        schema="ip",
+    )
+    op.create_index(
+        "idx_webhook_slug_lookup",
+        "webhook_endpoints",
+        ["tenant_id", "endpoint_slug"],
+        unique=False,
+        schema="ip",
+        postgresql_where=sa.text("is_active = TRUE"),
+    )
+    op.create_index(
+        op.f("ix_ip_webhook_endpoints_tenant_id"),
+        "webhook_endpoints",
+        ["tenant_id"],
+        unique=False,
+        schema="ip",
+    )
+
+    op.create_table(
+        "webhook_event_routes",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("endpoint_id", sa.String(length=64), nullable=False),
+        sa.Column("event_pattern", sa.String(length=128), nullable=False),
+        sa.Column("payload_semantic", sa.String(length=32), server_default="DATA", nullable=False),
+        sa.Column("target_pipeline_or_workflow_id", sa.String(length=128), nullable=False),
+        sa.Column("description", sa.Text(), nullable=False, server_default=""),
+        sa.Column("priority", sa.Integer(), server_default=sa.text("100"), nullable=False),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["endpoint_id"],
+            ["ip.webhook_endpoints.id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("endpoint_id", "event_pattern", name="uq_endpoint_event_pattern"),
+        schema="ip",
+    )
+    op.create_index(
+        "idx_event_route_lookup",
+        "webhook_event_routes",
+        ["endpoint_id", "priority"],
+        unique=False,
+        schema="ip",
+        postgresql_where=sa.text("is_active = TRUE"),
+    )
+
 
 def downgrade() -> None:
     """Downgrade Control Plane schema."""
+    op.drop_index(
+        "idx_event_route_lookup",
+        table_name="webhook_event_routes",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_table("webhook_event_routes", schema="ip", if_exists=True)
+    op.drop_index(
+        op.f("ix_ip_webhook_endpoints_tenant_id"),
+        table_name="webhook_endpoints",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_index(
+        "idx_webhook_slug_lookup",
+        table_name="webhook_endpoints",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_table("webhook_endpoints", schema="ip", if_exists=True)
     op.drop_index(
         "uq_ip_stitches_concrete_id",
         table_name="stitches",

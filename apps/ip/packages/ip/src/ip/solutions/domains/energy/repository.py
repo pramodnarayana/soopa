@@ -235,6 +235,9 @@ class SqlAlchemyEnergyDomainRepository(EnergyDomainRepositoryPort):
         service_point_external_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         stmt = (
             update(MdmServicePointRecord)
@@ -246,6 +249,9 @@ class SqlAlchemyEnergyDomainRepository(EnergyDomainRepositoryPort):
                 status=ServicePointStatus.DELETED.value,
                 trace_id=trace_id,
                 correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
                 updated_at=datetime.now(UTC),
             )
         )
@@ -258,6 +264,9 @@ class SqlAlchemyEnergyDomainRepository(EnergyDomainRepositoryPort):
         reading_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         stmt = (
             update(MdmMeterReadingRecord)
@@ -269,6 +278,9 @@ class SqlAlchemyEnergyDomainRepository(EnergyDomainRepositoryPort):
                 quality_flag=MeterReadingQualityFlag.TOMBSTONED.value,
                 trace_id=trace_id,
                 correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
                 recorded_at=datetime.now(UTC),
             )
         )
@@ -287,6 +299,57 @@ class SqlAlchemyEnergyDomainRepository(EnergyDomainRepositoryPort):
             .where(
                 MdmMeterReadingRecord.tenant_id == tenant_id,
                 MdmMeterReadingRecord.id == reading_id,
+            )
+            .values(
+                service_point_id=service_point_id,
+                trace_id=trace_id,
+                recorded_at=datetime.now(UTC),
+            )
+        )
+        await self._session.execute(stmt)
+        await self._session.flush()
+
+    async def soft_delete_billing_reading_by_id(
+        self,
+        tenant_id: str,
+        reading_id: str,
+        trace_id: str,
+        correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
+    ) -> None:
+        stmt = (
+            update(MdmBillingReadingRecord)
+            .where(
+                MdmBillingReadingRecord.tenant_id == tenant_id,
+                MdmBillingReadingRecord.id == reading_id,
+            )
+            .values(
+                quality_flag=MeterReadingQualityFlag.TOMBSTONED.value,
+                trace_id=trace_id,
+                correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
+                recorded_at=datetime.now(UTC),
+            )
+        )
+        await self._session.execute(stmt)
+        await self._session.flush()
+
+    async def update_billing_reading_service_point(
+        self,
+        tenant_id: str,
+        reading_id: str,
+        service_point_id: str,
+        trace_id: str,
+    ) -> None:
+        stmt = (
+            update(MdmBillingReadingRecord)
+            .where(
+                MdmBillingReadingRecord.tenant_id == tenant_id,
+                MdmBillingReadingRecord.id == reading_id,
             )
             .values(
                 service_point_id=service_point_id,

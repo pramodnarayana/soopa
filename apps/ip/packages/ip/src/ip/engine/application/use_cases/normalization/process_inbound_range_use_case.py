@@ -240,6 +240,9 @@ class ProcessInboundRangeUseCase:
             replica_version=merge_res.version,
             trace_id=effective_trace_id,
             correlation_id=effective_corr_id,
+            parent_trace_id=replica.parent_trace_id if replica is not None else None,
+            original_trace_id=replica.original_trace_id if replica is not None else None,
+            replay_count=replica.replay_count if replica is not None else 0,
         )
         norm_res = await self._normalize_use_case.normalize_replica_in_uow(
             uow=uow,

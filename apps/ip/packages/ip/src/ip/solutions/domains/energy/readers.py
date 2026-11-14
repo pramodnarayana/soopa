@@ -93,12 +93,17 @@ class SqlAlchemyMeterReadingCanonicalReader(CanonicalReaderPort):
         tenant_id: str,
         record_id: str,
     ) -> NormalizedRecord | None:
-        stmt = select(MdmMeterReadingRecord).where(
-            MdmMeterReadingRecord.tenant_id == tenant_id,
-            MdmMeterReadingRecord.id == record_id,
+        stmt = (
+            select(MdmMeterReadingRecord)
+            .where(
+                MdmMeterReadingRecord.tenant_id == tenant_id,
+                MdmMeterReadingRecord.id == record_id,
+            )
+            .order_by(MdmMeterReadingRecord.reading_timestamp.desc())
+            .limit(1)
         )
         res = await session.execute(stmt)
-        orm = res.scalar_one_or_none()
+        orm = res.scalars().first()
         return _meter_reading_to_normalized_record(orm) if orm is not None else None
 
     async def get_by_trace_id(
@@ -133,7 +138,7 @@ class SqlAlchemyMeterReadingCanonicalReader(CanonicalReaderPort):
             stmt = stmt.where(MdmMeterReadingRecord.source_connection_id == connection_id)
         stmt = (
             stmt.order_by(
-                MdmMeterReadingRecord.reading_timestamp.desc(),
+                MdmMeterReadingRecord.recorded_at.desc(),
                 MdmMeterReadingRecord.id.asc(),
             )
             .offset(offset)
@@ -249,12 +254,17 @@ class SqlAlchemyBillingReadingCanonicalReader(CanonicalReaderPort):
         tenant_id: str,
         record_id: str,
     ) -> NormalizedRecord | None:
-        stmt = select(MdmBillingReadingRecord).where(
-            MdmBillingReadingRecord.tenant_id == tenant_id,
-            MdmBillingReadingRecord.id == record_id,
+        stmt = (
+            select(MdmBillingReadingRecord)
+            .where(
+                MdmBillingReadingRecord.tenant_id == tenant_id,
+                MdmBillingReadingRecord.id == record_id,
+            )
+            .order_by(MdmBillingReadingRecord.reading_timestamp.desc())
+            .limit(1)
         )
         res = await session.execute(stmt)
-        orm = res.scalar_one_or_none()
+        orm = res.scalars().first()
         return _billing_reading_to_normalized_record(orm) if orm is not None else None
 
     async def get_by_trace_id(
@@ -270,7 +280,7 @@ class SqlAlchemyBillingReadingCanonicalReader(CanonicalReaderPort):
                 MdmBillingReadingRecord.tenant_id == tenant_id,
                 MdmBillingReadingRecord.trace_id == trace_id,
             )
-            .order_by(MdmBillingReadingRecord.reading_timestamp.asc())
+            .order_by(MdmBillingReadingRecord.recorded_at.asc())
         )
         res = await session.execute(stmt)
         return [_billing_reading_to_normalized_record(r) for r in res.scalars().all()]
@@ -289,7 +299,7 @@ class SqlAlchemyBillingReadingCanonicalReader(CanonicalReaderPort):
             stmt = stmt.where(MdmBillingReadingRecord.source_connection_id == connection_id)
         stmt = (
             stmt.order_by(
-                MdmBillingReadingRecord.reading_timestamp.desc(),
+                MdmBillingReadingRecord.recorded_at.desc(),
                 MdmBillingReadingRecord.id.asc(),
             )
             .offset(offset)

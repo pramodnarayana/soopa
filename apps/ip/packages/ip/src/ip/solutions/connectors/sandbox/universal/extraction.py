@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
 from ip.engine.ports.outbound.connector_port import RecordEnvelopeDTO
@@ -22,8 +24,23 @@ from ip.solutions.connectors.sandbox.universal.synthesizer import (
     EPOCH_ANCHOR,
     JsonSchemaRecordSynthesizer,
     _format_iso_utc,
+    _parse_iso_cursor,
 )
 from seedwork.domain.types import JsonValue
+
+MAX_REPRESENTABLE_TIMESTAMP_SECONDS = 250_000_000_000.0
+
+
+class CdcOperation(StrEnum):
+    """Supported Change Data Capture (CDC) mutation operations."""
+
+    INSERT = "INSERT"
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+
+
+CDC_OP_FIELD = "_cdc_op"
+CDC_VERSION_FIELD = "_cdc_version"
 
 
 @dataclass(frozen=True)
@@ -52,10 +69,32 @@ class BoundedTimeWindowExtractionStrategy:
                 )
             )
 
-        start_seq = max(1, int((start_dt - EPOCH_ANCHOR).total_seconds()) // step_sec)
-        end_seq = max(start_seq, int((end_dt - EPOCH_ANCHOR).total_seconds()) // step_sec)
+        start_sec = max(0.0, (start_dt - EPOCH_ANCHOR).total_seconds())
+        end_sec = max(0.0, (end_dt - EPOCH_ANCHOR).total_seconds())
+        start_seq = max(1, math.ceil(start_sec / step_sec))
+        end_seq = math.floor(end_sec / step_sec)
 
-        effective_start = start_seq if query.offset is None else max(start_seq, query.offset)
+        if end_seq < start_seq:
+            return Result.ok(
+                PaginatedSliceDTO(
+                    records=[],
+                    next_cursor=None,
+                    next_offset=None,
+                    continuation_token=None,
+                    has_more=False,
+                    total_estimated=0,
+                )
+            )
+
+        effective_start = start_seq
+        if query.cursor:
+            cursor_dt = _parse_iso_cursor(query.cursor)
+            cursor_sec = max(0.0, (cursor_dt - EPOCH_ANCHOR).total_seconds())
+            cursor_seq = max(1, math.ceil(cursor_sec / step_sec))
+            effective_start = max(start_seq, cursor_seq)
+        elif query.offset is not None:
+            effective_start = max(start_seq, query.offset)
+
         remaining = max(0, end_seq - effective_start + 1)
         count = min(query.limit, remaining)
 
@@ -104,12 +143,13 @@ class HighWatermarkExtractionStrategy:
         query: ExtractionQuery,
     ) -> Result[PaginatedSliceDTO, IpError]:
         effective_limit = min(max(1, query.limit), spec.records_per_pull)
+        seq_offset = (query.offset + 1) if query.offset is not None else None
         batch = self.synthesizer.synthesize_batch(
             spec,
             seed=seed,
             cursor=query.cursor,
             limit=effective_limit,
-            sequence_offset=query.offset,
+            sequence_offset=seq_offset,
         )
 
         next_cursor = batch[-1].cursor_value if batch else query.cursor
@@ -142,6 +182,16 @@ class OffsetLimitExtractionStrategy:
         step_sec = max(1, spec.cursor_step_seconds)
         offset = max(0, query.offset or 0)
         limit = max(1, min(query.limit, 5000))
+
+        if (offset + limit) * step_sec > MAX_REPRESENTABLE_TIMESTAMP_SECONDS:
+            return Result.fail(
+                IpError(
+                    code=IpErrorCode.VALIDATION_FAILED,
+                    message="Requested offset or sequence out of representable timestamp range.",
+                    http_status=400,
+                    details={"offset": offset, "limit": limit},
+                )
+            )
 
         records: list[RecordEnvelopeDTO] = []
         for i in range(limit):
@@ -186,6 +236,8 @@ class OpaqueTokenExtractionStrategy:
         if query.token:
             try:
                 decoded = json.loads(base64.urlsafe_b64decode(query.token.encode()).decode())
+                if not isinstance(decoded, dict):
+                    raise TypeError("Continuation token payload must be a JSON object.")
                 offset = max(0, int(decoded.get("seq", 0)))
             except (ValueError, TypeError, KeyError):
                 return Result.fail(
@@ -199,6 +251,16 @@ class OpaqueTokenExtractionStrategy:
 
         limit = max(1, min(query.limit, 5000))
         step_sec = max(1, spec.cursor_step_seconds)
+
+        if (offset + limit) * step_sec > MAX_REPRESENTABLE_TIMESTAMP_SECONDS:
+            return Result.fail(
+                IpError(
+                    code=IpErrorCode.VALIDATION_FAILED,
+                    message="Requested continuation sequence out of representable timestamp range.",
+                    http_status=400,
+                    details={"token_seq": offset, "limit": limit},
+                )
+            )
 
         records: list[RecordEnvelopeDTO] = []
         for i in range(limit):
@@ -237,9 +299,25 @@ class DeltaCdcExtractionStrategy:
         seed: int,
         query: ExtractionQuery,
     ) -> Result[PaginatedSliceDTO, IpError]:
-        start_version = max(0, query.since_version or 0)
+        start_version = query.since_version
+        if start_version is None and query.cursor:
+            try:
+                start_version = int(query.cursor)
+            except ValueError:
+                start_version = 0
+        start_version = max(0, start_version or 0)
         limit = max(1, min(query.limit, 5000))
         step_sec = max(1, spec.cursor_step_seconds)
+
+        if (start_version + limit) * step_sec > MAX_REPRESENTABLE_TIMESTAMP_SECONDS:
+            return Result.fail(
+                IpError(
+                    code=IpErrorCode.VALIDATION_FAILED,
+                    message="Requested version sequence out of representable timestamp range.",
+                    http_status=400,
+                    details={"start_version": start_version, "limit": limit},
+                )
+            )
 
         records: list[RecordEnvelopeDTO] = []
         for i in range(limit):
@@ -249,10 +327,10 @@ class DeltaCdcExtractionStrategy:
                 spec, seed=seed, seq_num=v, record_dt=record_dt
             )
             # Decorate payload with CDC operational metadata
-            op = "UPDATE" if (v % 3 == 0) else "INSERT"
+            op = CdcOperation.UPDATE.value if (v % 3 == 0) else CdcOperation.INSERT.value
             cdc_data: dict[str, JsonValue] = dict(base_rec.data)
-            cdc_data["_cdc_op"] = op
-            cdc_data["_cdc_version"] = v
+            cdc_data[CDC_OP_FIELD] = op
+            cdc_data[CDC_VERSION_FIELD] = v
 
             records.append(
                 RecordEnvelopeDTO(
@@ -378,7 +456,10 @@ class PullQueryEngine:
 
 
 __all__ = [
+    "CDC_OP_FIELD",
+    "CDC_VERSION_FIELD",
     "BoundedTimeWindowExtractionStrategy",
+    "CdcOperation",
     "DeltaCdcExtractionStrategy",
     "HighWatermarkExtractionStrategy",
     "OffsetLimitExtractionStrategy",

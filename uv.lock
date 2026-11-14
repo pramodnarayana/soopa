@@ -53,6 +53,7 @@ members = [
     "ucp-worker",
     "unified-api",
     "unified-worker",
+    "webhooks",
 ]
 overrides = [{ name = "pykcs11", directory = "tools/dummy-pykcs11" }]
 
@@ -1113,6 +1114,7 @@ dependencies = [
     { name = "ucp-models" },
     { name = "unified-api" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "webhooks" },
 ]
 
 [package.dev-dependencies]
@@ -1156,6 +1158,7 @@ requires-dist = [
     { name = "ucp-models", editable = "core/ucp/packages/models" },
     { name = "unified-api", editable = "core/platform/apps/unified-api" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.22.0" },
+    { name = "webhooks", editable = "core/platform/packages/webhooks" },
 ]
 
 [package.metadata.requires-dev]
@@ -1232,6 +1235,7 @@ dependencies = [
     { name = "strace" },
     { name = "structlog" },
     { name = "ucp-models" },
+    { name = "webhooks" },
 ]
 
 [package.dev-dependencies]
@@ -1258,6 +1262,7 @@ requires-dist = [
     { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog" },
     { name = "ucp-models", editable = "core/ucp/packages/models" },
+    { name = "webhooks", editable = "core/platform/packages/webhooks" },
 ]
 
 [package.metadata.requires-dev]
@@ -1844,6 +1849,7 @@ dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
     { name = "botocore" },
+    { name = "croniter" },
     { name = "cryptography" },
     { name = "database" },
     { name = "dependency-injector" },
@@ -1867,6 +1873,7 @@ dependencies = [
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "strace" },
     { name = "structlog" },
+    { name = "webhooks" },
 ]
 
 [package.dev-dependencies]
@@ -1883,6 +1890,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.13.0" },
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "botocore" },
+    { name = "croniter", specifier = ">=6.2.4" },
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "database", editable = "core/platform/packages/database" },
     { name = "dependency-injector", specifier = ">=4.41.0" },
@@ -1906,6 +1914,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
     { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog", specifier = ">=24.1.0" },
+    { name = "webhooks", editable = "core/platform/packages/webhooks" },
 ]
 
 [package.metadata.requires-dev]
@@ -4707,6 +4716,39 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/34/74/c6428f875774288bec1396f5bfcbc2d925700a4dad61727fd5f2b12f249d/wcwidth-0.8.2.tar.gz", hash = "sha256:91fbef97204b96a3d4d421609b80340b760cf33e26da123ff243d76b1fda8dda", size = 1466253, upload-time = "2026-06-29T18:11:11.601Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/96/42/3e5985a0a7e57de470b320c6d6a1a67c844f6737a587f3d44dd13d1819e7/wcwidth-0.8.2-py3-none-any.whl", hash = "sha256:d63947694a0539a1d51e01eda7caf800c291020e6cdd7e28ad7b14dd33ad4f85", size = 323166, upload-time = "2026-06-29T18:11:09.888Z" },
+]
+
+[[package]]
+name = "webhooks"
+version = "0.1.0"
+source = { editable = "core/platform/packages/webhooks" }
+dependencies = [
+    { name = "httpx" },
+    { name = "seedwork" },
+    { name = "shttp" },
+    { name = "structlog" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "shttp", editable = "core/platform/packages/shttp" },
+    { name = "structlog", specifier = ">=24.1.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
+    { name = "pytest-mock", specifier = ">=3.12.0" },
 ]
 
 [[package]]

@@ -100,12 +100,13 @@ export function isRecordMatchingStream(record: NormalizedRecord, streamName: str
   }
 
   // 3. Transformation ID match (e.g. "domain.entity_transform" contains "entity_transform")
-  const transformId =
+  const rawTransformId =
     record.canonicalData && typeof record.canonicalData === 'object'
       ? String(
           (record.canonicalData as Record<string, unknown>).transformation_id ?? '',
         ).toLowerCase()
       : '';
+  const transformId = rawTransformId.replace(/[^a-z0-9]/g, '');
   if (transformId && (transformId.includes(sNorm) || (sStem && transformId.includes(sStem)))) {
     return true;
   }

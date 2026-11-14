@@ -388,6 +388,69 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
                     USING (tenant_id = current_setting('platform.current_tenant_id', true));
                 """)
             )
+
+            await shard_session.execute(
+                text("""
+                CREATE TABLE IF NOT EXISTS public.mdm_billing_readings (
+                    id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    trace_id VARCHAR(64) NOT NULL,
+                    correlation_id VARCHAR(255),
+                    parent_trace_id VARCHAR(64),
+                    original_trace_id VARCHAR(64),
+                    replay_count INTEGER NOT NULL DEFAULT 0,
+                    source_connection_id VARCHAR(64) NOT NULL,
+                    source_replica_id VARCHAR(64) NOT NULL,
+                    transformation_id VARCHAR(128) NOT NULL DEFAULT 'energy.sap_billing_reading',
+                    transformation_version INTEGER NOT NULL DEFAULT 1,
+                    reading_id VARCHAR(128) NOT NULL,
+                    meter_serial_number VARCHAR(128) NOT NULL,
+                    service_point_id VARCHAR(128),
+                    reading_timestamp TIMESTAMPTZ NOT NULL,
+                    kwh_delivered FLOAT NOT NULL,
+                    quality_flag VARCHAR(32) NOT NULL DEFAULT 'VALIDATED',
+                    recorded_at TIMESTAMPTZ NOT NULL,
+                    PRIMARY KEY (id, reading_timestamp)
+                );
+                """)
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_mdm_billing_meter_ts ON public.mdm_billing_readings (tenant_id, meter_serial_number, reading_timestamp);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_mdm_billing_sp ON public.mdm_billing_readings (tenant_id, service_point_id);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_mdm_billing_trace ON public.mdm_billing_readings (tenant_id, trace_id);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_mdm_billing_reading_id ON public.mdm_billing_readings (tenant_id, reading_id);"
+                )
+            )
+            await shard_session.execute(
+                text("ALTER TABLE public.mdm_billing_readings ENABLE ROW LEVEL SECURITY;")
+            )
+            await shard_session.execute(
+                text("ALTER TABLE public.mdm_billing_readings FORCE ROW LEVEL SECURITY;")
+            )
+            await shard_session.execute(
+                text(
+                    "DROP POLICY IF EXISTS tenant_isolation_mdm_billing_readings ON public.mdm_billing_readings;"
+                )
+            )
+            await shard_session.execute(
+                text("""
+                CREATE POLICY tenant_isolation_mdm_billing_readings ON public.mdm_billing_readings
+                    USING (tenant_id = current_setting('platform.current_tenant_id', true));
+                """)
+            )
             await shard_session.commit()
     finally:
         await shard_provider.close()

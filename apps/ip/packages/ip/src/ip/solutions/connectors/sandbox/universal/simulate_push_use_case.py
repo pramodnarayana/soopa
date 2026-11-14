@@ -31,7 +31,6 @@ from ip.solutions.connectors.sandbox.universal.inference import (
 )
 from ip.solutions.connectors.sandbox.universal.ports import SimulatorEntityReaderPort
 from ip.solutions.connectors.sandbox.universal.spec import (
-    DEFAULT_SIMULATED_PUSH_COUNT,
     MAX_SIMULATED_PUSH_COUNT,
     MIN_SIMULATED_PUSH_COUNT,
     SimulatorStreamSpec,
@@ -60,7 +59,7 @@ class TriggerSimulatedPushCommand:
     tenant_id: str
     connection_id: str
     stream_name: str
-    count: int = DEFAULT_SIMULATED_PUSH_COUNT
+    count: int | None = None
     delivery_style: SimulatedPushDeliveryStyle = SimulatedPushDeliveryStyle.FULL_PAYLOAD
     correlation_id: str | None = None
     cadence_mode: PushCadenceMode | None = None
@@ -189,7 +188,7 @@ class TriggerSimulatedPushUseCase:
                 )
             )
 
-        if command.count != DEFAULT_SIMULATED_PUSH_COUNT:
+        if command.count is not None:
             target_count = command.count
         else:
             target_count = strategy.compute_batch_size(cadence_state)

@@ -465,8 +465,8 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(html).toContain('Push Delivery Options');
     expect(html).toContain('Push Emission Mode');
     expect(html).not.toContain('Records per Pull');
-    expect(html).toContain('Stream Velocity Mode');
-    expect(html).toContain('name="velocity_mode"');
+    expect(html).not.toContain('Stream Velocity Mode');
+    expect(html).not.toContain('name="velocity_mode"');
     expect(html).toContain('Upload .json');
     expect(html).toContain('Format');
     expect(html).toContain('aria-labelledby=');

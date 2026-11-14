@@ -74,6 +74,9 @@ from ip.engine.adapters.outbound.database.control_plane.transformation_repositor
 from ip.engine.adapters.outbound.database.control_plane.uow import (
     SqlAlchemyIpControlPlaneUnitOfWork,
 )
+from ip.engine.adapters.outbound.database.control_plane.webhook_endpoint_repository import (
+    SqlAlchemyWebhookEndpointRepository,
+)
 from ip.engine.adapters.outbound.database.data_plane.batch_manifest_repository import (
     SqlAlchemyBatchManifestRepository,
 )
@@ -362,6 +365,7 @@ def create_ip_control_plane_uow(
         sync_runs=SqlAlchemySyncRunRepository(global_session),
         transformations=SqlAlchemyTransformationRepository(global_session),
         stitches=SqlAlchemyStitchRepository(global_session),
+        webhook_endpoints=SqlAlchemyWebhookEndpointRepository(global_session),
     )
 
 

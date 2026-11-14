@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from croniter import croniter
 from ip.engine.domain.exceptions import InvalidConnectionConfigError
 from ip.solutions.connectors.sandbox.universal.strategies import (
     CadenceState,
@@ -160,7 +161,14 @@ class CronBatchCadenceStrategy:
     cron_expression: str | None = None
 
     def compute_next_delay_seconds(self, state: CadenceState) -> float:
-        _ = state
+        if self.cron_expression is not None and croniter.is_valid(self.cron_expression):
+            now = state.last_emitted_at or datetime.now(UTC)
+            cron = croniter(self.cron_expression, now)
+            next_time = cron.get_next(datetime)
+            if next_time.tzinfo is None:
+                next_time = next_time.replace(tzinfo=UTC)
+            delay = (next_time - now).total_seconds()
+            return max(1.0, delay)
         return max(1.0, self.interval_seconds)
 
     def compute_batch_size(self, state: CadenceState) -> int:
@@ -257,7 +265,7 @@ def resolve_push_cadence_strategy(
 
     if mode == PushCadenceMode.RANDOM_BURST:
         min_b = _extract_int(cfg.get("min_batch"), 1)
-        max_b = _extract_int(cfg.get("max_batch"), 10)
+        max_b = max(min_b, _extract_int(cfg.get("max_batch"), 10))
         interval = _extract_float(cfg.get("interval_seconds"), 5.0)
         seed = _extract_int(cfg.get("seed"), 42)
         return RandomBurstCadenceStrategy(
@@ -269,9 +277,9 @@ def resolve_push_cadence_strategy(
 
     if mode == PushCadenceMode.POISSON_JITTER:
         min_d = _extract_float(cfg.get("min_delay_seconds"), 1.0)
-        max_d = _extract_float(cfg.get("max_delay_seconds"), 10.0)
+        max_d = max(min_d, _extract_float(cfg.get("max_delay_seconds"), 10.0))
         min_b = _extract_int(cfg.get("min_batch"), 1)
-        max_b = _extract_int(cfg.get("max_batch"), 5)
+        max_b = max(min_b, _extract_int(cfg.get("max_batch"), 5))
         seed = _extract_int(cfg.get("seed"), 42)
         return PoissonJitterCadenceStrategy(
             min_delay_seconds=min_d,
@@ -354,17 +362,21 @@ def _validate_random_burst_config(
             message="max_batch must be a positive integer.",
             details={"push_mode": PushCadenceMode.RANDOM_BURST.value},
         )
-    if (
-        isinstance(min_b, int)
-        and not isinstance(min_b, bool)
-        and isinstance(max_b, int)
-        and not isinstance(max_b, bool)
-        and min_b > max_b
-    ):
+    effective_min = min_b if (isinstance(min_b, int) and not isinstance(min_b, bool)) else 1
+    effective_max = max_b if (isinstance(max_b, int) and not isinstance(max_b, bool)) else 10
+    if effective_min > effective_max:
         return InvalidConnectionConfigError(
-            field_name="push_config.min_batch",
-            message="min_batch must be less than or equal to max_batch.",
-            details={"push_mode": PushCadenceMode.RANDOM_BURST.value},
+            field_name="push_config.min_batch" if max_b is None else "push_config.max_batch",
+            message=(
+                "min_batch cannot exceed default max_batch (10)."
+                if max_b is None
+                else "min_batch must be less than or equal to max_batch."
+            ),
+            details={
+                "push_mode": PushCadenceMode.RANDOM_BURST.value,
+                "min_batch": effective_min,
+                "max_batch": effective_max,
+            },
         )
     return None
 
@@ -390,17 +402,29 @@ def _validate_poisson_jitter_config(
             message="max_delay_seconds must be a positive number.",
             details={"push_mode": PushCadenceMode.POISSON_JITTER.value},
         )
-    if (
-        isinstance(min_d, (int, float))
-        and not isinstance(min_d, bool)
-        and isinstance(max_d, (int, float))
-        and not isinstance(max_d, bool)
-        and min_d > max_d
-    ):
+    effective_min_d = (
+        min_d if (isinstance(min_d, (int, float)) and not isinstance(min_d, bool)) else 1.0
+    )
+    effective_max_d = (
+        max_d if (isinstance(max_d, (int, float)) and not isinstance(max_d, bool)) else 10.0
+    )
+    if effective_min_d > effective_max_d:
         return InvalidConnectionConfigError(
-            field_name="push_config.min_delay_seconds",
-            message="min_delay_seconds cannot exceed max_delay_seconds.",
-            details={"push_mode": PushCadenceMode.POISSON_JITTER.value},
+            field_name=(
+                "push_config.min_delay_seconds"
+                if max_d is None
+                else "push_config.max_delay_seconds"
+            ),
+            message=(
+                "min_delay_seconds cannot exceed default max_delay_seconds (10.0)."
+                if max_d is None
+                else "min_delay_seconds cannot exceed max_delay_seconds."
+            ),
+            details={
+                "push_mode": PushCadenceMode.POISSON_JITTER.value,
+                "min_delay_seconds": effective_min_d,
+                "max_delay_seconds": effective_max_d,
+            },
         )
     return None
 
@@ -410,12 +434,15 @@ def _validate_cron_batch_config(
 ) -> InvalidConnectionConfigError | None:
     cron_expr = config.get("cron_expression")
     if cron_expr is not None and (
-        not isinstance(cron_expr, str) or len(cron_expr.strip().split()) != 5
+        not isinstance(cron_expr, str) or not croniter.is_valid(cron_expr)
     ):
         return InvalidConnectionConfigError(
             field_name="push_config.cron_expression",
-            message="cron_expression must be a standard 5-field cron string.",
-            details={"push_mode": PushCadenceMode.CRON_BATCH.value, "cron_expression": cron_expr},
+            message="cron_expression must be a valid standard 5-field cron string.",
+            details={
+                "push_mode": PushCadenceMode.CRON_BATCH.value,
+                "cron_expression": cron_expr,
+            },
         )
     return None
 

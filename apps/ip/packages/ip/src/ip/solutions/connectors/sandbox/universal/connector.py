@@ -246,11 +246,12 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             )
             return ()
         spec = entity_dto_to_stream_spec(entity)
+        effective_limit = min(max(1, limit), spec.records_per_pull)
         batch = self._synthesizer.synthesize_batch(
             spec,
             seed=cfg.seed,
             cursor=cursor,
-            limit=max(1, limit),
+            limit=effective_limit,
         )
         object_ids = tuple(env.record_id for env in batch)
         logger.info(
@@ -325,7 +326,7 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             return
 
         spec = entity_dto_to_stream_spec(entity)
-        effective_limit = max(1, limit)
+        effective_limit = min(max(1, limit), spec.records_per_pull)
         batch = self._synthesizer.synthesize_batch(
             spec,
             seed=cfg.seed,

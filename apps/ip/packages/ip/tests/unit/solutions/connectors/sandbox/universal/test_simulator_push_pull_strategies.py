@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -489,6 +490,17 @@ def test_opaque_token_strategy_round_trips_tokens() -> None:
     assert bad_res.is_err
     assert bad_res.unwrap_err().code == IpErrorCode.VALIDATION_FAILED
 
+    # Non-dict JSON token rejected
+    non_dict_token = base64.urlsafe_b64encode(b'"just a string"').decode()
+    non_dict_q = ExtractionQuery(
+        stream_name="ecommerce_orders",
+        mode=PullExtractionMode.OPAQUE_TOKEN,
+        token=non_dict_token,
+    )
+    non_dict_res = strategy.extract(ORDER_STREAM_SPEC, seed=42, query=non_dict_q)
+    assert non_dict_res.is_err
+    assert non_dict_res.unwrap_err().code == IpErrorCode.VALIDATION_FAILED
+
 
 def test_delta_cdc_strategy_decorates_operations() -> None:
     synthesizer = JsonSchemaRecordSynthesizer()
@@ -513,6 +525,20 @@ def test_delta_cdc_strategy_decorates_operations() -> None:
         cdc_v = r.data["_cdc_version"]
         assert isinstance(cdc_v, (int, str))
         assert int(cdc_v) > 10
+
+    # Resume from cursor when since_version is None
+    q_cursor = ExtractionQuery(
+        stream_name="ecommerce_orders",
+        mode=PullExtractionMode.DELTA_CDC,
+        cursor=slice_dto.next_cursor,
+        limit=4,
+    )
+    res_cursor = strategy.extract(ORDER_STREAM_SPEC, seed=42, query=q_cursor)
+    assert res_cursor.is_ok
+    slice_resumed = res_cursor.unwrap()
+    assert len(slice_resumed.records) == 4
+    first_resumed_v = int(slice_resumed.records[0].data["_cdc_version"])
+    assert first_resumed_v == int(slice_dto.next_cursor) + 1
 
 
 def test_rate_limited_429_strategy_throttles_excessive_polls() -> None:
@@ -833,7 +859,7 @@ async def test_read_stream_honours_caller_pull_limit() -> None:
         entity_name="telemetry",
         primary_key_field="order_id",
         cursor_field="updated_at",
-        records_per_pull=25,
+        records_per_pull=100,
         cursor_step_seconds=60,
         velocity_mode=StreamVelocityMode.ENTITY_TRANSACTIONAL,
         sample_blueprint={},
@@ -847,7 +873,7 @@ async def test_read_stream_honours_caller_pull_limit() -> None:
 
     connector = UniversalSchemaSimulatorConnector(entity_reader=repo)
 
-    # Ingestion pipeline requests 60 records; connector must fulfill up to 60, not clamp to 25
+    # Ingestion pipeline requests 60 records; connector fulfills caller limit up to stream records_per_pull
     pulled = [
         rec
         async for rec in connector.read_stream(

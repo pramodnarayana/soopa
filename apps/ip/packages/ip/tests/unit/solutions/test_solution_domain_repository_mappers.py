@@ -262,6 +262,85 @@ async def test_ip_solution_domain_repositories_round_trip_persistence() -> None:
             assert persisted_mr.transformation_version == 2
             assert persisted_mr.replay_count == 1
 
+            billing_dto = CanonicalBillingReadingDTO(
+                id="ip_mdmb_rt_1",
+                tenant_id=tenant_id,
+                trace_id="ip_trc_rt_1",
+                correlation_id="CORR-BR-1",
+                parent_trace_id="ip_trc_parent_1",
+                original_trace_id="ip_trc_orig_1",
+                replay_count=1,
+                source_connection_id="ip_conn_sap",
+                source_replica_id="ip_rep_br_1",
+                transformation_id="energy.sap_billing_reading",
+                transformation_version=1,
+                reading_id="BILL-RT-1",
+                meter_serial_number="MTR-RT-1",
+                service_point_id=None,
+                reading_timestamp=reading_ts,
+                kwh_delivered=120.5,
+                quality_flag="VALIDATED",
+                recorded_at=recorded_ts,
+            )
+            await energy_repo.save_billing_reading(billing_dto)
+
+            await energy_repo.update_billing_reading_service_point(
+                tenant_id,
+                reading_id="ip_mdmb_rt_1",
+                service_point_id="SP-EXT-RT-1",
+                trace_id="ip_trc_rt_patch",
+            )
+            persisted_br = await energy_repo.get_billing_reading_by_reading_id(
+                tenant_id, "BILL-RT-1"
+            )
+            assert persisted_br is not None
+            assert persisted_br.service_point_id == "SP-EXT-RT-1"
+
+            await energy_repo.soft_delete_billing_reading_by_id(
+                tenant_id,
+                reading_id="ip_mdmb_rt_1",
+                trace_id="ip_trc_rt_del",
+                parent_trace_id="ip_trc_p_del",
+                original_trace_id="ip_trc_o_del",
+                replay_count=3,
+            )
+            tombstoned_br = await energy_repo.get_billing_reading_by_reading_id(
+                tenant_id, "BILL-RT-1"
+            )
+            assert tombstoned_br is not None
+            assert tombstoned_br.quality_flag == "TOMBSTONED"
+            assert tombstoned_br.parent_trace_id == "ip_trc_p_del"
+            assert tombstoned_br.replay_count == 3
+
+            await energy_repo.soft_delete_meter_reading_by_id(
+                tenant_id,
+                reading_id="ip_mdmr_rt_1",
+                trace_id="ip_trc_rt_del2",
+                parent_trace_id="ip_trc_p_del2",
+                original_trace_id="ip_trc_o_del2",
+                replay_count=4,
+            )
+            tombstoned_mr = (await energy_repo.list_readings_by_meter(tenant_id, "MTR-RT-1"))[0]
+            assert tombstoned_mr.quality_flag == "TOMBSTONED"
+            assert tombstoned_mr.parent_trace_id == "ip_trc_p_del2"
+            assert tombstoned_mr.replay_count == 4
+
+            await energy_repo.soft_delete_service_point(
+                tenant_id,
+                service_point_external_id="SP-EXT-RT-1",
+                trace_id="ip_trc_rt_del3",
+                parent_trace_id="ip_trc_p_del3",
+                original_trace_id="ip_trc_o_del3",
+                replay_count=5,
+            )
+            tombstoned_sp = await energy_repo.get_service_point_by_external_id(
+                tenant_id, "SP-EXT-RT-1"
+            )
+            assert tombstoned_sp is not None
+            assert tombstoned_sp.status == "DELETED"
+            assert tombstoned_sp.parent_trace_id == "ip_trc_p_del3"
+            assert tombstoned_sp.replay_count == 5
+
             carrier_dto = CanonicalCarrierDTO(
                 id="ip_tmsc_rt_1",
                 tenant_id=tenant_id,

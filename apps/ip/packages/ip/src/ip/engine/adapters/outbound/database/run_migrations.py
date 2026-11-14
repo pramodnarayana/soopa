@@ -171,6 +171,10 @@ async def reconcile_global_simulator_schema(global_url: str) -> None:
                 text("SELECT to_regclass('ip.simulator_entities')")
             )
             if table_exists.scalar() is None:
+                logger.info(
+                    "ip_global_simulator_schema_reconciliation_skipped",
+                    reason="table_not_found",
+                )
                 return
 
             await session.execute(
@@ -183,6 +187,7 @@ async def reconcile_global_simulator_schema(global_url: str) -> None:
                 )
             )
             await session.commit()
+            logger.info("ip_global_simulator_schema_reconciled")
     finally:
         await provider.close()
 
