@@ -1,4 +1,4 @@
-"""CanonicalWriterPort adapters for Energy Smart Grid MDM tables (`mdm_meter_readings`, `mdm_service_points`)."""
+"""CanonicalWriterPort adapters for Energy Smart Grid MDM tables (`mdm_meter_readings`, `mdm_service_points`, `mdm_billing_readings`)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 
 from ip.engine.domain.enums import IpIdPrefix
-from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap
 from ip.engine.domain.normalization.registries import (
     CanonicalWriterRegistry,
 )
@@ -20,6 +20,7 @@ from ip.engine.ports.outbound.canonical_writer_port import (
 )
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 from ip.solutions.domains.energy.canonical import (
+    CanonicalBillingReadingDTO,
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,
     EnergyEntityType,
@@ -136,6 +137,9 @@ class SqlAlchemyMeterReadingCanonicalWriter(CanonicalWriterPort):
         replica_id: str,
         replica_version: int,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         canonical_id = await _resolve_or_create_canonical_id(
             uow,
@@ -146,22 +150,6 @@ class SqlAlchemyMeterReadingCanonicalWriter(CanonicalWriterPort):
             trace_id=trace_id,
             correlation_id=correlation_id,
         )
-        normalized_record = NormalizedRecord.create(
-            tenant_id=tenant_id,
-            connection_id=connection_id,
-            canonical_type=self.canonical_type,
-            source_id=source_id,
-            canonical_data={
-                **fields,
-                "canonical_id": canonical_id,
-                "transformation_id": transformation_id,
-                "transformation_version": transformation_version,
-                "extensions": dict(extensions),
-            },
-            trace_id=trace_id,
-            correlation_id=correlation_id,
-        )
-        await uow.normalized_records.save(normalized_record)
 
         repo = self._repo_factory(uow)
         if repo is not None:
@@ -170,6 +158,9 @@ class SqlAlchemyMeterReadingCanonicalWriter(CanonicalWriterPort):
                 tenant_id=tenant_id,
                 trace_id=trace_id,
                 correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
                 source_connection_id=connection_id,
                 source_replica_id=replica_id,
                 transformation_id=transformation_id,
@@ -208,6 +199,9 @@ class SqlAlchemyMeterReadingCanonicalWriter(CanonicalWriterPort):
         source_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         gem = await uow.entity_maps.get_by_source(
             tenant_id=tenant_id,
@@ -311,6 +305,9 @@ class SqlAlchemyServicePointCanonicalWriter(CanonicalWriterPort):
         replica_id: str,
         replica_version: int,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         canonical_id = await _resolve_or_create_canonical_id(
             uow,
@@ -321,22 +318,6 @@ class SqlAlchemyServicePointCanonicalWriter(CanonicalWriterPort):
             trace_id=trace_id,
             correlation_id=correlation_id,
         )
-        normalized_record = NormalizedRecord.create(
-            tenant_id=tenant_id,
-            connection_id=connection_id,
-            canonical_type=self.canonical_type,
-            source_id=source_id,
-            canonical_data={
-                **fields,
-                "canonical_id": canonical_id,
-                "transformation_id": transformation_id,
-                "transformation_version": transformation_version,
-                "extensions": dict(extensions),
-            },
-            trace_id=trace_id,
-            correlation_id=correlation_id,
-        )
-        await uow.normalized_records.save(normalized_record)
 
         repo = self._repo_factory(uow)
         if repo is not None:
@@ -345,6 +326,9 @@ class SqlAlchemyServicePointCanonicalWriter(CanonicalWriterPort):
                 tenant_id=tenant_id,
                 trace_id=trace_id,
                 correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
                 source_connection_id=connection_id,
                 source_replica_id=replica_id,
                 transformation_id=transformation_id,
@@ -379,6 +363,9 @@ class SqlAlchemyServicePointCanonicalWriter(CanonicalWriterPort):
         source_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         repo = self._repo_factory(uow)
         if repo is not None:
@@ -438,13 +425,146 @@ class SqlAlchemyServicePointCanonicalWriter(CanonicalWriterPort):
         return None
 
 
+class SqlAlchemyBillingReadingCanonicalWriter(CanonicalWriterPort):
+    """Persists normalized `MDM_BILLING_READING` entities via an injected `EnergyDomainRepositoryPort` factory."""
+
+    def __init__(self, repo_factory: EnergyRepoFactory) -> None:
+        self._repo_factory = repo_factory
+
+    @property
+    def canonical_type(self) -> str:
+        return EnergyEntityType.MDM_BILLING_READING.value
+
+    async def upsert(
+        self,
+        uow: IpDataPlaneUnitOfWorkPort,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        source_id: str,
+        fields: JsonDict,
+        extensions: JsonDict,
+        trace_id: str,
+        transformation_id: str,
+        transformation_version: int,
+        replica_id: str,
+        replica_version: int,
+        correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
+    ) -> None:
+        canonical_id = await _resolve_or_create_canonical_id(
+            uow,
+            tenant_id=tenant_id,
+            entity_domain=self.canonical_type,
+            connection_id=connection_id,
+            source_id=source_id,
+            trace_id=trace_id,
+            correlation_id=correlation_id,
+        )
+
+        repo = self._repo_factory(uow)
+        if repo is not None:
+            reading_id = str(fields.get("reading_id") or source_id)
+            meter_serial = str(
+                fields.get("meter_serial_number") or fields.get("meter_serial") or source_id
+            )
+            billing_dto = CanonicalBillingReadingDTO(
+                id=canonical_id,
+                tenant_id=tenant_id,
+                trace_id=trace_id,
+                correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
+                source_connection_id=connection_id,
+                source_replica_id=replica_id,
+                transformation_id=transformation_id,
+                transformation_version=transformation_version,
+                reading_id=reading_id,
+                meter_serial_number=meter_serial,
+                service_point_id=_parse_optional_str(fields.get("service_point_id")),
+                reading_timestamp=_parse_iso_datetime(fields.get("reading_timestamp")),
+                kwh_delivered=_parse_float(fields.get("kwh_delivered"), 0.0),
+                quality_flag=str(
+                    fields.get("quality_flag") or MeterReadingQualityFlag.VALIDATED.value
+                ),
+                recorded_at=datetime.now(UTC),
+            )
+            await repo.save_billing_reading(billing_dto)
+
+        logger.info(
+            "energy_billing_reading_canonical_upserted",
+            tenant_id=tenant_id,
+            connection_id=connection_id,
+            canonical_id=canonical_id,
+            source_id=source_id,
+            transformation_id=transformation_id,
+            transformation_version=transformation_version,
+            trace_id=trace_id,
+        )
+
+    async def soft_delete(
+        self,
+        uow: IpDataPlaneUnitOfWorkPort,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        source_id: str,
+        trace_id: str,
+        correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
+    ) -> None:
+        logger.info(
+            "energy_billing_reading_canonical_soft_deleted_noop",
+            tenant_id=tenant_id,
+            source_id=source_id,
+            trace_id=trace_id,
+        )
+
+    async def resolve_id(
+        self,
+        uow: IpDataPlaneUnitOfWorkPort,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        source_id: str,
+    ) -> str | None:
+        gem = await uow.entity_maps.get_by_source(
+            tenant_id=tenant_id,
+            entity_domain=self.canonical_type,
+            source_connection_id=connection_id,
+            source_entity_id=source_id,
+        )
+        if gem is None:
+            return None
+        return gem.canonical_id
+
+    async def resolve_reference(
+        self,
+        uow: IpDataPlaneUnitOfWorkPort,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        source_id: str,
+        field_name: str,
+        target_id: str,
+        trace_id: str,
+    ) -> None:
+        return None
+
+
 def register_energy_canonical_writers(
     registry: CanonicalWriterRegistryPort,
     repo_factory: EnergyRepoFactory,
 ) -> None:
-    """Register Energy Smart Grid MDM canonical writers (`MDM_METER_READING`, `MDM_SERVICE_POINT`)."""
+    """Register Energy Smart Grid MDM canonical writers (`MDM_METER_READING`, `MDM_SERVICE_POINT`, `MDM_BILLING_READING`)."""
     registry.register(SqlAlchemyMeterReadingCanonicalWriter(repo_factory=repo_factory))
     registry.register(SqlAlchemyServicePointCanonicalWriter(repo_factory=repo_factory))
+    registry.register(SqlAlchemyBillingReadingCanonicalWriter(repo_factory=repo_factory))
 
 
 def create_default_canonical_writer_registry(
@@ -458,6 +578,7 @@ def create_default_canonical_writer_registry(
 
 __all__ = [
     "EnergyRepoFactory",
+    "SqlAlchemyBillingReadingCanonicalWriter",
     "SqlAlchemyMeterReadingCanonicalWriter",
     "SqlAlchemyServicePointCanonicalWriter",
     "create_default_canonical_writer_registry",

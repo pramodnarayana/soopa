@@ -39,6 +39,10 @@ class SqlAlchemyReplicaRejectionRepository(
             reason=rejection.reason,
             detail=rejection.detail,
             trace_id=rejection.trace_id,
+            correlation_id=rejection.correlation_id,
+            parent_trace_id=rejection.parent_trace_id,
+            original_trace_id=rejection.original_trace_id,
+            replay_count=rejection.replay_count,
             created_at=rejection.created_at,
         )
 

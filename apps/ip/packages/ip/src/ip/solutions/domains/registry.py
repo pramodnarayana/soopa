@@ -19,6 +19,7 @@ ENERGY = DomainMigrationModule(
     owned_tables=(
         "mdm_meter_readings",
         "mdm_service_points",
+        "mdm_billing_readings",
     ),
 )
 

@@ -18,7 +18,10 @@ from ip.solutions.connectors.sandbox.universal.ports import (
     SimulatorRepositoryPort,
     SimulatorUnitOfWorkPort,
 )
-from ip.solutions.connectors.sandbox.universal.spec import StreamVelocityMode
+from ip.solutions.connectors.sandbox.universal.spec import (
+    PushCadenceMode,
+    StreamVelocityMode,
+)
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +47,8 @@ def _entity_record_to_dto(record: SimulatorEntityRecord) -> SimulatorEntityDTO:
         version=record.version,
         created_at=record.created_at,
         updated_at=record.updated_at,
+        push_mode=PushCadenceMode(record.push_mode),
+        push_config=dict(record.push_config),
     )
 
 
@@ -52,6 +57,8 @@ def _update_entity_record_from_dto(record: SimulatorEntityRecord, dto: Simulator
     record.entity_name = dto.entity_name
     record.primary_key_field = dto.primary_key_field
     record.cursor_field = dto.cursor_field
+    record.push_mode = dto.push_mode.value
+    record.push_config = dict(dto.push_config)
     record.records_per_pull = dto.records_per_pull
     record.cursor_step_seconds = dto.cursor_step_seconds
     record.velocity_mode = dto.velocity_mode.value
@@ -126,6 +133,8 @@ class SqlAlchemySimulatorRepository(SimulatorRepositoryPort):
             entity_name=entity.entity_name,
             primary_key_field=entity.primary_key_field,
             cursor_field=entity.cursor_field,
+            push_mode=entity.push_mode.value,
+            push_config=dict(entity.push_config),
             records_per_pull=entity.records_per_pull,
             cursor_step_seconds=entity.cursor_step_seconds,
             velocity_mode=entity.velocity_mode.value,

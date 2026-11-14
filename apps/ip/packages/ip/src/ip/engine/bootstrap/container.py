@@ -262,10 +262,15 @@ from ip.engine.domain.normalization.policies import (
 )
 from ip.engine.domain.normalization.registries import (
     CanonicalEntityRegistry,
+    CanonicalReaderRegistry,
     CanonicalWriterRegistry,
     TransformerRegistry,
 )
 from ip.engine.ports.outbound.auth_resolver_port import AuthStrategyResolverPort
+from ip.engine.ports.outbound.canonical_reader_port import (
+    CanonicalReaderPort,
+    CanonicalReaderRegistryPort,
+)
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
 from ip.engine.ports.outbound.catalog_registry_port import (
     CatalogAppSummaryDTO,
@@ -336,6 +341,11 @@ def create_empty_canonical_writer_registry() -> CanonicalWriterRegistry[Canonica
     return CanonicalWriterRegistry()
 
 
+def create_empty_canonical_reader_registry() -> CanonicalReaderRegistry[CanonicalReaderPort]:
+    """Creates an empty domain-agnostic L3 CanonicalReaderRegistry."""
+    return CanonicalReaderRegistry()
+
+
 def create_empty_workflow_definition_registry() -> InMemoryWorkflowDefinitionRegistry:
     """Creates an empty domain-agnostic L4 InMemoryWorkflowDefinitionRegistry."""
     return InMemoryWorkflowDefinitionRegistry()
@@ -375,6 +385,7 @@ def create_ip_data_plane_uow(
     storage: TieredStoragePort | None = None,
     *,
     domain_repository_factories: Mapping[str, DomainRepositoryFactory] | None = None,
+    reader_registry: CanonicalReaderRegistryPort | None = None,
 ) -> SqlAlchemyIpDataPlaneUnitOfWork:
     """Composition root factory assembling SqlAlchemyIpDataPlaneUnitOfWork with concrete repositories."""
     resolved_domain_repos = {
@@ -386,7 +397,9 @@ def create_ip_data_plane_uow(
         inbound_records=SqlAlchemyInboundRecordRepository(tenant_session, storage=storage),
         replica_records=SqlAlchemyReplicaRecordRepository(tenant_session),
         replica_rejections=SqlAlchemyReplicaRejectionRepository(tenant_session),
-        normalized_records=SqlAlchemyNormalizedRecordRepository(tenant_session),
+        normalized_records=SqlAlchemyNormalizedRecordRepository(
+            tenant_session, reader_registry=reader_registry
+        ),
         entity_maps=SqlAlchemyGlobalEntityMapRepository(tenant_session),
         outbound_records=SqlAlchemyOutboundRecordRepository(tenant_session, storage=storage),
         quarantine_records=SqlAlchemyQuarantineRecordRepository(tenant_session),
@@ -414,6 +427,7 @@ def create_ip_tenant_uow_provider(
     storage: TieredStoragePort | None = None,
     *,
     domain_repository_factories: Mapping[str, DomainRepositoryFactory] | None = None,
+    reader_registry: CanonicalReaderRegistryPort | None = None,
 ) -> SqlAlchemyIpTenantUoWProvider:
     """Composition root factory assembling SqlAlchemyIpTenantUoWProvider."""
     return SqlAlchemyIpTenantUoWProvider(
@@ -423,6 +437,7 @@ def create_ip_tenant_uow_provider(
             session,
             storage=storage,
             domain_repository_factories=domain_repository_factories,
+            reader_registry=reader_registry,
         ),
     )
 
@@ -755,11 +770,15 @@ class Container(containers.DeclarativeContainer):
     domain_repository_factories: providers.Object[Mapping[str, DomainRepositoryFactory]] = (
         providers.Object({})
     )
+    reader_registry: providers.Singleton[CanonicalReaderRegistry[CanonicalReaderPort]] = (
+        providers.Singleton(create_empty_canonical_reader_registry)
+    )
     cp_uow = providers.Factory(create_ip_control_plane_uow)
     dp_uow = providers.Factory(
         create_ip_data_plane_uow,
         storage=tiered_storage,
         domain_repository_factories=domain_repository_factories,
+        reader_registry=reader_registry,
     )
     dp_uow_provider = providers.Factory(
         create_ip_tenant_uow_provider,
@@ -767,6 +786,7 @@ class Container(containers.DeclarativeContainer):
         db_router=db_router,
         storage=tiered_storage,
         domain_repository_factories=domain_repository_factories,
+        reader_registry=reader_registry,
     )
 
     # -----------------------------------------------------------------------
@@ -996,6 +1016,7 @@ __all__ = [
     "SessionScopedOutboundDeliveryStager",
     "create_default_stage_replay_processors",
     "create_default_stitch_catalog",
+    "create_empty_canonical_reader_registry",
     "create_empty_canonical_writer_registry",
     "create_empty_transformer_registry",
     "create_empty_workflow_definition_registry",

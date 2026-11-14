@@ -9,12 +9,14 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ip.solutions.domains.energy.canonical import (
+    CanonicalBillingReadingDTO,
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,
     MeterReadingQualityFlag,
     ServicePointStatus,
 )
 from ip.solutions.domains.energy.models import (
+    MdmBillingReadingRecord,
     MdmMeterReadingRecord,
     MdmServicePointRecord,
 )
@@ -123,6 +125,52 @@ class SqlAlchemyEnergyDomainRepository(EnergyDomainRepositoryPort):
             grid_region=dto.grid_region,
             status=dto.status,
             updated_at=dto.updated_at,
+        )
+
+    @staticmethod
+    def _to_billing_reading_dto(orm: MdmBillingReadingRecord) -> CanonicalBillingReadingDTO:
+        return CanonicalBillingReadingDTO(
+            id=orm.id,
+            tenant_id=orm.tenant_id,
+            trace_id=orm.trace_id,
+            correlation_id=orm.correlation_id,
+            parent_trace_id=orm.parent_trace_id,
+            original_trace_id=orm.original_trace_id,
+            replay_count=orm.replay_count,
+            source_connection_id=orm.source_connection_id,
+            source_replica_id=orm.source_replica_id,
+            transformation_id=orm.transformation_id,
+            transformation_version=orm.transformation_version,
+            reading_id=orm.reading_id,
+            meter_serial_number=orm.meter_serial_number,
+            service_point_id=orm.service_point_id,
+            reading_timestamp=orm.reading_timestamp,
+            kwh_delivered=orm.kwh_delivered,
+            quality_flag=orm.quality_flag,
+            recorded_at=orm.recorded_at,
+        )
+
+    @staticmethod
+    def _to_billing_reading_orm(dto: CanonicalBillingReadingDTO) -> MdmBillingReadingRecord:
+        return MdmBillingReadingRecord(
+            id=dto.id,
+            tenant_id=dto.tenant_id,
+            trace_id=dto.trace_id,
+            correlation_id=dto.correlation_id,
+            parent_trace_id=dto.parent_trace_id,
+            original_trace_id=dto.original_trace_id,
+            replay_count=dto.replay_count,
+            source_connection_id=dto.source_connection_id,
+            source_replica_id=dto.source_replica_id,
+            transformation_id=dto.transformation_id,
+            transformation_version=dto.transformation_version,
+            reading_id=dto.reading_id,
+            meter_serial_number=dto.meter_serial_number,
+            service_point_id=dto.service_point_id,
+            reading_timestamp=dto.reading_timestamp,
+            kwh_delivered=dto.kwh_delivered,
+            quality_flag=dto.quality_flag,
+            recorded_at=dto.recorded_at,
         )
 
     async def save_meter_reading(self, dto: CanonicalMeterReadingDTO) -> None:
@@ -248,3 +296,46 @@ class SqlAlchemyEnergyDomainRepository(EnergyDomainRepositoryPort):
         )
         await self._session.execute(stmt)
         await self._session.flush()
+
+    async def save_billing_reading(self, dto: CanonicalBillingReadingDTO) -> None:
+        orm = self._to_billing_reading_orm(dto)
+        await self._session.merge(orm)
+        await self._session.flush()
+
+    async def get_billing_reading_by_reading_id(
+        self,
+        tenant_id: str,
+        reading_id: str,
+    ) -> CanonicalBillingReadingDTO | None:
+        stmt = (
+            select(MdmBillingReadingRecord)
+            .where(
+                MdmBillingReadingRecord.tenant_id == tenant_id,
+                MdmBillingReadingRecord.reading_id == reading_id,
+            )
+            .order_by(MdmBillingReadingRecord.reading_timestamp.desc())
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        orm = result.scalar_one_or_none()
+        if orm is None:
+            return None
+        return self._to_billing_reading_dto(orm)
+
+    async def list_billing_readings_by_meter(
+        self,
+        tenant_id: str,
+        meter_serial_number: str,
+        limit: int = 100,
+    ) -> Sequence[CanonicalBillingReadingDTO]:
+        stmt = (
+            select(MdmBillingReadingRecord)
+            .where(
+                MdmBillingReadingRecord.tenant_id == tenant_id,
+                MdmBillingReadingRecord.meter_serial_number == meter_serial_number,
+            )
+            .order_by(MdmBillingReadingRecord.reading_timestamp.desc())
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_billing_reading_dto(r) for r in result.scalars().all()]

@@ -554,6 +554,8 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                         entity_name VARCHAR(128) NOT NULL,
                         primary_key_field VARCHAR(128) NOT NULL,
                         cursor_field VARCHAR(128) NOT NULL,
+                        push_mode VARCHAR(32) NOT NULL DEFAULT 'RANDOM_BURST',
+                        push_config JSONB NOT NULL DEFAULT '{}'::jsonb,
                         records_per_pull INTEGER NOT NULL DEFAULT 25,
                         cursor_step_seconds INTEGER NOT NULL DEFAULT 60,
                         velocity_mode VARCHAR(32) NOT NULL DEFAULT 'ENTITY_TRANSACTIONAL',
@@ -565,6 +567,13 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         CONSTRAINT uq_ip_simulator_entity_conn_name UNIQUE (tenant_id, connection_id, entity_name)
                     );
+                    """)
+                )
+                await session.execute(
+                    text("""
+                    ALTER TABLE ip.simulator_entities
+                    ADD COLUMN IF NOT EXISTS push_mode VARCHAR(32) NOT NULL DEFAULT 'RANDOM_BURST',
+                    ADD COLUMN IF NOT EXISTS push_config JSONB NOT NULL DEFAULT '{}'::jsonb;
                     """)
                 )
                 await session.commit()

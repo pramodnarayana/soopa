@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import structlog
 from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
+from ip.solutions.connectors.sandbox.universal.cadence import validate_push_cadence_config
 from ip.solutions.connectors.sandbox.universal.chaos import SimulatorChaosPolicy
 from ip.solutions.connectors.sandbox.universal.dto import SimulatorEntityDTO
 from ip.solutions.connectors.sandbox.universal.inference import (
@@ -18,7 +19,10 @@ from ip.solutions.connectors.sandbox.universal.ports import (
     SimulatorEntityNotFoundError,
     SimulatorUnitOfWorkPort,
 )
-from ip.solutions.connectors.sandbox.universal.spec import StreamVelocityMode
+from ip.solutions.connectors.sandbox.universal.spec import (
+    PushCadenceMode,
+    StreamVelocityMode,
+)
 from ip.solutions.connectors.sandbox.universal.use_cases.connection_guard import (
     lock_simulator_connection,
     validate_simulator_entity_bounds,
@@ -39,6 +43,8 @@ class UpdateSimulatorEntityCommand:
     sample_blueprint: JsonValue | None = None
     primary_key_field: str | None = None
     cursor_field: str | None = None
+    push_mode: PushCadenceMode | None = None
+    push_config: Mapping[str, JsonValue] | None = None
     records_per_pull: int | None = None
     cursor_step_seconds: int | None = None
     velocity_mode: StreamVelocityMode | None = None
@@ -111,6 +117,18 @@ class UpdateSimulatorEntityUseCase:
             if bounds_err is not None:
                 return Result.fail(bounds_err)
 
+            next_push_mode = (
+                command.push_mode if command.push_mode is not None else existing.push_mode
+            )
+            next_push_config = (
+                dict(command.push_config)
+                if command.push_config is not None
+                else dict(existing.push_config)
+            )
+            cadence_err = validate_push_cadence_config(next_push_mode, next_push_config)
+            if cadence_err is not None:
+                return Result.fail(cadence_err)
+
             target_name = (
                 command.entity_name if command.entity_name is not None else existing.entity_name
             )
@@ -158,6 +176,8 @@ class UpdateSimulatorEntityUseCase:
                 entity_name=validated.entity_name,
                 primary_key_field=validated.primary_key_field,
                 cursor_field=validated.cursor_field,
+                push_mode=next_push_mode,
+                push_config=next_push_config,
                 records_per_pull=next_records_per_pull,
                 cursor_step_seconds=next_cursor_step,
                 velocity_mode=(

@@ -29,8 +29,12 @@ from ip.engine.bootstrap.container import (
 )
 from ip.engine.bootstrap.workers.ip_delivery_worker import IpDeliveryWorkerModule
 from ip.engine.bootstrap.workers.ip_orchestrator_worker import IpOrchestratorWorkerModule
-from ip.engine.domain.normalization.registries import CanonicalWriterRegistry
+from ip.engine.domain.normalization.registries import (
+    CanonicalReaderRegistry,
+    CanonicalWriterRegistry,
+)
 from ip.engine.ports.outbound.auth_resolver_port import AuthStrategyResolverPort
+from ip.engine.ports.outbound.canonical_reader_port import CanonicalReaderPort
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
@@ -55,6 +59,7 @@ from ip.solutions.domains.energy.ports import (
     ENERGY_DOMAIN_REPOSITORY_KEY,
     EnergyDomainRepositoryPort,
 )
+from ip.solutions.domains.energy.readers import create_default_canonical_reader_registry
 from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
 from ip.solutions.domains.energy.writers import create_default_canonical_writer_registry
 from ip.solutions.domains.tms.ports import TMS_DOMAIN_REPOSITORY_KEY
@@ -153,6 +158,11 @@ def create_solution_canonical_writer_registry() -> CanonicalWriterRegistry[Canon
     return create_default_canonical_writer_registry(repo_factory=resolve_energy_domain_repo)
 
 
+def create_solution_canonical_reader_registry() -> CanonicalReaderRegistry[CanonicalReaderPort]:
+    """Creates a CanonicalReaderRegistry populated with built-in vertical domain readers."""
+    return create_default_canonical_reader_registry()
+
+
 def create_solution_data_plane_uow(
     tenant_session: AsyncSession,
     storage: TieredStoragePort | None = None,
@@ -162,6 +172,7 @@ def create_solution_data_plane_uow(
         tenant_session,
         storage=storage,
         domain_repository_factories=SOLUTION_DOMAIN_REPOSITORY_FACTORIES,
+        reader_registry=create_solution_canonical_reader_registry(),
     )
 
 
@@ -187,6 +198,9 @@ def configure_solution_container(container: Container) -> Container:
     )
     container.writer_registry.override(
         providers.Singleton(create_solution_canonical_writer_registry)
+    )
+    container.reader_registry.override(
+        providers.Singleton(create_solution_canonical_reader_registry)
     )
     container.stitch_catalog.override(providers.Singleton(create_solution_stitch_catalog))
     container.workflow_definition_registry.override(
@@ -214,6 +228,7 @@ def create_solution_api_provider(
             entity_reader=entity_reader,
         ),
         transformer_registry_factory=create_default_transformer_registry,
+        reader_registry_factory=create_solution_canonical_reader_registry,
         stitch_catalog_factory=create_solution_stitch_catalog,
         workflow_definition_registry_factory=create_default_workflow_definition_registry,
         domain_repository_factories=SOLUTION_DOMAIN_REPOSITORY_FACTORIES,
@@ -274,6 +289,7 @@ __all__ = [
     "SolutionSimulatorApiProvider",
     "configure_solution_container",
     "create_solution_api_provider",
+    "create_solution_canonical_reader_registry",
     "create_solution_canonical_writer_registry",
     "create_solution_catalog_registry",
     "create_solution_data_plane_uow",

@@ -67,8 +67,10 @@ from ip.engine.ports.outbound.transformation_repository_port import (
     TransformationRepositoryPort,
 )
 from ip.engine.ports.outbound.uow import (
+    DomainRepositoryKey,
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
+    TDomainRepo,
 )
 from security.ports.cipher_port import CipherPort
 from seedwork.domain.types import JsonDict, JsonValue
@@ -86,6 +88,7 @@ from helpers.trace_fakes import (
     InMemoryReplicaRecordRepo,
     InMemoryTraceRepo,
 )
+from helpers.worker_fakes import InMemoryBatchManifestRepo
 
 
 class FakeCipher(CipherPort):
@@ -394,6 +397,12 @@ class FakeControlPlaneUnitOfWork(IpControlPlaneUnitOfWorkPort):
     async def rollback(self) -> None:
         pass
 
+    def resolve_domain_repository(
+        self, key: DomainRepositoryKey[TDomainRepo]
+    ) -> TDomainRepo | None:
+        _ = key
+        return None
+
 
 class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
     def __init__(self) -> None:
@@ -410,6 +419,7 @@ class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
         )
         self.pending_references: PendingReferenceRepositoryPort = DummyPendingRefRepo()
         self.traces: TraceRepositoryPort = InMemoryTraceRepo()
+        self.batch_manifests = InMemoryBatchManifestRepo()
         self.commits = 0
 
     async def __aenter__(self) -> FakeDataPlaneUnitOfWork:
@@ -438,6 +448,12 @@ class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
 
     async def rollback(self) -> None:
         pass
+
+    def resolve_domain_repository(
+        self, key: DomainRepositoryKey[TDomainRepo]
+    ) -> TDomainRepo | None:
+        _ = key
+        return None
 
 
 class FakeTieredStorage(TieredStoragePort):

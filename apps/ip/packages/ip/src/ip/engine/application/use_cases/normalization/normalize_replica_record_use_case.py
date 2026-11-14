@@ -678,6 +678,9 @@ class NormalizeReplicaRecordUseCase:
                     source_id=source_id,
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
+                    parent_trace_id=command.parent_trace_id,
+                    original_trace_id=command.original_trace_id,
+                    replay_count=command.replay_count,
                 )
             ledger_entry.record_canonical_tombstone(
                 connection_id=command.connection_id,
@@ -845,6 +848,9 @@ class NormalizeReplicaRecordUseCase:
                     extensions=draft.extensions,
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
+                    parent_trace_id=command.parent_trace_id,
+                    original_trace_id=command.original_trace_id,
+                    replay_count=command.replay_count,
                     transformation_id=transformation.transformation_id,
                     transformation_version=transformation.transformation_version,
                     replica_id=command.replica_record_id,
@@ -919,6 +925,9 @@ class NormalizeReplicaRecordUseCase:
                     source_id=source_id,
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
+                    parent_trace_id=command.parent_trace_id,
+                    original_trace_id=command.original_trace_id,
+                    replay_count=command.replay_count,
                 )
             ledger_entry.record_unseen_draft_tombstone(
                 connection_id=command.connection_id,

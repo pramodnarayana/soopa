@@ -417,6 +417,9 @@ class ProcessInboundRangeUseCase:
                         source_inbound_record_id=inbound.id,
                         trace_id=rec_trace_id,
                         correlation_id=rec_corr_id,
+                        parent_trace_id=inbound.parent_trace_id,
+                        original_trace_id=inbound.original_trace_id,
+                        replay_count=inbound.replay_count,
                         is_deleted=extracted_rec.is_deleted,
                     )
                 )
@@ -432,6 +435,10 @@ class ProcessInboundRangeUseCase:
                         reason=rej.reason.value,
                         detail=rej.detail,
                         trace_id=rec_trace_id,
+                        correlation_id=rec_corr_id,
+                        parent_trace_id=inbound.parent_trace_id,
+                        original_trace_id=inbound.original_trace_id,
+                        replay_count=inbound.replay_count,
                         created_at=now,
                     )
                 )

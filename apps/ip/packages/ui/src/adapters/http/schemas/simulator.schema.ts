@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SimulatorVelocityMode } from '../../../domain/simulator';
+import { PushCadenceMode, SimulatorVelocityMode } from '../../../domain/simulator';
 
 export const SimulatorBlueprintWireSchema = z.union([
   z.record(z.string(), z.unknown()),
@@ -13,7 +13,20 @@ export const SimulatorEntityWireSchema = z.object({
   entity_name: z.string(),
   primary_key_field: z.string(),
   cursor_field: z.string(),
-  records_per_pull: z.number(),
+  push_mode: z
+    .enum([
+      PushCadenceMode.MANUAL,
+      PushCadenceMode.RANDOM_BURST,
+      PushCadenceMode.CONSTANT_PACED,
+      PushCadenceMode.POISSON_JITTER,
+      PushCadenceMode.CRON_BATCH,
+      PushCadenceMode.CHAOS_FAULT,
+      PushCadenceMode.DIURNAL_WAVE,
+      PushCadenceMode.THIN_PUSH,
+    ])
+    .default(PushCadenceMode.RANDOM_BURST),
+  push_config: z.record(z.string(), z.unknown()).default({}),
+  records_per_pull: z.number().default(25),
   cursor_step_seconds: z.number().default(60),
   velocity_mode: z
     .enum([SimulatorVelocityMode.ENTITY_TRANSACTIONAL, SimulatorVelocityMode.TIMESERIES_COLUMNAR])

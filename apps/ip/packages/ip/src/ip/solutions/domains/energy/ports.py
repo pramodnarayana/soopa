@@ -7,6 +7,7 @@ from typing import Protocol, runtime_checkable
 
 from ip.engine.ports.outbound.uow import DomainRepositoryKey
 from ip.solutions.domains.energy.canonical import (
+    CanonicalBillingReadingDTO,
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,
 )
@@ -56,6 +57,21 @@ class EnergyDomainRepositoryPort(Protocol):
         service_point_id: str,
         trace_id: str,
     ) -> None: ...
+
+    async def save_billing_reading(self, dto: CanonicalBillingReadingDTO) -> None: ...
+
+    async def get_billing_reading_by_reading_id(
+        self,
+        tenant_id: str,
+        reading_id: str,
+    ) -> CanonicalBillingReadingDTO | None: ...
+
+    async def list_billing_readings_by_meter(
+        self,
+        tenant_id: str,
+        meter_serial_number: str,
+        limit: int = 100,
+    ) -> Sequence[CanonicalBillingReadingDTO]: ...
 
 
 def _narrow_energy_domain_repository(

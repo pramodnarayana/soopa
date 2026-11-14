@@ -21,6 +21,7 @@ depends_on: str | Sequence[str] | None = "0001_engine_core_schema"
 _ENERGY_TABLES: tuple[str, ...] = (
     "mdm_meter_readings",
     "mdm_service_points",
+    "mdm_billing_readings",
 )
 
 
@@ -107,6 +108,47 @@ def upgrade() -> None:
     )
     op.create_index("idx_mdm_sp_meter", "mdm_service_points", ["tenant_id", "meter_serial_number"])
     op.create_index("idx_mdm_sp_trace", "mdm_service_points", ["tenant_id", "trace_id"])
+
+    op.create_table(
+        "mdm_billing_readings",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("parent_trace_id", sa.String(length=64), nullable=True),
+        sa.Column("original_trace_id", sa.String(length=64), nullable=True),
+        sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("source_connection_id", sa.String(length=64), nullable=False),
+        sa.Column("source_replica_id", sa.String(length=64), nullable=False),
+        sa.Column(
+            "transformation_id",
+            sa.String(length=128),
+            server_default="energy.sap_billing_reading",
+            nullable=False,
+        ),
+        sa.Column(
+            "transformation_version",
+            sa.Integer(),
+            server_default=sa.text("1"),
+            nullable=False,
+        ),
+        sa.Column("reading_id", sa.String(length=128), nullable=False),
+        sa.Column("meter_serial_number", sa.String(length=128), nullable=False),
+        sa.Column("service_point_id", sa.String(length=128), nullable=True),
+        sa.Column("reading_timestamp", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("kwh_delivered", sa.Float(), nullable=False),
+        sa.Column("quality_flag", sa.String(length=32), server_default="VALIDATED", nullable=False),
+        sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id", "reading_timestamp"),
+    )
+    op.create_index(
+        "idx_mdm_billing_meter_ts",
+        "mdm_billing_readings",
+        ["tenant_id", "meter_serial_number", "reading_timestamp"],
+    )
+    op.create_index("idx_mdm_billing_sp", "mdm_billing_readings", ["tenant_id", "service_point_id"])
+    op.create_index("idx_mdm_billing_trace", "mdm_billing_readings", ["tenant_id", "trace_id"])
+    op.create_index("idx_mdm_billing_reading_id", "mdm_billing_readings", ["tenant_id", "reading_id"])
 
     for table_name in _ENERGY_TABLES:
         apply_tenant_isolation(op, table_name)

@@ -18,8 +18,12 @@ from ip.engine.adapters.outbound.inbound.verifiers import NoOpVerifier
 from ip.engine.application.use_cases.connections.token_manager_service import TokenManagerService
 from ip.engine.application.use_cases.ingestion.receive_push_use_case import ReceivePushUseCase
 from ip.engine.domain.connection.connection import Connection
-from ip.engine.domain.connection.enums import AuthType, PropertyType
-from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.exceptions import (
+    IpErrorCode,
+    Result,
+    TenantShardNotFoundError,
+)
 from ip.engine.ports.outbound.connector_port import WriteRecordCommand
 from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkPort,
@@ -53,6 +57,7 @@ from ip.solutions.connectors.sandbox.universal.synthesizer import (
     MAX_SYNTHESIS_DIGITS,
     JsonSchemaRecordSynthesizer,
 )
+from seedwork.domain.types import JsonDict
 from unit.solutions.connectors.sandbox.universal.simulator_fakes import (
     FakeSimulatorUnitOfWork,
     InMemorySimulatorRepository,
@@ -64,14 +69,15 @@ class _StaticDataPlaneUoWProvider(IpDataPlaneUnitOfWorkProviderPort):
         self._uow = uow
         self.checkouts = 0
 
-    async def resolve_shard_info(self, tenant_id: str) -> Result[tuple[str, str], IpError]:
+    async def resolve_shard_info(
+        self, tenant_id: str
+    ) -> Result[tuple[str, str], TenantShardNotFoundError]:
         _ = tenant_id
         return Result.ok(("ip_shard_1", "in-memory://ip-shard-1"))
 
     @contextlib.asynccontextmanager
     async def get_data_plane_uow(
         self,
-        *,
         tenant_id: str,
         shard_id: str,
         shard_dsn: str,
@@ -103,7 +109,7 @@ async def _seed_simulator_connection(
 
 
 def test_infer_schema_from_single_sample_json_detects_formats() -> None:
-    sample = {
+    sample: JsonDict = {
         "order_id": "ORD-00105",
         "customer_email": "alice@example.com",
         "amount": 149.95,
@@ -115,12 +121,24 @@ def test_infer_schema_from_single_sample_json_detects_formats() -> None:
     assert schema["type"] == "object"
     props = schema["properties"]
     assert isinstance(props, dict)
-    assert props["order_id"]["x_prefix"] == "ORD-"
-    assert props["customer_email"]["format"] == "email"
-    assert props["amount"]["type"] == "number"
-    assert props["item_count"]["type"] == "integer"
-    assert props["is_priority"]["type"] == "boolean"
-    assert props["updated_at"]["format"] == "date-time"
+    order_id_def = props["order_id"]
+    assert isinstance(order_id_def, dict)
+    assert order_id_def["x_prefix"] == "ORD-"
+    email_def = props["customer_email"]
+    assert isinstance(email_def, dict)
+    assert email_def["format"] == "email"
+    amount_def = props["amount"]
+    assert isinstance(amount_def, dict)
+    assert amount_def["type"] == "number"
+    count_def = props["item_count"]
+    assert isinstance(count_def, dict)
+    assert count_def["type"] == "integer"
+    priority_def = props["is_priority"]
+    assert isinstance(priority_def, dict)
+    assert priority_def["type"] == "boolean"
+    updated_def = props["updated_at"]
+    assert isinstance(updated_def, dict)
+    assert updated_def["format"] == "date-time"
 
 
 async def test_entity_use_cases_enforce_tenant_connection_ownership() -> None:
@@ -275,13 +293,10 @@ async def test_connector_executes_no_auth_discover_pull_fetch_write_with_typed_s
     connector = UniversalSchemaSimulatorConnector(entity_reader=repo)
     spec = connector.spec()
     assert spec.auth_type == AuthType.NO_AUTH
-    prop_map = {p.name: p for p in spec.properties}
-    assert set(prop_map.keys()) == {"seed", "records_per_pull"}
-    assert prop_map["seed"].type == PropertyType.NUMBER
-    assert prop_map["seed"].required is False
+    assert spec.properties == ()
 
     good_check = await connector.check(
-        public_config={"seed": 77, "records_per_pull": 25},
+        public_config={},
         credentials={},
     )
     assert good_check.success is True

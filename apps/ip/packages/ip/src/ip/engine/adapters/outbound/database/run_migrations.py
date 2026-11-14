@@ -162,6 +162,31 @@ async def reconcile_global_no_auth_connection_constraint(global_url: str) -> Non
         await provider.close()
 
 
+async def reconcile_global_simulator_schema(global_url: str) -> None:
+    """Ensure `push_mode` and `push_config` columns exist on `ip.simulator_entities`."""
+    provider = DatabaseProvider.from_url(global_url)
+    try:
+        async with provider.session() as session:
+            table_exists = await session.execute(
+                text("SELECT to_regclass('ip.simulator_entities')")
+            )
+            if table_exists.scalar() is None:
+                return
+
+            await session.execute(
+                text(
+                    """
+                    ALTER TABLE ip.simulator_entities
+                    ADD COLUMN IF NOT EXISTS push_mode VARCHAR(32) NOT NULL DEFAULT 'RANDOM_BURST',
+                    ADD COLUMN IF NOT EXISTS push_config JSONB NOT NULL DEFAULT '{}'::jsonb;
+                    """
+                )
+            )
+            await session.commit()
+    finally:
+        await provider.close()
+
+
 async def fetch_tenant_shard_urls(global_url: str, overrides: Mapping[str, str]) -> list[str]:
     """Connect to the global DB and fetch all registered IP shard URLs."""
     return await fetch_prefixed_shard_urls(
@@ -216,6 +241,7 @@ def run_migrations() -> None:
     global_cfg.set_main_option("sqlalchemy.url", settings.global_url.replace("%", "%%"))
     command.upgrade(global_cfg, "heads")
     asyncio.run(reconcile_global_no_auth_connection_constraint(settings.global_url))
+    asyncio.run(reconcile_global_simulator_schema(settings.global_url))
     logger.info("ip_global_migrations_completed")
 
     # 2. Tenant Data Plane shard migrations

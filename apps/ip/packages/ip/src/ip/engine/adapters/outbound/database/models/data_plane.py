@@ -74,7 +74,7 @@ class InboundRecordModel(IpTenantBase, TenantTraceableOrmModel):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
-class ReplicaRecordModel(IpTenantBase):
+class ReplicaRecordModel(IpTenantBase, TenantTraceableOrmModel):
     """Database record representation of the replica_records table in tenant shards."""
 
     __tablename__ = "replica_records"
@@ -113,17 +113,16 @@ class ReplicaRecordModel(IpTenantBase):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     source_inbound_record_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
-    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
-class ReplicaRejectionModel(IpTenantBase):
+class ReplicaRejectionModel(IpTenantBase, TenantTraceableOrmModel):
     """Database record representation of rejected records at Layer 2."""
 
     __tablename__ = "replica_rejections"
     __table_args__ = (
         Index("idx_rejection_tenant_conn", "tenant_id", "connection_id", "stream"),
         Index("idx_rejection_trace", "tenant_id", "trace_id"),
+        Index("idx_rejection_corr", "tenant_id", "correlation_id"),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -134,7 +133,6 @@ class ReplicaRejectionModel(IpTenantBase):
     record_index: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(String(64), nullable=False)
     detail: Mapped[str] = mapped_column(Text, nullable=False)
-    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
