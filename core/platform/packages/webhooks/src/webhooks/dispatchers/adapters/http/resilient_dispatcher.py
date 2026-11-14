@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlsplit, urlunsplit
+
 import httpx
 import structlog
 from shttp import (
@@ -15,10 +17,24 @@ from shttp import (
 )
 
 from webhooks.crypto.hmac_signer import sign_payload
-from webhooks.dispatchers.domain.models import WebhookDeliveryResult, WebhookDispatchCommand
+from webhooks.dispatchers.domain.models import (
+    WebhookDeliveryFailureType,
+    WebhookDeliveryResult,
+    WebhookDispatchCommand,
+)
 from webhooks.dispatchers.ports.webhook_dispatcher_port import WebhookDispatcherPort
 
 logger = structlog.get_logger(__name__)
+
+
+def sanitize_url(raw_url: str) -> str:
+    """Sanitizes a URL for telemetry by removing credentials, query parameters, and fragments."""
+    try:
+        parts = urlsplit(raw_url)
+        netloc = parts.netloc.split("@")[-1] if "@" in parts.netloc else parts.netloc
+        return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+    except (ValueError, TypeError, AttributeError):
+        return "[REDACTED_URL]"
 
 
 class ResilientWebhookDispatcher(WebhookDispatcherPort):
@@ -49,10 +65,11 @@ class ResilientWebhookDispatcher(WebhookDispatcherPort):
             self._client = client
 
     async def dispatch(self, command: WebhookDispatchCommand) -> WebhookDeliveryResult:
+        sanitized_url = sanitize_url(command.url)
         log = logger.bind(
             tenant_id=command.tenant_id,
             subscription_id=command.subscription_id,
-            url=command.url,
+            url=sanitized_url,
             event_type=command.event_type,
         )
 
@@ -99,30 +116,34 @@ class ResilientWebhookDispatcher(WebhookDispatcherPort):
                 response_body=text,
                 is_success=is_success,
                 error_message=None if is_success else f"HTTP {status_code}: {text}",
+                failure_type=None if is_success else WebhookDeliveryFailureType.HTTP_ERROR,
             )
         except SsrfSecurityError as e:
-            log.error("webhook_dispatch.ssrf_blocked", error=str(e))
+            log.error("webhook_dispatch.ssrf_blocked", error=sanitize_url(str(e)))
             return WebhookDeliveryResult(
                 status_code=403,
                 response_body="",
                 is_success=False,
                 error_message=f"SSRF Security Violation: {e}",
+                failure_type=WebhookDeliveryFailureType.SSRF,
             )
         except HttpTimeoutError as e:
-            log.error("webhook_dispatch.timed_out", error=str(e))
+            log.error("webhook_dispatch.timed_out", error=sanitize_url(str(e)))
             return WebhookDeliveryResult(
                 status_code=504,
                 response_body="",
                 is_success=False,
                 error_message=f"Connection Timeout: {e}",
+                failure_type=WebhookDeliveryFailureType.TIMEOUT,
             )
         except (HttpNetworkError, HttpError, httpx.RequestError) as e:
-            log.error("webhook_dispatch.network_error", error=str(e))
+            log.error("webhook_dispatch.network_error", error=sanitize_url(str(e)))
             return WebhookDeliveryResult(
                 status_code=502,
                 response_body="",
                 is_success=False,
                 error_message=f"Network Error: {e}",
+                failure_type=WebhookDeliveryFailureType.NETWORK_ERROR,
             )
 
     async def close(self) -> None:

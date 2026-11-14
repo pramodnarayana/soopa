@@ -10,6 +10,9 @@ import structlog
 from seedwork.domain.exceptions import Result
 from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
+from webhooks.receivers.domain.enums import (
+    VerificationStrategy as SharedVerificationStrategy,
+)
 from webhooks.receivers.guards.crypto_verifier import TimingSafeInboundVerifier
 from webhooks.receivers.guards.discriminator import resolve_event_discriminator
 from webhooks.receivers.ports.inbound_verifier_port import InboundVerifierPort
@@ -24,6 +27,7 @@ from ip.engine.domain.webhook.exceptions import (
     WebhookEndpointNotFoundError,
     WebhookVerificationFailedError,
 )
+from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
@@ -68,10 +72,12 @@ class ReceiveWebhookPushUseCase:
         control_plane_uow: IpControlPlaneUnitOfWorkPort,
         data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort,
         verifier: InboundVerifierPort | None = None,
+        storage: TieredStoragePort | None = None,
     ) -> None:
         self._cp_uow = control_plane_uow
         self._dp_uow_provider = data_plane_uow_provider
         self._verifier = verifier or TimingSafeInboundVerifier()
+        self._storage = storage
 
     async def execute(
         self, command: ReceiveWebhookPushCommand
@@ -109,7 +115,7 @@ class ReceiveWebhookPushUseCase:
 
         # 2. Timing-safe cryptographic & token verification
         is_verified = self._verifier.verify(
-            strategy=verification_strategy,
+            strategy=SharedVerificationStrategy(verification_strategy.value),
             headers=command.headers,
             query_params=command.query_params,
             raw_body=command.raw_payload,
@@ -148,6 +154,16 @@ class ReceiveWebhookPushUseCase:
         # 5. Incept root trace ID & persist L1 Inbound Record in Data Plane
         trace_id = generate_id(IpIdPrefix.TRACE.value)
         is_inlined = len(command.raw_payload) <= DEFAULT_INLINE_THRESHOLD_BYTES
+        request_s3_key: str | None = None
+
+        if not is_inlined and self._storage is not None:
+            storage_result = await self._storage.store(
+                tenant_id=command.tenant_id,
+                trace_id=trace_id,
+                payload_bytes=command.raw_payload,
+                parsed_payload=parsed_body,
+            )
+            request_s3_key = storage_result.s3_key
 
         shard_res = await self._dp_uow_provider.resolve_shard_info(command.tenant_id)
         if shard_res.is_err:
@@ -169,9 +185,16 @@ class ReceiveWebhookPushUseCase:
                 tenant_id=command.tenant_id,
                 connection_id=bound_connection_id,
                 app_id=clean_slug,
-                stream_name=matched_route.event_pattern,
+                stream_name=(
+                    discriminator
+                    if (discriminator and discriminator != "*")
+                    else (
+                        matched_route.target_pipeline_or_workflow_id or matched_route.event_pattern
+                    )
+                ),
                 payload_bytes=command.raw_payload,
                 is_inlined=is_inlined,
+                request_s3_key=request_s3_key,
                 trace_id=trace_id,
                 correlation_id=command.correlation_id,
                 ingestion_mode=IngestionMode.PUSH_FULL,

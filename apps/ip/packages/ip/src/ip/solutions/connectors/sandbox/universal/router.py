@@ -590,7 +590,7 @@ def _parse_strict_iso_param(raw: str, param_name: str) -> Result[datetime, IpErr
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=UTC)
         return Result.ok(dt.astimezone(UTC))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         return Result.fail(
             IpError(
                 code=IpErrorCode.VALIDATION_FAILED,

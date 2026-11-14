@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ip.engine.domain.webhook.enums import PayloadSemantic, VerificationStrategy
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -18,8 +19,8 @@ class CreateWebhookEndpointHttpRequest(BaseModel):
     )
     name: str = Field(..., min_length=2, max_length=255, description="Human-readable name.")
     description: str = Field(default="", max_length=1000)
-    verification_strategy: str = Field(
-        default="SHARED_HEADER_SECRET",
+    verification_strategy: VerificationStrategy = Field(
+        default=VerificationStrategy.SHARED_HEADER_SECRET,
         description="Authentication strategy (SHARED_HEADER_SECRET, HMAC_SHA256, BEARER_TOKEN, etc.).",
     )
     primary_secret: str | None = Field(
@@ -58,8 +59,8 @@ class AddWebhookEventRouteHttpRequest(BaseModel):
         max_length=128,
         description="Event pattern (e.g. 'orders.created', 'historical_extract.request', '*').",
     )
-    payload_semantic: str = Field(
-        default="DATA",
+    payload_semantic: PayloadSemantic = Field(
+        default=PayloadSemantic.DATA,
         description="Payload semantic modality ('DATA' for L2/L3 or 'COMMAND' for L4 Orchestrator).",
     )
     target_pipeline_or_workflow_id: str = Field(
@@ -69,7 +70,7 @@ class AddWebhookEventRouteHttpRequest(BaseModel):
         description="Target pipeline ID or stitch workflow ID.",
     )
     description: str = Field(default="", max_length=500)
-    priority: int = Field(default=100, ge=1, le=10000, description="Evaluation priority.")
+    priority: int = Field(default=100, ge=1, le=9999, description="Evaluation priority.")
 
 
 class AddWebhookEventRouteHttpResponse(BaseModel):

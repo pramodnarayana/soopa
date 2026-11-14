@@ -236,10 +236,27 @@ class OpaqueTokenExtractionStrategy:
         if query.token:
             try:
                 decoded = json.loads(base64.urlsafe_b64decode(query.token.encode()).decode())
-                if not isinstance(decoded, dict):
-                    raise TypeError("Continuation token payload must be a JSON object.")
+            except (ValueError, UnicodeDecodeError):
+                return Result.fail(
+                    IpError(
+                        code=IpErrorCode.VALIDATION_FAILED,
+                        message="Invalid continuation token format.",
+                        http_status=400,
+                        details={"token": query.token},
+                    )
+                )
+            if not isinstance(decoded, dict):
+                return Result.fail(
+                    IpError(
+                        code=IpErrorCode.VALIDATION_FAILED,
+                        message="Invalid continuation token format.",
+                        http_status=400,
+                        details={"token": query.token},
+                    )
+                )
+            try:
                 offset = max(0, int(decoded.get("seq", 0)))
-            except (ValueError, TypeError, KeyError):
+            except (ValueError, TypeError):
                 return Result.fail(
                     IpError(
                         code=IpErrorCode.VALIDATION_FAILED,

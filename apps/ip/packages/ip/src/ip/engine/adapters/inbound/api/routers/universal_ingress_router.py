@@ -10,6 +10,7 @@ from ip.engine.adapters.inbound.api.dependencies import (
     get_effective_ucp_tenant_id,
     get_ip_control_plane_uow,
     get_ip_data_plane_uow_provider,
+    get_tiered_storage,
     require_flows_read,
     require_flows_write,
     resolve_tenant_id_by_slug,
@@ -44,7 +45,8 @@ from ip.engine.application.use_cases.ingress.rotate_webhook_secret_use_case impo
     RotateWebhookSecretCommand,
     RotateWebhookSecretUseCase,
 )
-from ip.engine.domain.webhook.enums import PayloadSemantic, VerificationStrategy
+from ip.engine.domain.exceptions import IpErrorCode
+from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
@@ -78,6 +80,7 @@ async def receive_inbound_webhook(
     dp_uow_provider: Annotated[
         IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
     ],
+    storage: Annotated[TieredStoragePort, Depends(get_tiered_storage)],
     correlation_id: Annotated[str | None, Header(alias="X-Correlation-ID")] = None,
 ) -> ReceiveWebhookPushHttpResponse | Response:
     """Universal perimeter webhook receiver.
@@ -92,6 +95,7 @@ async def receive_inbound_webhook(
     use_case = ReceiveWebhookPushUseCase(
         control_plane_uow=cp_uow,
         data_plane_uow_provider=dp_uow_provider,
+        storage=storage,
     )
 
     cmd = ReceiveWebhookPushCommand(
@@ -107,9 +111,9 @@ async def receive_inbound_webhook(
     if result.is_err:
         err = result.unwrap_err()
         # Custom status code mapping for perimeter edge
-        if err.code.value == "UNMAPPED_EVENT_ROUTE":
+        if err.code == IpErrorCode.UNMAPPED_EVENT_ROUTE:
             return from_ip_error(err, status_code_override=status.HTTP_422_UNPROCESSABLE_CONTENT)
-        if err.code.value == "WEBHOOK_VERIFICATION_FAILED":
+        if err.code == IpErrorCode.WEBHOOK_VERIFICATION_FAILED:
             return from_ip_error(err, status_code_override=status.HTTP_401_UNAUTHORIZED)
         return from_ip_error(err)
 
@@ -143,7 +147,7 @@ async def create_webhook_endpoint(
 ) -> CreateWebhookEndpointHttpResponse | Response:
     """Provisions a new passive inbound WebhookEndpoint aggregate root."""
     use_case = CreateWebhookEndpointUseCase(cp_uow)
-    strategy = VerificationStrategy(body.verification_strategy)
+    strategy = body.verification_strategy
 
     cmd = CreateWebhookEndpointCommand(
         tenant_id=tenant_id,
@@ -231,7 +235,7 @@ async def add_webhook_event_route(
 ) -> AddWebhookEventRouteHttpResponse | Response:
     """Attaches a multiplexed event route to an existing endpoint."""
     use_case = AddWebhookEventRouteUseCase(cp_uow)
-    semantic = PayloadSemantic(body.payload_semantic)
+    semantic = body.payload_semantic
 
     cmd = AddWebhookEventRouteCommand(
         tenant_id=tenant_id,

@@ -34,6 +34,16 @@ QUERY_TOKEN_CANDIDATES: tuple[str, ...] = (
 )
 
 
+def _safe_compare(candidate: str, secret: str) -> bool:
+    """Performs constant-time string comparison using ASCII byte representation.
+
+    Rejects empty or non-ASCII candidate strings safely.
+    """
+    if not candidate or not secret or not candidate.isascii() or not secret.isascii():
+        return False
+    return hmac.compare_digest(candidate.encode("ascii"), secret.encode("ascii"))
+
+
 class TimingSafeInboundVerifier(InboundVerifierPort):
     """Production implementation of InboundVerifierPort using timing-safe comparisons."""
 
@@ -70,7 +80,7 @@ class TimingSafeInboundVerifier(InboundVerifierPort):
             return self._verify_hmac_sha256(normalized_headers, raw_body, secrets)
 
         if strategy == VerificationStrategy.MUTUAL_TLS:
-            return self._verify_mtls(normalized_headers)
+            return self._verify_mtls(normalized_headers, secrets)
 
         return False
 
@@ -80,7 +90,7 @@ class TimingSafeInboundVerifier(InboundVerifierPort):
         for header_name in HEADER_TOKEN_CANDIDATES:
             if candidate := normalized_headers.get(header_name):
                 for secret in secrets:
-                    if hmac.compare_digest(candidate, secret):
+                    if _safe_compare(candidate, secret):
                         return True
         return False
 
@@ -96,13 +106,13 @@ class TimingSafeInboundVerifier(InboundVerifierPort):
             return False
 
         token = parts[1].strip()
-        return any(hmac.compare_digest(token, secret) for secret in secrets)
+        return any(_safe_compare(token, secret) for secret in secrets)
 
     def _verify_query_token(self, normalized_query: Mapping[str, str], secrets: list[str]) -> bool:
         for param_name in QUERY_TOKEN_CANDIDATES:
             if candidate := normalized_query.get(param_name):
                 for secret in secrets:
-                    if hmac.compare_digest(candidate, secret):
+                    if _safe_compare(candidate, secret):
                         return True
         return False
 
@@ -122,7 +132,27 @@ class TimingSafeInboundVerifier(InboundVerifierPort):
                         return True
         return False
 
-    def _verify_mtls(self, normalized_headers: Mapping[str, str]) -> bool:
+    def _verify_mtls(
+        self,
+        normalized_headers: Mapping[str, str],
+        secrets: list[str] | None = None,
+    ) -> bool:
         # Standard reverse proxy mTLS header convention (e.g. Envoy, NGINX, AWS ALB)
         client_verify = normalized_headers.get("x-ssl-client-verify", "")
-        return client_verify.upper() in ("SUCCESS", "OK", "TRUE")
+        if client_verify.upper() not in ("SUCCESS", "OK", "TRUE"):
+            return False
+
+        # If certificate fingerprint is pinned in secrets, verify match
+        active_secrets = [s for s in (secrets or []) if s and s != "not_used"]
+        if active_secrets:
+            client_sha = normalized_headers.get("x-ssl-client-sha256", "").strip().lower()
+            if not client_sha:
+                return False
+            return any(_safe_compare(client_sha, s.strip().lower()) for s in active_secrets)
+
+        # Verified transport origin context must be present
+        return bool(
+            normalized_headers.get("x-ssl-client-sha256")
+            or normalized_headers.get("x-ssl-client-s-dn")
+            or normalized_headers.get("x-ssl-client-cert")
+        )

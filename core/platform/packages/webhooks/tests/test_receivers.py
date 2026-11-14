@@ -178,6 +178,22 @@ def test_hmac_sha256_strategy() -> None:
 
 def test_mutual_tls_strategy() -> None:
     verifier = TimingSafeInboundVerifier()
+    # Verified transport origin present with SUCCESS
+    assert (
+        verifier.verify(
+            strategy=VerificationStrategy.MUTUAL_TLS,
+            headers={
+                "X-SSL-Client-Verify": "SUCCESS",
+                "X-SSL-Client-SHA256": "abcdef123456",
+            },
+            query_params={},
+            raw_body=b"",
+            primary_secret="not_used",
+        )
+        is True
+    )
+
+    # Missing verified transport context rejected even if header claims SUCCESS
     assert (
         verifier.verify(
             strategy=VerificationStrategy.MUTUAL_TLS,
@@ -186,13 +202,17 @@ def test_mutual_tls_strategy() -> None:
             raw_body=b"",
             primary_secret="not_used",
         )
-        is True
+        is False
     )
 
+    # Failed verification
     assert (
         verifier.verify(
             strategy=VerificationStrategy.MUTUAL_TLS,
-            headers={"X-SSL-Client-Verify": "FAILED"},
+            headers={
+                "X-SSL-Client-Verify": "FAILED",
+                "X-SSL-Client-SHA256": "abcdef123456",
+            },
             query_params={},
             raw_body=b"",
             primary_secret="not_used",

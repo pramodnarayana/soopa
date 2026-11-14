@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase
+from ip.engine.domain.webhook.enums import PayloadSemantic, VerificationStrategy
 from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 from sqlalchemy import (
@@ -284,7 +285,9 @@ class WebhookEndpointRecord(IpGlobalBase):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     verification_strategy: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="SHARED_HEADER_SECRET"
+        String(32),
+        nullable=False,
+        default=VerificationStrategy.SHARED_HEADER_SECRET.value,
     )
     primary_secret_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     secondary_secret_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -330,7 +333,11 @@ class WebhookEventRouteRecord(IpGlobalBase):
         nullable=False,
     )
     event_pattern: Mapped[str] = mapped_column(String(128), nullable=False)
-    payload_semantic: Mapped[str] = mapped_column(String(32), nullable=False, default="DATA")
+    payload_semantic: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=PayloadSemantic.DATA.value,
+    )
     target_pipeline_or_workflow_id: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)

@@ -192,6 +192,67 @@ async def reconcile_global_simulator_schema(global_url: str) -> None:
         await provider.close()
 
 
+async def reconcile_global_webhook_ingress_schema(global_url: str) -> None:
+    """Ensure `ip.webhook_endpoints` and `ip.webhook_event_routes` tables exist on already-stamped databases."""
+    provider = DatabaseProvider.from_url(global_url)
+    try:
+        async with provider.session() as session:
+            conn_exists = await session.execute(text("SELECT to_regclass('ip.connections')"))
+            if conn_exists.scalar() is None:
+                return
+
+            await session.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS ip.webhook_endpoints (
+                        id VARCHAR(64) PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        endpoint_slug VARCHAR(128) NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        description TEXT NOT NULL DEFAULT '',
+                        verification_strategy VARCHAR(32) NOT NULL DEFAULT 'SHARED_HEADER_SECRET',
+                        primary_secret_hash VARCHAR(255) NOT NULL,
+                        secondary_secret_hash VARCHAR(255),
+                        secret_rotated_at TIMESTAMPTZ,
+                        bound_connection_id VARCHAR(64) REFERENCES ip.connections(id) ON DELETE SET NULL,
+                        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_at TIMESTAMPTZ NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL,
+                        CONSTRAINT uq_tenant_endpoint_slug UNIQUE (tenant_id, endpoint_slug)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_webhook_slug_lookup
+                    ON ip.webhook_endpoints (tenant_id, endpoint_slug)
+                    WHERE is_active = TRUE;
+
+                    CREATE INDEX IF NOT EXISTS ix_ip_webhook_endpoints_tenant_id
+                    ON ip.webhook_endpoints (tenant_id);
+
+                    CREATE TABLE IF NOT EXISTS ip.webhook_event_routes (
+                        id VARCHAR(64) PRIMARY KEY,
+                        endpoint_id VARCHAR(64) NOT NULL REFERENCES ip.webhook_endpoints(id) ON DELETE CASCADE,
+                        event_pattern VARCHAR(128) NOT NULL,
+                        payload_semantic VARCHAR(32) NOT NULL DEFAULT 'DATA',
+                        target_pipeline_or_workflow_id VARCHAR(128) NOT NULL,
+                        description TEXT NOT NULL DEFAULT '',
+                        priority INTEGER NOT NULL DEFAULT 100,
+                        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_at TIMESTAMPTZ NOT NULL,
+                        CONSTRAINT uq_endpoint_event_pattern UNIQUE (endpoint_id, event_pattern)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_event_route_lookup
+                    ON ip.webhook_event_routes (endpoint_id, priority)
+                    WHERE is_active = TRUE;
+                    """
+                )
+            )
+            await session.commit()
+            logger.info("ip_global_webhook_ingress_schema_reconciled")
+    finally:
+        await provider.close()
+
+
 async def fetch_tenant_shard_urls(global_url: str, overrides: Mapping[str, str]) -> list[str]:
     """Connect to the global DB and fetch all registered IP shard URLs."""
     return await fetch_prefixed_shard_urls(
@@ -247,6 +308,7 @@ def run_migrations() -> None:
     command.upgrade(global_cfg, "heads")
     asyncio.run(reconcile_global_no_auth_connection_constraint(settings.global_url))
     asyncio.run(reconcile_global_simulator_schema(settings.global_url))
+    asyncio.run(reconcile_global_webhook_ingress_schema(settings.global_url))
     logger.info("ip_global_migrations_completed")
 
     # 2. Tenant Data Plane shard migrations

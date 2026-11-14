@@ -333,7 +333,7 @@ flowchart TD
 ### 6.1 Why Layer 1 ALWAYS Executes (Even for Commands)
 1. **Asynchronous Non-Blocking Acknowledgment:** Returns `HTTP 202 Accepted` in $< 20\text{ ms}$ regardless of how long the downstream processing or extraction takes.
 2. **Root Trace Inception:** Establishes the master `trace_id` for complete operational lineage across all child tasks and outbound messages.
-3. **Immutable Audit Trail:** Stored permanently in `ip.inbound_records` for compliance and replay.
+3. **Immutable Audit Trail:** Durably stored in `ip.inbound_records` with raw payloads backed by permanent tiered object storage for compliance and replay.
 
 ### 6.2 The Post-L1 Fork
 - **`DATA` Modality**: The dispatcher emits `ReplicateRecordCommand` to write to `ip.replica_records`, execute schema validation, run domain transformers, and produce normalized DTOs.
@@ -538,9 +538,10 @@ class InboundRecordCreatedEvent(DomainEvent):
 ```
 
 ### 8.5 L1 Ledger Retention & Chunked PostgreSQL Sweeper
-To prevent disk exhaustion on high-volume inbound channels:
-1. **Retention Policy:** `ip.inbound_records` are retained for a rolling 30-day compliance window.
-2. **Chunked Iteration (Zero Table Locking):** The background sweeper task in `ip-data-plane-worker` runs an asynchronous chunked loop:
+To prevent disk exhaustion on high-volume inbound channels while satisfying enterprise data governance and audit retention mandates:
+1. **Permanent Object Storage Archival Guarantee:** Prior to any pruning from the active database table, inbound record payloads and full metadata envelopes are durably archived into permanent tiered object storage (`S3`/`GCS`/`TieredStoragePort`). The background sweeping process strictly validates that archival is completed and confirmed durable before any record is eligible for deletion.
+2. **Rolling Operational Database Retention Window:** Active transactional rows in `ip.inbound_records` are retained in PostgreSQL for a rolling 30-day operational compliance window to service low-latency replay and audit queries.
+3. **Chunked Iteration (Zero Table Locking):** The background sweeper task in `ip-data-plane-worker` runs an asynchronous chunked loop over verified-archived records older than the 30-day threshold:
    ```python
    async def sweep_stale_inbound_records(session: AsyncSession, threshold_date: datetime) -> int:
        total_deleted = 0

@@ -51,6 +51,9 @@ class _InMemoryWebhookEndpointRepo(WebhookEndpointRepositoryPort):
     async def get_by_id(self, endpoint_id: str) -> WebhookEndpoint | None:
         return self.endpoints.get(endpoint_id)
 
+    async def get_by_id_for_update(self, endpoint_id: str) -> WebhookEndpoint | None:
+        return self.endpoints.get(endpoint_id)
+
     async def get_by_slug(self, tenant_id: str, endpoint_slug: str) -> WebhookEndpoint | None:
         for ep in self.endpoints.values():
             if ep.tenant_id == tenant_id and ep.endpoint_slug == endpoint_slug:

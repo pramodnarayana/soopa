@@ -49,7 +49,7 @@ class RotateWebhookSecretUseCase:
         new_secret = command.new_secret or f"whsec_{os.urandom(16).hex()}"
 
         async with self._uow:
-            endpoint = await self._uow.webhook_endpoints.get_by_id(command.endpoint_id)
+            endpoint = await self._uow.webhook_endpoints.get_by_id_for_update(command.endpoint_id)
             if endpoint is None or endpoint.tenant_id != command.tenant_id:
                 log.error("rotate_webhook_secret.endpoint_not_found")
                 return Result.fail(

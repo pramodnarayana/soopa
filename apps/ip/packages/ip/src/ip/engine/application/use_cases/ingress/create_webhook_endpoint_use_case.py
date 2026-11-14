@@ -10,7 +10,7 @@ from seedwork.domain.exceptions import Result
 from seedwork.utils import generate_id
 
 from ip.engine.domain.enums import IpIdPrefix
-from ip.engine.domain.exceptions import IpError
+from ip.engine.domain.exceptions import ConnectionNotFoundError, IpError
 from ip.engine.domain.webhook.endpoint import WebhookEndpoint
 from ip.engine.domain.webhook.enums import PayloadSemantic, VerificationStrategy
 from ip.engine.domain.webhook.exceptions import (
@@ -72,6 +72,15 @@ class CreateWebhookEndpointUseCase:
                 log.error("create_webhook_endpoint.slug_already_exists")
                 return Result.fail(DuplicateWebhookEndpointSlugError())
 
+            if command.bound_connection_id:
+                conn = await self._uow.connections.get_by_id(command.bound_connection_id)
+                if conn is None or conn.tenant_id != command.tenant_id:
+                    log.error(
+                        "create_webhook_endpoint.invalid_bound_connection",
+                        bound_connection_id=command.bound_connection_id,
+                    )
+                    return Result.fail(ConnectionNotFoundError.for_id(command.bound_connection_id))
+
             secret = command.primary_secret or f"whsec_{os.urandom(16).hex()}"
             endpoint_id = generate_id(IpIdPrefix.WEBHOOK_ENDPOINT.value)
 
@@ -86,7 +95,7 @@ class CreateWebhookEndpointUseCase:
                 bound_connection_id=command.bound_connection_id,
             )
 
-            # Provision default wildcard route
+            # Provision default wildcard route as fallback evaluated after explicit routes
             wildcard_route = WebhookEventRoute(
                 id=generate_id(IpIdPrefix.WEBHOOK_EVENT_ROUTE.value),
                 endpoint_id=endpoint_id,
@@ -94,13 +103,19 @@ class CreateWebhookEndpointUseCase:
                 payload_semantic=PayloadSemantic.DATA,
                 target_pipeline_or_workflow_id="default_data_pipeline",
                 description="Default wildcard route for unclassified vendor data drops",
-                priority=999,
+                priority=10000,
                 is_active=True,
             )
             endpoint.add_event_route(wildcard_route)
 
-            await self._uow.webhook_endpoints.save(endpoint)
-            await self._uow.commit()
+            try:
+                await self._uow.webhook_endpoints.save(endpoint)
+                await self._uow.commit()
+            except Exception as e:
+                if "uq_tenant_endpoint_slug" in str(e):
+                    log.error("create_webhook_endpoint.slug_already_exists_concurrent")
+                    return Result.fail(DuplicateWebhookEndpointSlugError())
+                raise
 
         permanent_url_path = f"/api/v1/ingress/{command.tenant_id}/{clean_slug}"
         log.info(

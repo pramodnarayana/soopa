@@ -77,7 +77,7 @@ class WebhookEndpoint(AggregateRoot):
         endpoint.add_domain_event(
             WebhookEndpointCreatedEvent(
                 endpoint_id=resolved_id,
-                tenant_id=tenant_id,
+                tenant_id=endpoint.tenant_id,
                 endpoint_slug=cleaned_slug,
                 name=name,
                 verification_strategy=verification_strategy.value,
@@ -89,11 +89,12 @@ class WebhookEndpoint(AggregateRoot):
     def match_route(self, event_name: str | None) -> WebhookEventRoute | None:
         """Evaluates active routes sorted by priority (lowest value = evaluated first).
 
+        Wildcard fallback ('*') is evaluated after explicit routes at matching priority levels.
         Returns the highest-priority route matching the discriminator, or None if unmapped.
         """
         sorted_routes = sorted(
             [r for r in self.event_routes if r.is_active],
-            key=lambda r: r.priority,
+            key=lambda r: (r.priority, 1 if r.event_pattern == "*" else 0),
         )
         for route in sorted_routes:
             if route.matches(event_name):

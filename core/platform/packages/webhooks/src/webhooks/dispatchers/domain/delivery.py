@@ -5,8 +5,18 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from seedwork.domain.types import JsonDict, JsonValue
+
+
+class WebhookDeliveryFailureType(StrEnum):
+    """Categorized failure type distinguishing transport and security errors from completed HTTP responses."""
+
+    HTTP_ERROR = "HTTP_ERROR"
+    SSRF = "SSRF"
+    TIMEOUT = "TIMEOUT"
+    NETWORK_ERROR = "NETWORK_ERROR"
 
 
 @dataclass(frozen=True)
@@ -30,8 +40,6 @@ class WebhookDispatchCommand:
         """Returns the payload serialized to bytes."""
         if isinstance(self.payload, bytes):
             return self.payload
-        if isinstance(self.payload, str):
-            return self.payload.encode("utf-8")
         return json.dumps(self.payload).encode("utf-8")
 
 
@@ -43,3 +51,4 @@ class WebhookDeliveryResult:
     response_body: str
     is_success: bool
     error_message: str | None = None
+    failure_type: WebhookDeliveryFailureType | None = None

@@ -15,6 +15,10 @@ class WebhookEndpointRepositoryPort(Protocol):
         """Retrieves a WebhookEndpoint by its unique identifier."""
         ...
 
+    async def get_by_id_for_update(self, endpoint_id: str) -> WebhookEndpoint | None:
+        """Retrieves a WebhookEndpoint by ID with a pessimistic row lock within an active transaction."""
+        ...
+
     async def get_by_slug(self, tenant_id: str, endpoint_slug: str) -> WebhookEndpoint | None:
         """Retrieves a WebhookEndpoint by tenant and endpoint slug with routes eager loaded."""
         ...

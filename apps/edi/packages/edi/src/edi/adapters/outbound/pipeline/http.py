@@ -12,8 +12,11 @@ from shttp import (
     SsrfViolationReason,
     create_http_client,
 )
-from webhooks.dispatchers.adapters.http.resilient_dispatcher import ResilientWebhookDispatcher
-from webhooks.dispatchers.domain.delivery import WebhookDispatchCommand
+from webhooks.dispatchers import ResilientWebhookDispatcher
+from webhooks.dispatchers.domain.delivery import (
+    WebhookDeliveryFailureType,
+    WebhookDispatchCommand,
+)
 from webhooks.dispatchers.ports.webhook_dispatcher_port import WebhookDispatcherPort
 
 from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
@@ -78,15 +81,15 @@ class HttpxDeliveryClient(HttpDeliveryPort):
         result = await self._dispatcher.dispatch(cmd)
 
         if not result.is_success:
-            if result.status_code == 504:
+            if result.failure_type == WebhookDeliveryFailureType.TIMEOUT:
                 raise PortTimeoutError(f"HTTP connection timed out: {result.error_message}")
-            if result.status_code == 403 and "SSRF" in (result.error_message or ""):
+            if result.failure_type == WebhookDeliveryFailureType.SSRF:
                 raise SsrfSecurityError(
                     result.error_message or "SSRF Security Violation",
                     url=url,
                     reason=SsrfViolationReason.RESTRICTED_IP,
                 )
-            if result.status_code == 502:
+            if result.failure_type == WebhookDeliveryFailureType.NETWORK_ERROR:
                 raise PortConnectionError(f"HTTP connection failed: {result.error_message}")
 
         return result.status_code, result.response_body

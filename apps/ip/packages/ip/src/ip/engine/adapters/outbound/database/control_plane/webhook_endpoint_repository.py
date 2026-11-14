@@ -87,6 +87,17 @@ class SqlAlchemyWebhookEndpointRepository(
         record = res.scalar_one_or_none()
         return self._to_domain_model(record) if record else None
 
+    async def get_by_id_for_update(self, endpoint_id: str) -> WebhookEndpoint | None:
+        stmt = (
+            select(WebhookEndpointRecord)
+            .options(selectinload(WebhookEndpointRecord.routes))
+            .where(WebhookEndpointRecord.id == endpoint_id)
+            .with_for_update()
+        )
+        res = await self._session.execute(stmt)
+        record = res.scalar_one_or_none()
+        return self._to_domain_model(record) if record else None
+
     async def get_by_slug(self, tenant_id: str, endpoint_slug: str) -> WebhookEndpoint | None:
         stmt = (
             select(WebhookEndpointRecord)

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
+import json
 from collections.abc import AsyncIterator
 
 from helpers.delivery_fakes import (
@@ -51,7 +53,13 @@ from ip.solutions.connectors.sandbox.universal import (
     UpdateSimulatorEntityUseCase,
     infer_json_schema_from_sample,
 )
+from ip.solutions.connectors.sandbox.universal.cadence import _validate_cron_batch_config
+from ip.solutions.connectors.sandbox.universal.extraction import (
+    ExtractionQuery,
+    OpaqueTokenExtractionStrategy,
+)
 from ip.solutions.connectors.sandbox.universal.repository import SqlAlchemySimulatorRepository
+from ip.solutions.connectors.sandbox.universal.router import _parse_strict_iso_param
 from ip.solutions.connectors.sandbox.universal.synthesizer import (
     MAX_SYNTHESIS_ARRAY_ITEMS,
     MAX_SYNTHESIS_DIGITS,
@@ -644,3 +652,41 @@ async def test_simulated_push_rejects_non_simulator_connection_with_400() -> Non
     err = res.unwrap_err()
     assert err.code == IpErrorCode.INVALID_CONFIG
     assert err.http_status == 400
+
+
+def test_parse_strict_iso_param_rejects_overflow_datetimes() -> None:
+    overflow_iso = "9999-12-31T23:59:59-12:00"
+    res_start = _parse_strict_iso_param(overflow_iso, "start_time")
+    assert res_start.is_err
+    err_start = res_start.unwrap_err()
+    assert err_start.code == IpErrorCode.VALIDATION_FAILED
+    assert err_start.http_status == 400
+    assert "start_time" in err_start.message
+
+    res_end = _parse_strict_iso_param(overflow_iso, "end_time")
+    assert res_end.is_err
+    err_end = res_end.unwrap_err()
+    assert err_end.code == IpErrorCode.VALIDATION_FAILED
+    assert err_end.http_status == 400
+    assert "end_time" in err_end.message
+
+
+def test_cron_batch_cadence_rejects_impossible_calendar_dates() -> None:
+    err = _validate_cron_batch_config({"cron_expression": "* * 30 2 *"})
+    assert err is not None
+    assert err.field_name == "push_config.cron_expression"
+    assert "cannot produce a valid occurrence" in err.message
+
+
+def test_opaque_token_extraction_rejects_non_object_token() -> None:
+    strategy = OpaqueTokenExtractionStrategy(synthesizer=JsonSchemaRecordSynthesizer())
+    spec = SimulatorStreamSpec(
+        stream_name="orders",
+        primary_key_field="order_id",
+        cursor_field="updated_at",
+        json_schema={"type": "object"},
+    )
+    token = base64.urlsafe_b64encode(json.dumps([1, 2, 3]).encode()).decode()
+    res = strategy.extract(spec, seed=42, query=ExtractionQuery(stream_name="orders", token=token))
+    assert res.is_err
+    assert res.unwrap_err().code == IpErrorCode.VALIDATION_FAILED

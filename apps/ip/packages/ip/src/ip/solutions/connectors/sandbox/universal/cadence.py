@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from croniter import croniter
+from croniter import CroniterBadCronError, CroniterBadDateError, croniter
 from ip.engine.domain.exceptions import InvalidConnectionConfigError
 from ip.solutions.connectors.sandbox.universal.strategies import (
     CadenceState,
@@ -163,12 +163,15 @@ class CronBatchCadenceStrategy:
     def compute_next_delay_seconds(self, state: CadenceState) -> float:
         if self.cron_expression is not None and croniter.is_valid(self.cron_expression):
             now = state.last_emitted_at or datetime.now(UTC)
-            cron = croniter(self.cron_expression, now)
-            next_time = cron.get_next(datetime)
-            if next_time.tzinfo is None:
-                next_time = next_time.replace(tzinfo=UTC)
-            delay = (next_time - now).total_seconds()
-            return max(1.0, delay)
+            try:
+                cron = croniter(self.cron_expression, now)
+                next_time = cron.get_next(datetime)
+                if next_time.tzinfo is None:
+                    next_time = next_time.replace(tzinfo=UTC)
+                delay = (next_time - now).total_seconds()
+                return max(1.0, delay)
+            except (CroniterBadDateError, CroniterBadCronError, ValueError, OverflowError):
+                return max(1.0, self.interval_seconds)
         return max(1.0, self.interval_seconds)
 
     def compute_batch_size(self, state: CadenceState) -> int:
@@ -433,17 +436,28 @@ def _validate_cron_batch_config(
     config: Mapping[str, JsonValue],
 ) -> InvalidConnectionConfigError | None:
     cron_expr = config.get("cron_expression")
-    if cron_expr is not None and (
-        not isinstance(cron_expr, str) or not croniter.is_valid(cron_expr)
-    ):
-        return InvalidConnectionConfigError(
-            field_name="push_config.cron_expression",
-            message="cron_expression must be a valid standard 5-field cron string.",
-            details={
-                "push_mode": PushCadenceMode.CRON_BATCH.value,
-                "cron_expression": cron_expr,
-            },
-        )
+    if cron_expr is not None:
+        if not isinstance(cron_expr, str) or not croniter.is_valid(cron_expr):
+            return InvalidConnectionConfigError(
+                field_name="push_config.cron_expression",
+                message="cron_expression must be a valid standard 5-field cron string.",
+                details={
+                    "push_mode": PushCadenceMode.CRON_BATCH.value,
+                    "cron_expression": cron_expr,
+                },
+            )
+        try:
+            cron = croniter(cron_expr, datetime.now(UTC))
+            cron.get_next(datetime)
+        except (CroniterBadDateError, CroniterBadCronError, ValueError, OverflowError) as exc:
+            return InvalidConnectionConfigError(
+                field_name="push_config.cron_expression",
+                message=f"cron_expression cannot produce a valid occurrence: {exc}",
+                details={
+                    "push_mode": PushCadenceMode.CRON_BATCH.value,
+                    "cron_expression": cron_expr,
+                },
+            )
     return None
 
 
