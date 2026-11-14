@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
 
 from ip.solutions.connectors.sandbox.universal.chaos import SimulatorChaosPolicy
 from ip.solutions.connectors.sandbox.universal.spec import (
+    PushCadenceMode,
     SimulatorStreamSpec,
     StreamVelocityMode,
 )
@@ -35,6 +36,8 @@ class SimulatorEntityDTO:
     version: int
     created_at: datetime
     updated_at: datetime
+    push_mode: PushCadenceMode = PushCadenceMode.RANDOM_BURST
+    push_config: JsonDict = field(default_factory=dict)
 
 
 def entity_dto_to_stream_spec(dto: SimulatorEntityDTO) -> SimulatorStreamSpec:
@@ -48,6 +51,8 @@ def entity_dto_to_stream_spec(dto: SimulatorEntityDTO) -> SimulatorStreamSpec:
         records_per_pull=dto.records_per_pull,
         cursor_step_seconds=dto.cursor_step_seconds,
         chaos_policy=SimulatorChaosPolicy.from_mapping(dto.chaos_policy),
+        push_mode=dto.push_mode,
+        push_config=dict(dto.push_config),
     )
 
 

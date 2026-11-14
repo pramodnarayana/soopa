@@ -15,6 +15,7 @@ from ip.solutions.connectors.sandbox.universal.spec import SimulatorStreamSpec
 from seedwork.domain.types import JsonDict, JsonValue
 
 _EPOCH_ANCHOR = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+EPOCH_ANCHOR: Final[datetime] = _EPOCH_ANCHOR
 _PATTERN_PREFIX_RE = re.compile(r"^\^?([A-Za-z0-9_-]+?)(?:\[0-9\]|\\d)\{(\d+)\}\$?$")
 MAX_SYNTHESIS_DIGITS: Final[int] = 32
 MAX_SYNTHESIS_ARRAY_ITEMS: Final[int] = 100
@@ -494,6 +495,58 @@ class JsonSchemaRecordSynthesizer:
 
         return records
 
+    def synthesize_record_by_sequence(
+        self,
+        spec: SimulatorStreamSpec,
+        *,
+        seed: int,
+        seq_num: int,
+        record_dt: datetime | None = None,
+    ) -> RecordEnvelopeDTO:
+        """Deterministically synthesizes a single record for a given sequence number."""
+        raw_props = spec.json_schema.get("properties")
+        props = raw_props if isinstance(raw_props, Mapping) else {}
+        pk_prop = props.get(spec.primary_key_field)
+        pk_prop_map = pk_prop if isinstance(pk_prop, Mapping) else None
+        step_sec = max(1, spec.cursor_step_seconds)
+        chaos = spec.chaos_policy
+
+        if record_dt is None:
+            record_dt = _EPOCH_ANCHOR + timedelta(seconds=step_sec * seq_num)
+
+        iso_ts = _format_iso_utc(record_dt)
+        rec_seed = _derive_seed_int(seed, spec.stream_name, seq_num)
+
+        spike_roll = ((rec_seed >> 8) % 1000) / 10.0
+        inject_spike = (
+            chaos.spike_anomaly_rate_percent > 0.0 and spike_roll < chaos.spike_anomaly_rate_percent
+        )
+        violation_roll = ((rec_seed >> 16) % 1000) / 10.0
+        inject_violation = (
+            chaos.schema_violation_rate_percent > 0.0
+            and violation_roll < chaos.schema_violation_rate_percent
+        )
+
+        pk_value, payload = _build_record_payload(
+            spec,
+            props,
+            pk_prop_map,
+            seq_num,
+            rec_seed,
+            record_dt,
+            iso_ts,
+            inject_spike=inject_spike,
+            inject_violation=inject_violation,
+        )
+
+        return RecordEnvelopeDTO(
+            stream_name=spec.stream_name,
+            record_id=pk_value,
+            data=payload,
+            emitted_at=iso_ts,
+            cursor_value=iso_ts,
+        )
+
     def synthesize_record_by_id(
         self,
         spec: SimulatorStreamSpec,
@@ -580,4 +633,9 @@ class JsonSchemaRecordSynthesizer:
         return Result.ok(True)
 
 
-__all__ = ["JsonSchemaRecordSynthesizer"]
+__all__ = [
+    "EPOCH_ANCHOR",
+    "JsonSchemaRecordSynthesizer",
+    "_format_iso_utc",
+    "_parse_iso_cursor",
+]

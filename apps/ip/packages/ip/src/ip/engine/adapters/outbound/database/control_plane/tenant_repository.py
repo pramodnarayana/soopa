@@ -67,7 +67,7 @@ class SqlAlchemyTenantRepository(GlobalSqlAlchemyRepository, TenantRepositoryPor
         return self._to_domain_model(record)
 
 
-class SessionScopedTenantRepository(TenantRepositoryPort):
+class SqlAlchemySessionScopedTenantRepository(TenantRepositoryPort):
     """Short-lived session-opening `TenantRepositoryPort` delegating to an injected `repository_factory`."""
 
     def __init__(
@@ -88,4 +88,10 @@ class SessionScopedTenantRepository(TenantRepositoryPort):
             return await self._repository_factory(session).get_by_slug(tenant_slug)
 
 
-__all__ = ["SessionScopedTenantRepository", "SqlAlchemyTenantRepository"]
+SessionScopedTenantRepository = SqlAlchemySessionScopedTenantRepository
+
+__all__ = [
+    "SessionScopedTenantRepository",
+    "SqlAlchemySessionScopedTenantRepository",
+    "SqlAlchemyTenantRepository",
+]

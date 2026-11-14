@@ -400,7 +400,8 @@ class FakeReplicaRecordRepo(ReplicaRecordRepositoryPort):
             )
             cursor_kind = (
                 CursorKind(cand.cursor_kind)
-                if cand.cursor_kind in CursorKind.__members__.values()
+                if cand.cursor_kind is not None
+                and cand.cursor_kind in CursorKind.__members__.values()
                 else CursorKind.STRING
             )
             outcome = ReplicaMergePolicy.evaluate(
@@ -424,6 +425,9 @@ class FakeReplicaRecordRepo(ReplicaRecordRepositoryPort):
                     source_inbound_record_id=cand.source_inbound_record_id,
                     trace_id=cand.trace_id,
                     correlation_id=cand.correlation_id,
+                    parent_trace_id=cand.parent_trace_id,
+                    original_trace_id=cand.original_trace_id,
+                    replay_count=cand.replay_count,
                 )
                 self.records[rec.id] = rec
                 changed.append(rec)
@@ -443,6 +447,9 @@ class FakeReplicaRecordRepo(ReplicaRecordRepositoryPort):
                     new_data=cand.data,
                     trace_id=cand.trace_id,
                     correlation_id=cand.correlation_id,
+                    parent_trace_id=cand.parent_trace_id,
+                    original_trace_id=cand.original_trace_id,
+                    replay_count=cand.replay_count,
                     cursor_value=cand.cursor_value,
                     generation_id=cand.generation_id,
                     source_inbound_record_id=cand.source_inbound_record_id,
@@ -476,12 +483,18 @@ class FakeReplicaRecordRepo(ReplicaRecordRepositoryPort):
                         source_inbound_record_id=cand.source_inbound_record_id,
                         trace_id=cand.trace_id,
                         correlation_id=cand.correlation_id,
+                        parent_trace_id=cand.parent_trace_id,
+                        original_trace_id=cand.original_trace_id,
+                        replay_count=cand.replay_count,
                     )
                     self.records[existing.id] = existing
                 else:
                     existing.tombstone(
                         trace_id=cand.trace_id,
                         correlation_id=cand.correlation_id,
+                        parent_trace_id=cand.parent_trace_id,
+                        original_trace_id=cand.original_trace_id,
+                        replay_count=cand.replay_count,
                         generation_id=cand.generation_id,
                         source_inbound_record_id=cand.source_inbound_record_id,
                     )

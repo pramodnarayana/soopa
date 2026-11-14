@@ -12,6 +12,7 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     IpTraceEventModel,
     NormalizedRecordModel,
     OutboundRecordModel,
+    ReplicaRecordModel,
 )
 from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
@@ -129,6 +130,22 @@ IP_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
             replay_count=inb.replay_count,
             parent_trace_id=inb.parent_trace_id,
             original_trace_id=inb.original_trace_id,
+        ),
+    ),
+    TraceStageSpec(
+        model_cls=ReplicaRecordModel,
+        timestamp_col=ReplicaRecordModel.updated_at,
+        static_status=IpTraceStatus.INGESTED,
+        correlation_cols=(ReplicaRecordModel.correlation_id,),
+        to_attempt_row=lambda rep: TraceStageAttemptRow(
+            trace_id=rep.trace_id,
+            correlation_id=rep.correlation_id,
+            status=IpTraceStatus.INGESTED,
+            primary_layer=PipelineStage.REPLICA,
+            created_at=rep.updated_at,
+            replay_count=rep.replay_count,
+            parent_trace_id=rep.parent_trace_id,
+            original_trace_id=rep.original_trace_id,
         ),
     ),
     TraceStageSpec(

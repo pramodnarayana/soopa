@@ -783,8 +783,20 @@ class _OrderCanonicalWriter(CanonicalWriterPort):
         replica_id: str,
         replica_version: int,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
-        _ = (extensions, transformation_id, transformation_version, replica_id, replica_version)
+        _ = (
+            extensions,
+            transformation_id,
+            transformation_version,
+            replica_id,
+            replica_version,
+            parent_trace_id,
+            original_trace_id,
+            replay_count,
+        )
         norm = NormalizedRecord.create(
             tenant_id=tenant_id,
             connection_id=connection_id,
@@ -806,8 +818,20 @@ class _OrderCanonicalWriter(CanonicalWriterPort):
         source_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
-        _ = (uow, tenant_id, connection_id, trace_id, correlation_id)
+        _ = (
+            uow,
+            tenant_id,
+            connection_id,
+            trace_id,
+            correlation_id,
+            parent_trace_id,
+            original_trace_id,
+            replay_count,
+        )
         self.staged_rows.pop(source_id, None)
 
     async def resolve_id(

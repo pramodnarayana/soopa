@@ -513,7 +513,7 @@ def build_validated_entity_blueprint(
     )
 
 
-def _extract_seed(public_config: JsonDict) -> int:
+def _extract_seed(public_config: JsonDict, connection_id: str | None = None) -> int:
     raw_seed = public_config.get("seed")
     if isinstance(raw_seed, int) and not isinstance(raw_seed, bool):
         return raw_seed
@@ -522,13 +522,18 @@ def _extract_seed(public_config: JsonDict) -> int:
             return int(raw_seed.strip())
         except ValueError:
             return int(hashlib.sha256(raw_seed.strip().encode("utf-8")).hexdigest()[:8], 16)
+    if connection_id and connection_id.strip():
+        return int(hashlib.sha256(connection_id.strip().encode("utf-8")).hexdigest()[:8], 16)
     return 42
 
 
-def parse_simulator_connection_config(public_config: JsonDict) -> SimulatorConnectionConfig:
+def parse_simulator_connection_config(
+    public_config: JsonDict,
+    connection_id: str | None = None,
+) -> SimulatorConnectionConfig:
     """Extracts connection-level scalar parameters (`seed`, `records_per_pull`) from `public_config`."""
     return SimulatorConnectionConfig(
-        seed=_extract_seed(public_config),
+        seed=_extract_seed(public_config, connection_id),
         default_records_per_pull=_extract_positive_int(public_config.get("records_per_pull"), 25),
     )
 
@@ -538,6 +543,8 @@ DEFAULT_SIMULATOR_TRANSFORMATIONS: Mapping[str, tuple[str, int]] = {
     "meter_reading": ("energy.ami_meter_reading", 2),
     "service_points": ("energy.ami_service_point", 1),
     "service_point": ("energy.ami_service_point", 1),
+    "billing_readings": ("energy.sap_billing_reading", 1),
+    "billing_reading": ("energy.sap_billing_reading", 1),
     "loads": ("tms.mercury_gate_load", 2),
     "load": ("tms.mercury_gate_load", 2),
     "carriers": ("tms.mercury_gate_carrier", 1),

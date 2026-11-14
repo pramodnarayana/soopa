@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase
+from ip.engine.domain.webhook.enums import PayloadSemantic, VerificationStrategy
 from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 from sqlalchemy import (
@@ -22,7 +23,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.models.common import OutboxMixin
 
@@ -262,6 +263,90 @@ class IpOutboxRecord(IpGlobalBase, OutboxMixin):
     )
 
 
+class WebhookEndpointRecord(IpGlobalBase):
+    """Database record representation of the ip.webhook_endpoints table."""
+
+    __tablename__ = "webhook_endpoints"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "endpoint_slug", name="uq_tenant_endpoint_slug"),
+        Index(
+            "idx_webhook_slug_lookup",
+            "tenant_id",
+            "endpoint_slug",
+            postgresql_where=text("is_active = TRUE"),
+        ),
+        Index("ix_ip_webhook_endpoints_tenant_id", "tenant_id"),
+        {"schema": "ip"},
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    endpoint_slug: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    verification_strategy: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=VerificationStrategy.SHARED_HEADER_SECRET.value,
+    )
+    primary_secret_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    secondary_secret_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    secret_rotated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    bound_connection_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("ip.connections.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    routes: Mapped[list[WebhookEventRouteRecord]] = relationship(
+        back_populates="endpoint",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="WebhookEventRouteRecord.priority.asc()",
+    )
+
+
+class WebhookEventRouteRecord(IpGlobalBase):
+    """Database record representation of the ip.webhook_event_routes table."""
+
+    __tablename__ = "webhook_event_routes"
+    __table_args__ = (
+        UniqueConstraint("endpoint_id", "event_pattern", name="uq_endpoint_event_pattern"),
+        Index(
+            "idx_event_route_lookup",
+            "endpoint_id",
+            "priority",
+            postgresql_where=text("is_active = TRUE"),
+        ),
+        {"schema": "ip"},
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    endpoint_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("ip.webhook_endpoints.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    event_pattern: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_semantic: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=PayloadSemantic.DATA.value,
+    )
+    target_pipeline_or_workflow_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    endpoint: Mapped[WebhookEndpointRecord] = relationship(back_populates="routes")
+
+
 __all__ = [
     "ConnectionEntityRecord",
     "ConnectionRecord",
@@ -269,4 +354,6 @@ __all__ = [
     "StitchRecord",
     "SyncRunRecord",
     "TransformationRecord",
+    "WebhookEndpointRecord",
+    "WebhookEventRouteRecord",
 ]

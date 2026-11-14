@@ -12,6 +12,9 @@ from ip.engine.ports.outbound.transformation_repository_port import (
     TransformationRepositoryPort,
 )
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.webhook_endpoint_repository_port import (
+    WebhookEndpointRepositoryPort,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.uow import BaseSqlAlchemyUnitOfWork
@@ -25,6 +28,7 @@ class SqlAlchemyIpControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpControlPlan
     sync_runs: SyncRunRepositoryPort
     transformations: TransformationRepositoryPort
     stitches: StitchRepositoryPort
+    webhook_endpoints: WebhookEndpointRepositoryPort
 
     def __init__(
         self,
@@ -35,6 +39,7 @@ class SqlAlchemyIpControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpControlPlan
         sync_runs: SyncRunRepositoryPort,
         transformations: TransformationRepositoryPort,
         stitches: StitchRepositoryPort,
+        webhook_endpoints: WebhookEndpointRepositoryPort,
     ) -> None:
         super().__init__(global_session)
         self.global_session = global_session
@@ -43,6 +48,7 @@ class SqlAlchemyIpControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpControlPlan
         self.sync_runs = sync_runs
         self.transformations = transformations
         self.stitches = stitches
+        self.webhook_endpoints = webhook_endpoints
 
 
 __all__ = ["SqlAlchemyIpControlPlaneUnitOfWork"]

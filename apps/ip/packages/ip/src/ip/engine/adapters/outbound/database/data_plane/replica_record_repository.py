@@ -55,6 +55,9 @@ class ReplicaRecordRowDict(TypedDict):
     source_inbound_record_id: str | None
     trace_id: str
     correlation_id: str | None
+    parent_trace_id: str | None
+    original_trace_id: str | None
+    replay_count: int
 
 
 class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecordRepositoryPort):
@@ -74,6 +77,9 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
             tenant_id=record.tenant_id,
             trace_id=record.trace_id,
             correlation_id=record.correlation_id,
+            parent_trace_id=record.parent_trace_id,
+            original_trace_id=record.original_trace_id,
+            replay_count=record.replay_count,
             connection_id=record.connection_id,
             stream=record.stream,
             record_key=record.record_key,
@@ -103,6 +109,9 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
         orm.data_hash = domain.data_hash
         orm.trace_id = domain.trace_id
         orm.correlation_id = domain.correlation_id
+        orm.parent_trace_id = domain.parent_trace_id
+        orm.original_trace_id = domain.original_trace_id
+        orm.replay_count = domain.replay_count
         orm.version = domain.version
         orm.generation_id = domain.generation_id
         orm.last_seen_generation = domain.last_seen_generation
@@ -134,6 +143,9 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
             "source_inbound_record_id": domain.source_inbound_record_id,
             "trace_id": domain.trace_id,
             "correlation_id": domain.correlation_id,
+            "parent_trace_id": domain.parent_trace_id,
+            "original_trace_id": domain.original_trace_id,
+            "replay_count": domain.replay_count,
         }
 
     async def get_by_id(
@@ -254,6 +266,9 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                 source_inbound_record_id=c.source_inbound_record_id,
                 trace_id=c.trace_id,
                 correlation_id=c.correlation_id,
+                parent_trace_id=c.parent_trace_id,
+                original_trace_id=c.original_trace_id,
+                replay_count=c.replay_count,
             )
             existing_map[map_key] = domain_record
             upsert_rows[map_key] = self._domain_to_row_dict(domain_record)
@@ -283,6 +298,9 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                     source_inbound_record_id=c.source_inbound_record_id,
                     trace_id=c.trace_id,
                     correlation_id=c.correlation_id,
+                    parent_trace_id=c.parent_trace_id,
+                    original_trace_id=c.original_trace_id,
+                    replay_count=c.replay_count,
                 )
                 existing_map[map_key] = domain_record
                 upsert_rows[map_key] = self._domain_to_row_dict(domain_record)
@@ -300,6 +318,9 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
             existing_domain.tombstone(
                 trace_id=c.trace_id,
                 correlation_id=c.correlation_id,
+                parent_trace_id=c.parent_trace_id,
+                original_trace_id=c.original_trace_id,
+                replay_count=c.replay_count,
                 generation_id=c.generation_id,
                 source_inbound_record_id=c.source_inbound_record_id,
             )
@@ -322,6 +343,9 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                 new_data=c.data,
                 trace_id=c.trace_id,
                 correlation_id=c.correlation_id,
+                parent_trace_id=c.parent_trace_id,
+                original_trace_id=c.original_trace_id,
+                replay_count=c.replay_count,
                 cursor_value=str(c.cursor_value) if c.cursor_value is not None else None,
                 generation_id=c.generation_id,
                 source_inbound_record_id=c.source_inbound_record_id,
@@ -472,6 +496,9 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                     "source_inbound_record_id": insert_stmt.excluded.source_inbound_record_id,
                     "trace_id": insert_stmt.excluded.trace_id,
                     "correlation_id": insert_stmt.excluded.correlation_id,
+                    "parent_trace_id": insert_stmt.excluded.parent_trace_id,
+                    "original_trace_id": insert_stmt.excluded.original_trace_id,
+                    "replay_count": insert_stmt.excluded.replay_count,
                 },
             ).returning(
                 ReplicaRecordModel.stream,

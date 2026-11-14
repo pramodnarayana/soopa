@@ -336,6 +336,7 @@ async def test_trace_stage_specs_map_in_flight_outbound_status_with_deduplicated
                     sync_conn,
                     tables=[
                         InboundRecordModel.__table__,
+                        ReplicaRecordModel.__table__,
                         NormalizedRecordModel.__table__,
                         OutboundRecordModel.__table__,
                         BatchManifestModel.__table__,

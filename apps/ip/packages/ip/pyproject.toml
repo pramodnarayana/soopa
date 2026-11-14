@@ -28,12 +28,14 @@ dependencies = [
     "orchestration",
     "strace",
     "sharding",
+    "webhooks",
     "pyyaml>=6.0.2",
     "aioboto3>=13.1.0",
     "botocore",
     "dependency-injector>=4.41.0",
     "fastapi==0.136.0",
     "alembic>=1.13.0",
+    "croniter>=6.2.4",
 ]
 
 [tool.uv.sources]
@@ -50,6 +52,7 @@ notification = { workspace = true }
 orchestration = { workspace = true }
 strace = { workspace = true }
 sharding = { workspace = true }
+webhooks = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -66,7 +69,7 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src", "tests", "../../../../core/platform/packages/orchestration/src", "../../../../core/platform/packages/strace/src", "../../../../core/platform/packages/identity/src"]
+pythonpath = ["src", "tests", "../../../../core/platform/packages/orchestration/src", "../../../../core/platform/packages/strace/src", "../../../../core/platform/packages/identity/src", "../../../../core/platform/packages/webhooks/src"]
 addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "integration: narrow integration tests against live PostgreSQL, S3, SFTP, and HTTP",

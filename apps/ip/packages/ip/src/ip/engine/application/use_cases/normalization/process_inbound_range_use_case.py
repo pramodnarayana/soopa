@@ -240,6 +240,9 @@ class ProcessInboundRangeUseCase:
             replica_version=merge_res.version,
             trace_id=effective_trace_id,
             correlation_id=effective_corr_id,
+            parent_trace_id=replica.parent_trace_id if replica is not None else None,
+            original_trace_id=replica.original_trace_id if replica is not None else None,
+            replay_count=replica.replay_count if replica is not None else 0,
         )
         norm_res = await self._normalize_use_case.normalize_replica_in_uow(
             uow=uow,
@@ -417,6 +420,9 @@ class ProcessInboundRangeUseCase:
                         source_inbound_record_id=inbound.id,
                         trace_id=rec_trace_id,
                         correlation_id=rec_corr_id,
+                        parent_trace_id=inbound.parent_trace_id,
+                        original_trace_id=inbound.original_trace_id,
+                        replay_count=inbound.replay_count,
                         is_deleted=extracted_rec.is_deleted,
                     )
                 )
@@ -432,6 +438,10 @@ class ProcessInboundRangeUseCase:
                         reason=rej.reason.value,
                         detail=rej.detail,
                         trace_id=rec_trace_id,
+                        correlation_id=rec_corr_id,
+                        parent_trace_id=inbound.parent_trace_id,
+                        original_trace_id=inbound.original_trace_id,
+                        replay_count=inbound.replay_count,
                         created_at=now,
                     )
                 )

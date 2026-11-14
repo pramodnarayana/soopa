@@ -30,6 +30,18 @@ def upgrade() -> None:
         sa.Column("primary_key_field", sa.String(length=128), nullable=False),
         sa.Column("cursor_field", sa.String(length=128), nullable=False),
         sa.Column(
+            "push_mode",
+            sa.String(length=32),
+            server_default="RANDOM_BURST",
+            nullable=False,
+        ),
+        sa.Column(
+            "push_config",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column(
             "records_per_pull",
             sa.Integer(),
             server_default=sa.text("25"),

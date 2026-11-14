@@ -55,11 +55,14 @@ from ip.engine.adapters.inbound.workers import (
     IpOrchestratorRouteRegistry,
     IpProcessInboundRangeExecutorPort,
 )
+from ip.engine.adapters.outbound.database.data_plane.normalized_record_repository import (
+    SqlAlchemyNormalizedRecordRepository,
+)
 from ip.engine.adapters.outbound.database.models.data_plane import (
+    GlobalEntityMapModel,
     InboundRecordModel,
     IpDataPlaneOutboxRecord,
     IpTraceEventModel,
-    NormalizedRecordModel,
     PendingReferenceModel,
     ReplicaRecordModel,
 )
@@ -569,21 +572,32 @@ async def test_energy_l1_to_l3_simulator_pull_sync_pipeline(
     )
     _assert_canonical_sp_rows(canonical_sp_rows)
 
-    # Verify L3 `normalized_records` and `entity_maps`
-    norm_sp_records = (
+    # Verify L3 `normalized_records` via CanonicalReader projection and `entity_maps`
+    norm_repo = SqlAlchemyNormalizedRecordRepository(
+        tenant_session,
+        reader_registry=container.reader_registry(),
+    )
+    norm_sp_records = await norm_repo.list_records(
+        seeded_ip_tenant,
+        connection_id=connection_id,
+        canonical_type=EnergyEntityType.MDM_SERVICE_POINT.value,
+    )
+    assert len(norm_sp_records) == 5
+
+    gem_sp_rows = (
         (
             await tenant_session.execute(
-                select(NormalizedRecordModel).where(
-                    NormalizedRecordModel.tenant_id == seeded_ip_tenant,
-                    NormalizedRecordModel.canonical_type
-                    == EnergyEntityType.MDM_SERVICE_POINT.value,
+                select(GlobalEntityMapModel).where(
+                    GlobalEntityMapModel.tenant_id == seeded_ip_tenant,
+                    GlobalEntityMapModel.source_connection_id == connection_id,
+                    GlobalEntityMapModel.entity_domain == EnergyEntityType.MDM_SERVICE_POINT.value,
                 )
             )
         )
         .scalars()
         .all()
     )
-    assert len(norm_sp_records) == 5
+    assert len(gem_sp_rows) == 5
 
     # 7. Execute Pull Sync for `meter_readings` (5 records)
     sync_mr_dto = await run_sync_uc.execute(

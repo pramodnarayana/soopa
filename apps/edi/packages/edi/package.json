@@ -18,6 +18,7 @@
     "@soopa/seedwork": "workspace:*",
     "@soopa/security": "workspace:*",
     "@soopa/secret-store": "workspace:*",
-    "@soopa/sharding": "workspace:*"
+    "@soopa/sharding": "workspace:*",
+    "@soopa/webhooks": "workspace:*"
   }
 }

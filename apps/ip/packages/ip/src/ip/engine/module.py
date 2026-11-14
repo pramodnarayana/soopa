@@ -26,6 +26,9 @@ from ip.engine.adapters.inbound.api.routers.trace_router import router as trace_
 from ip.engine.adapters.inbound.api.routers.transformations_router import (
     router as transformations_router,
 )
+from ip.engine.adapters.inbound.api.routers.universal_ingress_router import (
+    router as universal_ingress_router,
+)
 from ip.engine.application.api_provider_port import IpApiProviderPort
 from ip.engine.bootstrap.api_provider import IpApiProvider
 from ip.engine.bootstrap.container import Container
@@ -60,6 +63,7 @@ class IpApiModule:
         app.include_router(connection_entities_router)
         app.include_router(catalog_router)
         app.include_router(ingress_router)
+        app.include_router(universal_ingress_router)
         app.include_router(transformations_router)
         app.include_router(sync_runs_router)
         app.include_router(stitches_router)

@@ -234,6 +234,9 @@ importers:
       '@soopa/ucp-models':
         specifier: workspace:*
         version: link:../../../../core/ucp/packages/models
+      '@soopa/webhooks':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/webhooks
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
@@ -315,6 +318,9 @@ importers:
       '@soopa/ucp':
         specifier: workspace:*
         version: link:../../../../core/ucp/packages/ucp
+      '@soopa/webhooks':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/webhooks
 
   apps/edi/packages/ui:
     dependencies:
@@ -451,6 +457,9 @@ importers:
       '@soopa/sharding':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/sharding
+      '@soopa/webhooks':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/webhooks
 
   apps/ip/packages/ui:
     dependencies:
@@ -888,6 +897,12 @@ importers:
       '@soopa/database':
         specifier: workspace:*
         version: link:../database
+      '@soopa/seedwork':
+        specifier: workspace:*
+        version: link:../seedwork
+
+  core/platform/packages/webhooks:
+    devDependencies:
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../seedwork

@@ -1016,6 +1016,8 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
       entity_name: 'orders',
       primary_key_field: 'order_id',
       cursor_field: 'updated_at',
+      push_mode: 'RANDOM_BURST',
+      push_config: { min_batch: 2, max_batch: 6, interval_seconds: 5 },
       records_per_pull: 50,
       cursor_step_seconds: 60,
       velocity_mode: 'TIMESERIES_COLUMNAR',
@@ -1073,6 +1075,7 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
       }),
     );
     expect(createdEntity.recordsPerPull).toBe(50);
+    expect(createdEntity.pushMode).toBe('RANDOM_BURST');
 
     const updatedEntity = expectOk(
       await simRepo.updateEntity(

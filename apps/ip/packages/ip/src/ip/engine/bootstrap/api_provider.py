@@ -36,6 +36,7 @@ from ip.engine.bootstrap.container import (
     create_ip_token_refresher,
 )
 from ip.engine.domain.enums import PipelineStage
+from ip.engine.ports.outbound.canonical_reader_port import CanonicalReaderRegistryPort
 from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
 from ip.engine.ports.outbound.columnar_batch_processor_port import ColumnarBatchProcessorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
@@ -69,6 +70,7 @@ class IpApiProvider(IpApiProviderPort[AsyncSession, DatabaseRouterPort]):
         *,
         catalog_registry_factory: Callable[[bool], CatalogRegistryPort] | None = None,
         transformer_registry_factory: Callable[[], TransformerRegistryPort] | None = None,
+        reader_registry_factory: Callable[[], CanonicalReaderRegistryPort] | None = None,
         stitch_catalog_factory: Callable[[], StitchCatalogRegistryPort] | None = None,
         workflow_definition_registry_factory: Callable[[], WorkflowDefinitionRegistryPort]
         | None = None,
@@ -80,6 +82,7 @@ class IpApiProvider(IpApiProviderPort[AsyncSession, DatabaseRouterPort]):
         self._transformer_registry_factory = (
             transformer_registry_factory or create_empty_transformer_registry
         )
+        self._reader_registry_factory = reader_registry_factory
         self._stitch_catalog_factory = stitch_catalog_factory or create_default_stitch_catalog
         self._workflow_definition_registry_factory = (
             workflow_definition_registry_factory or create_empty_workflow_definition_registry
@@ -115,11 +118,15 @@ class IpApiProvider(IpApiProviderPort[AsyncSession, DatabaseRouterPort]):
     ) -> tuple[IpDataPlaneUnitOfWorkProviderPort, IpTenantResolverPort, TieredStoragePort]:
         resolved_resolver = resolver or create_ip_tenant_resolver(db_router)
         resolved_storage = storage or create_ip_tiered_storage()
+        reader_registry = (
+            self._reader_registry_factory() if self._reader_registry_factory is not None else None
+        )
         provider = create_ip_tenant_uow_provider(
             resolver=resolved_resolver,
             db_router=db_router,
             storage=resolved_storage,
             domain_repository_factories=self._domain_repository_factories,
+            reader_registry=reader_registry,
         )
         return provider, resolved_resolver, resolved_storage
 

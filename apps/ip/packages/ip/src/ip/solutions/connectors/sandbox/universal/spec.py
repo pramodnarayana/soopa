@@ -29,6 +29,31 @@ class StreamVelocityMode(StrEnum):
     TIMESERIES_COLUMNAR = "TIMESERIES_COLUMNAR"
 
 
+class PushCadenceMode(StrEnum):
+    """Supported outbound cadence profiles for simulated push streams."""
+
+    MANUAL = "MANUAL"
+    CONSTANT_PACED = "CONSTANT_PACED"
+    RANDOM_BURST = "RANDOM_BURST"
+    POISSON_JITTER = "POISSON_JITTER"
+    DIURNAL_WAVE = "DIURNAL_WAVE"
+    CRON_BATCH = "CRON_BATCH"
+    THIN_PUSH = "THIN_PUSH"
+    CHAOS_FAULT = "CHAOS_FAULT"
+
+
+class PullExtractionMode(StrEnum):
+    """Supported inbound query extraction strategies for simulated stream pulls."""
+
+    BOUNDED_TIME_WINDOW = "BOUNDED_TIME_WINDOW"
+    HIGH_WATERMARK = "HIGH_WATERMARK"
+    OFFSET_LIMIT = "OFFSET_LIMIT"
+    OPAQUE_TOKEN = "OPAQUE_TOKEN"  # noqa: S105 - Protocol query mode identifier, not a credential
+    DELTA_CDC = "DELTA_CDC"
+    RATE_LIMITED_429 = "RATE_LIMITED_429"
+    STREAMED_CHUNKED = "STREAMED_CHUNKED"
+
+
 class SimulatorSubmissionStatus(StrEnum):
     """Canonical acknowledgment status for simulated push and destination write responses."""
 
@@ -56,6 +81,8 @@ class SimulatorStreamSpec:
     records_per_pull: int = DEFAULT_SIMULATOR_RECORDS_PER_PULL
     cursor_step_seconds: int = DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS
     chaos_policy: SimulatorChaosPolicy = field(default_factory=SimulatorChaosPolicy)
+    push_mode: PushCadenceMode = PushCadenceMode.RANDOM_BURST
+    push_config: JsonDict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -79,6 +106,8 @@ __all__ = [
     "MIN_SIMULATOR_CURSOR_STEP_SECONDS",
     "MIN_SIMULATOR_RECORDS_PER_PULL",
     "UNIVERSAL_SIMULATOR_APP_ID",
+    "PullExtractionMode",
+    "PushCadenceMode",
     "SimulatorConnectionConfig",
     "SimulatorStreamSpec",
     "SimulatorSubmissionStatus",

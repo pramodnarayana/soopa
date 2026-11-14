@@ -42,6 +42,9 @@ class ReplicateRecordsCommand:
     sync_id: str
     trace_id: str
     correlation_id: str | None = None
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
+    replay_count: int = 0
     raw_payload: JsonValue = None
     stream_definition: StreamDefinition | None = None
 
@@ -196,6 +199,9 @@ class ReplicateRecordsUseCase:
                         source_inbound_record_id=command.inbound_record_id,
                         trace_id=command.trace_id,
                         correlation_id=command.correlation_id,
+                        parent_trace_id=command.parent_trace_id,
+                        original_trace_id=command.original_trace_id,
+                        replay_count=command.replay_count,
                         is_deleted=rec.is_deleted,
                     )
                 )
@@ -219,6 +225,10 @@ class ReplicateRecordsUseCase:
                         reason=rej.reason.value,
                         detail=rej.detail,
                         trace_id=command.trace_id,
+                        correlation_id=command.correlation_id,
+                        parent_trace_id=command.parent_trace_id,
+                        original_trace_id=command.original_trace_id,
+                        replay_count=command.replay_count,
                         created_at=now,
                     )
                 )

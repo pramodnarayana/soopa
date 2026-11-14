@@ -359,6 +359,7 @@ class ReplicaRecord(TracedAggregateRoot):
         correlation_id: str | None = None,
         parent_trace_id: str | None = None,
         original_trace_id: str | None = None,
+        replay_count: int | None = None,
         generation_id: int | None = None,
         source_inbound_record_id: str | None = None,
     ) -> None:
@@ -377,6 +378,8 @@ class ReplicaRecord(TracedAggregateRoot):
             self.parent_trace_id = parent_trace_id
         if original_trace_id is not None:
             self.original_trace_id = original_trace_id
+        if replay_count is not None:
+            self.replay_count = replay_count
         if generation_id is not None:
             self.last_seen_generation = generation_id
         if source_inbound_record_id is not None:
@@ -511,6 +514,10 @@ class ReplicaRejection:
     reason: str
     detail: str
     trace_id: str
+    correlation_id: str | None = None
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
+    replay_count: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @classmethod
@@ -525,6 +532,10 @@ class ReplicaRejection:
         reason: str,
         detail: str,
         trace_id: str,
+        correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
         created_at: datetime | None = None,
     ) -> ReplicaRejection:
         return cls(
@@ -537,5 +548,9 @@ class ReplicaRejection:
             reason=reason,
             detail=detail,
             trace_id=trace_id,
+            correlation_id=correlation_id,
+            parent_trace_id=parent_trace_id,
+            original_trace_id=original_trace_id,
+            replay_count=replay_count,
             created_at=created_at or datetime.now(UTC),
         )

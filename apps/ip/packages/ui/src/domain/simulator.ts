@@ -16,6 +16,19 @@ export const SimulatorVelocityMode = {
 export type SimulatorVelocityModeValue =
   (typeof SimulatorVelocityMode)[keyof typeof SimulatorVelocityMode];
 
+export const PushCadenceMode = {
+  MANUAL: 'MANUAL',
+  RANDOM_BURST: 'RANDOM_BURST',
+  CONSTANT_PACED: 'CONSTANT_PACED',
+  POISSON_JITTER: 'POISSON_JITTER',
+  CRON_BATCH: 'CRON_BATCH',
+  CHAOS_FAULT: 'CHAOS_FAULT',
+  DIURNAL_WAVE: 'DIURNAL_WAVE',
+  THIN_PUSH: 'THIN_PUSH',
+} as const;
+
+export type PushCadenceModeValue = (typeof PushCadenceMode)[keyof typeof PushCadenceMode];
+
 export type SimulatorBlueprintJson = JsonRecord | readonly unknown[];
 
 export interface SimulatorEntity {
@@ -25,6 +38,8 @@ export interface SimulatorEntity {
   readonly entityName: string;
   readonly primaryKeyField: string;
   readonly cursorField: string;
+  readonly pushMode: PushCadenceModeValue;
+  readonly pushConfig: JsonRecord;
   readonly recordsPerPull: number;
   readonly cursorStepSeconds: number;
   readonly velocityMode: SimulatorVelocityModeValue;
@@ -41,6 +56,8 @@ export interface CreateSimulatorEntityInput {
   readonly sampleBlueprint: SimulatorBlueprintJson;
   readonly primaryKeyField?: string | null;
   readonly cursorField?: string | null;
+  readonly pushMode?: PushCadenceModeValue;
+  readonly pushConfig?: JsonRecord;
   readonly recordsPerPull?: number;
   readonly cursorStepSeconds?: number;
   readonly velocityMode?: SimulatorVelocityModeValue;
@@ -52,6 +69,8 @@ export interface UpdateSimulatorEntityInput {
   readonly sampleBlueprint?: SimulatorBlueprintJson | null;
   readonly primaryKeyField?: string | null;
   readonly cursorField?: string | null;
+  readonly pushMode?: PushCadenceModeValue | null;
+  readonly pushConfig?: JsonRecord | null;
   readonly recordsPerPull?: number | null;
   readonly cursorStepSeconds?: number | null;
   readonly velocityMode?: SimulatorVelocityModeValue | null;

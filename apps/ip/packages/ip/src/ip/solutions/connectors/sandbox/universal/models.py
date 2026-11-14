@@ -11,6 +11,7 @@ from ip.solutions.connectors.sandbox.universal.dto import SIMULATOR_ENTITY_ID_PR
 from ip.solutions.connectors.sandbox.universal.spec import (
     DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS,
     DEFAULT_SIMULATOR_RECORDS_PER_PULL,
+    PushCadenceMode,
     StreamVelocityMode,
 )
 from seedwork.domain.types import JsonDict, JsonValue
@@ -50,6 +51,12 @@ class SimulatorEntityRecord(IpGlobalBase):
     entity_name: Mapped[str] = mapped_column(String(128), nullable=False)
     primary_key_field: Mapped[str] = mapped_column(String(128), nullable=False)
     cursor_field: Mapped[str] = mapped_column(String(128), nullable=False)
+    push_mode: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=PushCadenceMode.RANDOM_BURST.value,
+    )
+    push_config: Mapped[JsonDict] = mapped_column(JSONB, nullable=False, default=dict)
     records_per_pull: Mapped[int] = mapped_column(
         Integer, nullable=False, default=DEFAULT_SIMULATOR_RECORDS_PER_PULL
     )

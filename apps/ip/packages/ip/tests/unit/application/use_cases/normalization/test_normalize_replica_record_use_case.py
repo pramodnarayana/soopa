@@ -489,6 +489,9 @@ class RecordingCanonicalWriter(CanonicalWriterPort):
         replica_id: str,
         replica_version: int,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         row_copy = dict(fields)
         self.upserted.append((source_id, row_copy))
@@ -503,6 +506,9 @@ class RecordingCanonicalWriter(CanonicalWriterPort):
         source_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         self.soft_deleted.append(source_id)
         self.rows_by_source_id.pop(source_id, None)

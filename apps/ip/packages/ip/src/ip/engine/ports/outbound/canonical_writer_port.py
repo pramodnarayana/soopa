@@ -32,6 +32,9 @@ class CanonicalWriterPort(Protocol):
         replica_id: str,
         replica_version: int,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         """Upsert a canonical domain entity instance."""
         ...
@@ -45,6 +48,9 @@ class CanonicalWriterPort(Protocol):
         source_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None:
         """Soft-delete a canonical domain entity instance on source tombstone."""
         ...

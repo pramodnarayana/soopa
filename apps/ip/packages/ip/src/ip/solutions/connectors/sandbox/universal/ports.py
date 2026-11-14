@@ -10,6 +10,15 @@ from typing import Protocol, Self, TypeVar
 from ip.engine.domain.dispatch.enums import FailureDisposition
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
 from ip.solutions.connectors.sandbox.universal.dto import SimulatorEntityDTO
+from ip.solutions.connectors.sandbox.universal.strategies import (
+    CadenceState,
+    ExtractionQuery,
+    PaginatedSliceDTO,
+    PullExtractionMode,
+    PullExtractionStrategy,
+    PushCadenceMode,
+    PushCadenceStrategy,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -162,7 +171,14 @@ class SimulatorApiProviderPort(Protocol[TSession_contra]):
 
 
 __all__ = [
+    "CadenceState",
     "DuplicateSimulatorEntityError",
+    "ExtractionQuery",
+    "PaginatedSliceDTO",
+    "PullExtractionMode",
+    "PullExtractionStrategy",
+    "PushCadenceMode",
+    "PushCadenceStrategy",
     "SimulatorApiProviderPort",
     "SimulatorEntityNotFoundError",
     "SimulatorEntityQuotaExceededError",

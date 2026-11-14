@@ -46,6 +46,9 @@ from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryP
 from ip.engine.ports.outbound.transformation_repository_port import (
     TransformationRepositoryPort,
 )
+from ip.engine.ports.outbound.webhook_endpoint_repository_port import (
+    WebhookEndpointRepositoryPort,
+)
 
 TDomainRepo = TypeVar("TDomainRepo")
 
@@ -69,6 +72,7 @@ class IpControlPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     sync_runs: SyncRunRepositoryPort
     transformations: TransformationRepositoryPort
     stitches: StitchRepositoryPort
+    webhook_endpoints: WebhookEndpointRepositoryPort
 
 
 class IpDataPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):

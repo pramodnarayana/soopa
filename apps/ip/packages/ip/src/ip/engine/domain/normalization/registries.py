@@ -52,6 +52,28 @@ class CanonicalWriterRegistry(Generic[_WriterT]):
         return self._writers.get(canonical_type)
 
 
+_ReaderT = TypeVar("_ReaderT", bound=CanonicalTypeIdentifiable)
+
+
+class CanonicalReaderRegistry(Generic[_ReaderT]):
+    """Registry of domain canonical readers keyed by canonical_type."""
+
+    def __init__(self) -> None:
+        self._readers: dict[str, _ReaderT] = {}
+
+    def register(self, reader: _ReaderT) -> None:
+        """Register a reader for a canonical_type."""
+        self._readers[reader.canonical_type] = reader
+
+    def get(self, canonical_type: str) -> _ReaderT | None:
+        """Retrieve a registered reader for a canonical_type."""
+        return self._readers.get(canonical_type)
+
+    def all_readers(self) -> tuple[_ReaderT, ...]:
+        """Retrieve all registered readers."""
+        return tuple(self._readers.values())
+
+
 class TransformerRegistry:
     """Thread-safe registry of pure normalization transformers keyed by (transformation_id, version)."""
 
@@ -83,6 +105,7 @@ class TransformerRegistry:
 
 __all__ = [
     "CanonicalEntityRegistry",
+    "CanonicalReaderRegistry",
     "CanonicalTypeIdentifiable",
     "CanonicalWriterRegistry",
     "TransformerRegistry",

@@ -215,11 +215,12 @@ def upgrade() -> None:
         sa.Column("extracted_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "source_inbound_record_id", sa.String(length=64), server_default="", nullable=False
-        ),
-        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("source_inbound_record_id", sa.String(length=64), server_default="", nullable=False),
+        sa.Column("trace_id", sa.String(length=128), nullable=False),
         sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
+        sa.Column("original_trace_id", sa.String(length=128), nullable=True),
+        sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "tenant_id",
@@ -249,7 +250,11 @@ def upgrade() -> None:
         sa.Column("record_index", sa.Integer(), nullable=False),
         sa.Column("reason", sa.String(length=64), nullable=False),
         sa.Column("detail", sa.Text(), nullable=False),
-        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("trace_id", sa.String(length=128), nullable=False),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
+        sa.Column("original_trace_id", sa.String(length=128), nullable=True),
+        sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -257,6 +262,7 @@ def upgrade() -> None:
         "idx_rejection_tenant_conn", "replica_rejections", ["tenant_id", "connection_id", "stream"]
     )
     op.create_index("idx_rejection_trace", "replica_rejections", ["tenant_id", "trace_id"])
+    op.create_index("idx_rejection_corr", "replica_rejections", ["tenant_id", "correlation_id"])
 
     # 4. Layer 3: normalized_records & global_entity_map & ip_trace_events
     op.create_table(

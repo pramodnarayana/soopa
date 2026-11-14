@@ -7,6 +7,7 @@ from typing import Protocol, runtime_checkable
 
 from ip.engine.ports.outbound.uow import DomainRepositoryKey
 from ip.solutions.domains.energy.canonical import (
+    CanonicalBillingReadingDTO,
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,
 )
@@ -39,6 +40,9 @@ class EnergyDomainRepositoryPort(Protocol):
         service_point_external_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None: ...
 
     async def soft_delete_meter_reading_by_id(
@@ -47,6 +51,9 @@ class EnergyDomainRepositoryPort(Protocol):
         reading_id: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
     ) -> None: ...
 
     async def update_meter_reading_service_point(
@@ -56,6 +63,40 @@ class EnergyDomainRepositoryPort(Protocol):
         service_point_id: str,
         trace_id: str,
     ) -> None: ...
+
+    async def soft_delete_billing_reading_by_id(
+        self,
+        tenant_id: str,
+        reading_id: str,
+        trace_id: str,
+        correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
+    ) -> None: ...
+
+    async def update_billing_reading_service_point(
+        self,
+        tenant_id: str,
+        reading_id: str,
+        service_point_id: str,
+        trace_id: str,
+    ) -> None: ...
+
+    async def save_billing_reading(self, dto: CanonicalBillingReadingDTO) -> None: ...
+
+    async def get_billing_reading_by_reading_id(
+        self,
+        tenant_id: str,
+        reading_id: str,
+    ) -> CanonicalBillingReadingDTO | None: ...
+
+    async def list_billing_readings_by_meter(
+        self,
+        tenant_id: str,
+        meter_serial_number: str,
+        limit: int = 100,
+    ) -> Sequence[CanonicalBillingReadingDTO]: ...
 
 
 def _narrow_energy_domain_repository(

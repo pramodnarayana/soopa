@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.data_plane.mappers import normalized_record_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import NormalizedRecordModel
 from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+from ip.engine.ports.outbound.canonical_reader_port import (
+    CanonicalReaderRegistryPort,
+)
 from ip.engine.ports.outbound.normalized_record_repository_port import (
     NormalizedRecordRepositoryPort,
 )
@@ -22,8 +26,14 @@ class SqlAlchemyNormalizedRecordRepository(
 ):
     """Repository persisting and retrieving NormalizedRecord aggregates with transactional outbox draining."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        reader_registry: CanonicalReaderRegistryPort | None = None,
+    ) -> None:
         super().__init__(session)
+        self._reader_registry = reader_registry
 
     @staticmethod
     def _to_domain_model(orm: NormalizedRecordModel) -> NormalizedRecord:
@@ -80,9 +90,19 @@ class SqlAlchemyNormalizedRecordRepository(
         )
         result = await self._session.execute(stmt)
         orm = result.scalar_one_or_none()
-        if orm is None:
-            return None
-        return self._to_domain_model(orm)
+        if orm is not None:
+            return self._to_domain_model(orm)
+
+        if self._reader_registry is not None:
+            for reader in self._reader_registry.all_readers():
+                found = await reader.get_by_id(
+                    self._session,
+                    tenant_id=tenant_id,
+                    record_id=record_id,
+                )
+                if found is not None:
+                    return found
+        return None
 
     async def list_by_source(
         self,
@@ -106,6 +126,38 @@ class SqlAlchemyNormalizedRecordRepository(
         result = await self._session.execute(stmt)
         return [self._to_domain_model(orm) for orm in result.scalars().all()]
 
+    async def _fetch_from_readers(
+        self,
+        *,
+        tenant_id: str,
+        connection_id: str | None,
+        canonical_type: str | None,
+        fetch_window: int,
+        seen_ids: set[str],
+        domain_records: list[NormalizedRecord],
+    ) -> None:
+        if self._reader_registry is None:
+            return
+        readers = (
+            (self._reader_registry.get(canonical_type),)
+            if canonical_type is not None
+            else self._reader_registry.all_readers()
+        )
+        for reader in readers:
+            if reader is None:
+                continue
+            recs = await reader.list_records(
+                self._session,
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+                limit=fetch_window,
+                offset=0,
+            )
+            for r in recs:
+                if r.id not in seen_ids:
+                    seen_ids.add(r.id)
+                    domain_records.append(r)
+
     async def list_records(
         self,
         tenant_id: str,
@@ -115,21 +167,57 @@ class SqlAlchemyNormalizedRecordRepository(
         limit: int = 50,
         offset: int = 0,
     ) -> Sequence[NormalizedRecord]:
+        fetch_window = offset + limit
         stmt = select(NormalizedRecordModel).where(NormalizedRecordModel.tenant_id == tenant_id)
         if connection_id is not None:
             stmt = stmt.where(NormalizedRecordModel.connection_id == connection_id)
         if canonical_type is not None:
             stmt = stmt.where(NormalizedRecordModel.canonical_type == str(canonical_type))
+
+        if self._reader_registry is None:
+            stmt = (
+                stmt.order_by(
+                    NormalizedRecordModel.normalized_at.desc(),
+                    NormalizedRecordModel.id.asc(),
+                )
+                .offset(offset)
+                .limit(limit)
+            )
+            result = await self._session.execute(stmt)
+            return [self._to_domain_model(orm) for orm in result.scalars().all()]
+
+        # Query normalized_records store up to fetch_window
         stmt = (
             stmt.order_by(
                 NormalizedRecordModel.normalized_at.desc(),
                 NormalizedRecordModel.id.asc(),
             )
-            .offset(offset)
-            .limit(limit)
+            .offset(0)
+            .limit(fetch_window)
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain_model(orm) for orm in result.scalars().all()]
+        domain_records: list[NormalizedRecord] = [
+            self._to_domain_model(orm) for orm in result.scalars().all()
+        ]
+        seen_ids: set[str] = {r.id for r in domain_records}
+
+        await self._fetch_from_readers(
+            tenant_id=tenant_id,
+            connection_id=connection_id,
+            canonical_type=canonical_type,
+            fetch_window=fetch_window,
+            seen_ids=seen_ids,
+            domain_records=domain_records,
+        )
+
+        if domain_records:
+            epoch_min = datetime.min.replace(tzinfo=UTC)
+            domain_records.sort(
+                key=lambda r: (r.normalized_at or epoch_min, r.id),
+                reverse=True,
+            )
+            return domain_records[offset : offset + limit]
+        return ()
 
     async def get_by_trace_id(
         self,
@@ -145,4 +233,24 @@ class SqlAlchemyNormalizedRecordRepository(
             .order_by(NormalizedRecordModel.normalized_at.asc())
         )
         result = await self._session.execute(stmt)
-        return [self._to_domain_model(orm) for orm in result.scalars().all()]
+        records = [self._to_domain_model(orm) for orm in result.scalars().all()]
+        if self._reader_registry is None:
+            return records
+
+        seen_ids: set[str] = {r.id for r in records}
+        domain_records: list[NormalizedRecord] = list(records)
+        for reader in self._reader_registry.all_readers():
+            domain_recs = await reader.get_by_trace_id(
+                self._session,
+                tenant_id=tenant_id,
+                trace_id=trace_id,
+            )
+            for rec in domain_recs:
+                if rec.id not in seen_ids:
+                    seen_ids.add(rec.id)
+                    domain_records.append(rec)
+        if domain_records:
+            epoch_min = datetime.min.replace(tzinfo=UTC)
+            domain_records.sort(key=lambda r: (r.normalized_at or epoch_min, r.id))
+            return domain_records
+        return ()

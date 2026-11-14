@@ -43,17 +43,19 @@ from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import AuthType
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.normalization.transformation import ReplicaSnapshot, TransformationContext
 from ip.engine.domain.replication.enums import CursorKind
 from ip.engine.domain.replication.replica_record import compute_record_key
 from ip.engine.domain.replication.stream_definition import StreamDefinition
 from ip.engine.domain.trace.enums import IpTraceEventType
-from ip.engine.ports.outbound.transformer_hook_port import ReplicaSnapshotDTO
 from ip.solutions.domains.energy.canonical import (
     CanonicalMeterReadingDTO,
     EnergyEntityType,
 )
 from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
-from ip.solutions.transformers.energy.itron_mdm import ItronMdmTransformer
+from ip.solutions.domains.energy.transformers.ami.meter_reading import (
+    AmiMeterReadingTransformerV1,
+)
 from seedwork.domain.types import JsonDict
 from sqlalchemy import select
 
@@ -146,23 +148,32 @@ async def test_full_l1_to_l5_energy_pipeline_vertical_slice_on_postgres(
     assert replica is not None
 
     # 3. Layer 3 & 4: Transform to NormalizedRecord + CanonicalMeterReadingDTO + GlobalEntityMap
-    transformer = ItronMdmTransformer()
-    replica_snapshot = ReplicaSnapshotDTO(
+    transformer = AmiMeterReadingTransformerV1()
+    replica_snapshot = ReplicaSnapshot(
+        id=replica.id,
+        connection_id=conn.id,
         stream=replica.stream,
         record_key=replica.record_key,
+        version=replica.version,
         data=replica.data,
-        primary_key_values=replica.primary_key_values,
     )
-    normalized_dto = transformer.normalize(replica_snapshot)
-    assert normalized_dto is not None
+    ctx = TransformationContext(
+        tenant_id=seeded_ip_tenant,
+        connection_id=conn.id,
+        stream=replica.stream,
+        trace_id=trace_id,
+    )
+    transform_res = transformer.transform(replica_snapshot, ctx)
+    assert len(transform_res.drafts) == 1
+    draft = transform_res.drafts[0]
 
     norm_repo = SqlAlchemyNormalizedRecordRepository(tenant_session)
     norm_record = NormalizedRecord.create(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        canonical_type=normalized_dto.canonical_type,
-        source_id=normalized_dto.source_id,
-        canonical_data=normalized_dto.data,
+        canonical_type=draft.canonical_type,
+        source_id=draft.source_id,
+        canonical_data=draft.fields,
         trace_id=trace_id,
         correlation_id="CORR-ERCOT-777",
     )
@@ -176,8 +187,8 @@ async def test_full_l1_to_l5_energy_pipeline_vertical_slice_on_postgres(
         correlation_id="CORR-ERCOT-777",
         source_connection_id=conn.id,
         source_replica_id=replica.id,
-        meter_serial_number=str(normalized_dto.data["meter_serial_number"]),
-        service_point_id=str(normalized_dto.data["service_point_id"]),
+        meter_serial_number=str(draft.fields["meter_serial_number"]),
+        service_point_id=str(draft.fields["service_point_id"]),
         reading_timestamp=now,
         interval_minutes=15,
         kwh_delivered=31.45,
