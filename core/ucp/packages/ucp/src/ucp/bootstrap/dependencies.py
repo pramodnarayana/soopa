@@ -28,24 +28,23 @@ def get_token_verifier() -> ZitadelTokenVerifierAdapter:
     # it only serves /oauth/v2/keys when the Host header matches its configured
     # ZITADEL_EXTERNALDOMAIN. Sending the internal URL's hostname (e.g.
     # "zitadel.staging-cluster.local") would cause a 404 from Zitadel.
-    jwks_url = (
-        f"{settings.zitadel_api_url_value.rstrip('/')}/oauth/v2/keys"
-        if settings.zitadel_api_url_value
-        else None
-    )
+    jwks_url = f"{settings.idp_api_url.rstrip('/')}/oauth/v2/keys" if settings.idp_api_url else None
     # Extract the bare hostname from the public issuer URL (e.g. "identity.staging.flowwolf.io")
     # to use as the Host header when making internal JWKS requests.
     # urlparse is used (not str.split) so that issuer URLs with path components
     # (e.g. "https://host/path") are handled correctly.
-    jwks_host_header = urlparse(settings.zitadel_issuer).netloc if settings.zitadel_issuer else None
+    jwks_host_header = (
+        urlparse(settings.identity.issuer).netloc if settings.identity.issuer else None
+    )
+
+    accepted_audiences = settings.identity.accepted_audiences
+    if not accepted_audiences and settings.control_plane_project_id:
+        accepted_audiences = (settings.control_plane_project_id,)
 
     options = ZitadelTokenVerifierOptions(
-        issuer=settings.zitadel_issuer,
-        audience=[
-            settings.zitadel_ucp_project_id,
-            settings.identity.oauth_client_id,
-        ],
-        platform_org_id=settings.zitadel_platform_org_id,
+        issuer=settings.identity.issuer,
+        audience=accepted_audiences,
+        platform_org_id=settings.identity.platform_org_id,
         jwks_url=jwks_url,
         jwks_host_header=jwks_host_header,
         allow_private_ips=settings.identity.allow_private_ips,

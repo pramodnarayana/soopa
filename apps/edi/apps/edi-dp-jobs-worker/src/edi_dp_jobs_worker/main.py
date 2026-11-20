@@ -10,18 +10,22 @@ logger = structlog.get_logger(__name__)
 
 
 class EdiDpJobsWorkerModule(LaunchableWorker):
-    def __init__(self) -> None:
-        self.container = WorkerContainer()
-        self.container.wire()
+    def __init__(self, container: WorkerContainer | None = None) -> None:
+        self.container = container or WorkerContainer()
+        if container is None:
+            self.container.wire()
 
     async def start(self) -> None:
         logger.info("edi_dp_jobs_worker.starting")
         await self.container.start()
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        tasks: list[asyncio.Task[object]] = []
         if self.container.dp_manager is not None:
-            return self.container.dp_manager.background_tasks()
-        return []
+            tasks.extend(self.container.dp_manager.background_tasks())
+        if self.container.dp_outbox_relay is not None:
+            tasks.extend(self.container.dp_outbox_relay.background_tasks())
+        return tasks
 
     async def stop(self) -> None:
         logger.info("edi_dp_jobs_worker_shutting_down")

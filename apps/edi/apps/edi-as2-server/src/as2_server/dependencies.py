@@ -12,7 +12,6 @@ from edi.ports.outbound.tenant_port import TenantPort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
 from fastapi import Depends, HTTPException, Request
-from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from secret_store.ports.secret_store_port import SecretStorePort
 from secret_store.provider import SecretStoreProvider
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,10 +64,6 @@ def get_receive_as2_use_case(
     if tenant_resolver is None:
         raise HTTPException(status_code=503, detail="Tenant resolver not initialized")
 
-    publisher: OutboxPublisherPort | None = request.app.state.publisher
-    if publisher is None:
-        raise HTTPException(status_code=503, detail="Publisher not initialized")
-
     crypto_service: CryptoServicePort | None = request.app.state.crypto_service
     if crypto_service is None:
         raise HTTPException(status_code=503, detail="Crypto service not initialized")
@@ -90,5 +85,4 @@ def get_receive_as2_use_case(
         dp_factory=dp_factory,
         secret_store=vault,
         crypto_service=crypto_service,
-        publisher=publisher,
     )

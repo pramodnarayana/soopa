@@ -11,24 +11,23 @@ from ip.solutions.domains.energy.canonical import (
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,
 )
+from ip.solutions.domains.energy.itron.meter_reading_transformer import (
+    ItronMeterReadingTransformer,
+)
+from ip.solutions.domains.energy.itron.service_point_transformer import (
+    ItronServicePointTransformer,
+)
+from ip.solutions.domains.energy.landis.meter_reading_transformer import (
+    AmiMeterReadingTransformer,
+)
+from ip.solutions.domains.energy.landis.service_point_transformer import (
+    AmiServicePointTransformer,
+)
 from ip.solutions.domains.energy.models import (
     MdmMeterReadingRecord,
     MdmServicePointRecord,
 )
 from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
-from ip.solutions.domains.energy.transformers.ami.meter_reading import (
-    AmiMeterReadingTransformerV1,
-    AmiMeterReadingTransformerV2,
-)
-from ip.solutions.domains.energy.transformers.ami.service_point import (
-    AmiServicePointTransformerV1,
-)
-from ip.solutions.domains.energy.transformers.itron.meter_reading import (
-    ItronMeterReadingTransformerV1,
-)
-from ip.solutions.domains.energy.transformers.itron.service_point import (
-    ItronServicePointTransformerV1,
-)
 from ip.solutions.domains.energy.writers import (
     _parse_float,
     _parse_iso_datetime,
@@ -138,9 +137,9 @@ def test_energy_meter_reading_transformer_rejects_invalid_iso_timestamp() -> Non
         stream="meter_reads",
         trace_id="ip_trc_01",
     )
-    v1 = AmiMeterReadingTransformerV1()
+    transformer = AmiMeterReadingTransformer()
 
-    bad_ts_res = v1.transform(
+    bad_ts_res = transformer.transform(
         ReplicaSnapshot(
             id="rep_bad_ts",
             connection_id="conn_01",
@@ -166,7 +165,7 @@ def test_energy_meter_reading_transformer_rejects_non_finite_required_metrics() 
         stream="meter_reads",
         trace_id="ip_trc_01",
     )
-    v2 = AmiMeterReadingTransformerV2()
+    transformer = AmiMeterReadingTransformer()
 
     for field_name, bad_val in (
         ("kwh_delivered", "nan"),
@@ -176,7 +175,7 @@ def test_energy_meter_reading_transformer_rejects_non_finite_required_metrics() 
         ("kwh_received", float("nan")),
         ("kwh_received", -(10**400)),
     ):
-        non_finite_res = v2.transform(
+        non_finite_res = transformer.transform(
             ReplicaSnapshot(
                 id="rep_nan",
                 connection_id="conn_01",
@@ -206,9 +205,9 @@ def test_energy_meter_reading_transformer_coerces_non_finite_optional_metrics() 
         stream="meter_reads",
         trace_id="ip_trc_01",
     )
-    v2 = AmiMeterReadingTransformerV2()
+    transformer = AmiMeterReadingTransformer()
 
-    valid_with_non_finite_optional = v2.transform(
+    valid_with_non_finite_optional = transformer.transform(
         ReplicaSnapshot(
             id="rep_opt_nan",
             connection_id="conn_01",
@@ -232,7 +231,7 @@ def test_energy_meter_reading_transformer_coerces_non_finite_optional_metrics() 
     assert draft_fields["interval_minutes"] == 15
     assert draft_fields["net_kwh"] == 10.0
 
-    overflow_diff_res = v2.transform(
+    overflow_diff_res = transformer.transform(
         ReplicaSnapshot(
             id="rep_overflow_diff",
             connection_id="conn_01",
@@ -266,9 +265,9 @@ def test_ami_meter_reading_transformer_supports_meter_id_alias() -> None:
         stream="meter_readings",
         trace_id="trc_ami_02",
     )
-    v1 = AmiMeterReadingTransformerV1()
+    transformer = AmiMeterReadingTransformer()
 
-    res = v1.transform(
+    res = transformer.transform(
         ReplicaSnapshot(
             id="rep_ami_alt",
             connection_id="conn_ami_01",
@@ -296,7 +295,7 @@ def test_itron_meter_reading_transformer_maps_vendor_contract() -> None:
         stream="meter_readings",
         trace_id="trc_itron_01",
     )
-    itron_xfrm = ItronMeterReadingTransformerV1()
+    itron_xfrm = ItronMeterReadingTransformer()
     assert itron_xfrm.transformation_id == "energy.itron_meter_reading"
     assert itron_xfrm.transformation_version == 1
 
@@ -337,7 +336,7 @@ def test_itron_meter_reading_transformer_rejects_missing_serial() -> None:
         stream="meter_readings",
         trace_id="trc_itron_01",
     )
-    itron_xfrm = ItronMeterReadingTransformerV1()
+    itron_xfrm = ItronMeterReadingTransformer()
 
     res = itron_xfrm.transform(
         ReplicaSnapshot(
@@ -363,7 +362,7 @@ def test_itron_service_point_transformer_maps_vendor_contract() -> None:
         stream="service_points",
         trace_id="trc_itron_sp_01",
     )
-    itron_sp_xfrm = ItronServicePointTransformerV1()
+    itron_sp_xfrm = ItronServicePointTransformer()
     assert itron_sp_xfrm.transformation_id == "energy.itron_service_point"
 
     res = itron_sp_xfrm.transform(
@@ -401,7 +400,7 @@ def test_ami_service_point_transformer_maps_vendor_contract() -> None:
         stream="service_points",
         trace_id="trc_ami_sp_01",
     )
-    ami_sp_xfrm = AmiServicePointTransformerV1()
+    ami_sp_xfrm = AmiServicePointTransformer()
     assert ami_sp_xfrm.transformation_id == "energy.ami_service_point"
 
     res = ami_sp_xfrm.transform(
@@ -439,7 +438,7 @@ def test_ami_service_point_transformer_rejects_missing_service_point_id() -> Non
         stream="service_points",
         trace_id="trc_ami_sp_01",
     )
-    ami_sp_xfrm = AmiServicePointTransformerV1()
+    ami_sp_xfrm = AmiServicePointTransformer()
 
     res = ami_sp_xfrm.transform(
         ReplicaSnapshot(
@@ -467,7 +466,7 @@ def test_ami_service_point_transformer_supports_meter_id_alias() -> None:
         stream="service_points",
         trace_id="trc_ami_sp_01",
     )
-    ami_sp_xfrm = AmiServicePointTransformerV1()
+    ami_sp_xfrm = AmiServicePointTransformer()
 
     res = ami_sp_xfrm.transform(
         ReplicaSnapshot(

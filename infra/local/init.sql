@@ -3,7 +3,17 @@
 -- Must be defined before any CREATE POLICY statement that references them.
 -- ---------------------------------------------------------------------------
 CREATE SCHEMA IF NOT EXISTS platform;
+CREATE SCHEMA IF NOT EXISTS identity;
+CREATE SCHEMA IF NOT EXISTS ucp;
+CREATE SCHEMA IF NOT EXISTS notifications;
+CREATE SCHEMA IF NOT EXISTS scheduling;
+CREATE SCHEMA IF NOT EXISTS observability;
 GRANT USAGE ON SCHEMA platform TO public;
+GRANT USAGE ON SCHEMA identity TO public;
+GRANT USAGE ON SCHEMA ucp TO public;
+GRANT USAGE ON SCHEMA notifications TO public;
+GRANT USAGE ON SCHEMA scheduling TO public;
+GRANT USAGE ON SCHEMA observability TO public;
 
 -- Returns the tenant_id stored in the current session local variable.
 -- Set this before any query that should be tenant-scoped:

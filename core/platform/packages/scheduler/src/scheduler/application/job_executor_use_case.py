@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 
 import structlog
@@ -14,10 +14,14 @@ logger = structlog.get_logger(__name__)
 
 class JobExecutorUseCase:
     def __init__(
-        self, uow_factory: Callable[[], SchedulerUnitOfWorkPort], dispatcher: JobDispatcherPort
-    ):
+        self,
+        uow_factory: Callable[[], SchedulerUnitOfWorkPort],
+        dispatcher: JobDispatcherPort,
+        active_namespaces: Sequence[str] | None = None,
+    ) -> None:
         self.uow_factory = uow_factory
         self.dispatcher = dispatcher
+        self.active_namespaces = active_namespaces
 
     async def execute(self, worker_id: str, limit: int, lock_lease_ms: int) -> None:
         async with self.uow_factory() as uow:
@@ -25,6 +29,7 @@ class JobExecutorUseCase:
                 worker_id=worker_id,
                 limit=limit,
                 lock_lease_ms=lock_lease_ms,
+                active_namespaces=self.active_namespaces,
             )
             # claim_next_jobs modifies rows so it must be committed
             await uow.commit()
@@ -33,7 +38,7 @@ class JobExecutorUseCase:
             return
 
         logger.info(
-            "Worker {worker_id} claimed {count} jobs.",
+            "scheduler_jobs_claimed",
             worker_id=worker_id,
             count=len(jobs),
         )
@@ -47,7 +52,7 @@ class JobExecutorUseCase:
                 raise ValueError(f"No target_queue defined for job {job.name}")
 
             logger.info(
-                "Dispatching job {job_name} ({job_id}) to queue {job_target_queue}",
+                "scheduler_job_dispatching",
                 job_name=job.name,
                 job_id=job.id,
                 job_target_queue=job.target_queue,
@@ -63,7 +68,7 @@ class JobExecutorUseCase:
                     await uow.job_repo.reschedule(job.id, worker_id, next_run_at)
                     await uow.commit()
                 logger.info(
-                    "Successfully rescheduled job {job_name} ({job_id}) for {next_run_at} via cron",
+                    "scheduler_job_rescheduled_cron",
                     job_name=job.name,
                     job_id=job.id,
                     next_run_at=next_run_at.isoformat(),
@@ -74,7 +79,7 @@ class JobExecutorUseCase:
                     await uow.job_repo.reschedule(job.id, worker_id, next_run_at)
                     await uow.commit()
                 logger.info(
-                    "Successfully rescheduled job {job_name} ({job_id}) for {next_run_at} via interval",
+                    "scheduler_job_rescheduled_interval",
                     job_name=job.name,
                     job_id=job.id,
                     next_run_at=next_run_at.isoformat(),
@@ -84,7 +89,7 @@ class JobExecutorUseCase:
                     await uow.job_repo.mark_completed(job.id, worker_id)
                     await uow.commit()
                 logger.info(
-                    "Successfully completed job {job_name} ({job_id})",
+                    "scheduler_job_completed",
                     job_name=job.name,
                     job_id=job.id,
                 )
@@ -104,7 +109,7 @@ class JobExecutorUseCase:
                     )
                     await uow.commit()
                 logger.info(
-                    "Scheduled retry for job {job_name} ({job_id}) at {next_run_at}",
+                    "scheduler_job_retry_scheduled",
                     job_name=job.name,
                     job_id=job.id,
                     next_run_at=next_run_at.isoformat(),

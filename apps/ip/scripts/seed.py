@@ -11,14 +11,13 @@ from database.models.identity import Tenant
 from database.provider import DatabaseProvider
 from database.utils import normalize_to_asyncpg
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from seedwork.infra.config import load_repo_env
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import PlatformDatabaseSettings
 from sharding.domain.constants import DatabaseShardStatus
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
-
-load_repo_env(override=False)
 
 logger = structlog.get_logger(__name__)
 
@@ -29,20 +28,19 @@ IP_SHARD_ID = "ip_shard_1"
 
 async def seed_ip_domain() -> None:
     """Idempotently seeds the IP primary database shard, application record, and default shard binding."""
-    database_url = os.environ.get("DATABASE_URL", "")
-    if not database_url:
-        logger.error("ip_seed_missing_database_url")
-        sys.exit(1)
+    settings = load_settings_safely(PlatformDatabaseSettings)
+    database_url = settings.global_url
 
-    ip_shard_dsn = (
-        os.environ.get("DATABASE__SHARD_OVERRIDES__IP_SHARD_1")
-        or os.environ.get("SHARD_OVERRIDES__IP_SHARD_1")
-        or os.environ.get("IP_DATABASE_URL", "")
-    )
-    if ip_shard_dsn:
-        ip_shard_dsn = normalize_to_asyncpg(ip_shard_dsn)
+    ip_shards: dict[str, str] = {}
+    for shard_key, dsn in settings.shard_overrides.items():
+        if shard_key.lower().startswith("ip_"):
+            ip_shards[shard_key.lower()] = normalize_to_asyncpg(dsn)
 
-    provider = DatabaseProvider.from_url(normalize_to_asyncpg(database_url))
+    default_ip_dsn = os.environ.get("IP_DATABASE_URL", "")
+    if not ip_shards and default_ip_dsn:
+        ip_shards[IP_SHARD_ID] = normalize_to_asyncpg(default_ip_dsn)
+
+    provider = DatabaseProvider.from_url(database_url)
     try:
         async with provider.session() as session:
             stmt_app = (
@@ -66,48 +64,50 @@ async def seed_ip_domain() -> None:
             actual_app_id = str(app_res.scalar_one())
             logger.info("ip_seed_app_registered", app_id=actual_app_id, slug=IP_APP_SLUG)
 
-            if ip_shard_dsn:
-                stmt_shard = (
-                    pg_insert(DatabaseShard)
-                    .values(
-                        id=IP_SHARD_ID,
-                        name="IP Primary Shard",
-                        dsn=ip_shard_dsn,
-                        status=DatabaseShardStatus.ACTIVE,
-                    )
-                    .on_conflict_do_update(
-                        index_elements=[DatabaseShard.id],
-                        set_={
-                            "name": "IP Primary Shard",
-                            "dsn": ip_shard_dsn,
-                            "status": DatabaseShardStatus.ACTIVE,
-                        },
-                    )
-                )
-                await session.execute(stmt_shard)
-                logger.info("ip_seed_shard_registered", shard_id=IP_SHARD_ID)
-
-                tenants_res = await session.execute(select(Tenant.id))
-                tenant_ids = set(tenants_res.scalars().all())
-                tenant_ids.add(PLATFORM_TENANT_ID)
-                for t_id in tenant_ids:
-                    stmt_binding = (
-                        pg_insert(ShardRegistry)
+            if ip_shards:
+                for shard_id, shard_dsn in ip_shards.items():
+                    shard_name = f"IP Shard ({shard_id})"
+                    stmt_shard = (
+                        pg_insert(DatabaseShard)
                         .values(
+                            id=shard_id,
+                            name=shard_name,
+                            dsn=shard_dsn,
+                            status=DatabaseShardStatus.ACTIVE,
+                        )
+                        .on_conflict_do_update(
+                            index_elements=[DatabaseShard.id],
+                            set_={
+                                "name": shard_name,
+                                "dsn": shard_dsn,
+                                "status": DatabaseShardStatus.ACTIVE,
+                            },
+                        )
+                    )
+                    await session.execute(stmt_shard)
+                    logger.info("ip_seed_shard_registered", shard_id=shard_id)
+
+                    tenants_res = await session.execute(select(Tenant.id))
+                    tenant_ids = set(tenants_res.scalars().all())
+                    tenant_ids.add(PLATFORM_TENANT_ID)
+                    for t_id in tenant_ids:
+                        stmt_binding = (
+                            pg_insert(ShardRegistry)
+                            .values(
+                                tenant_id=t_id,
+                                app_id=actual_app_id,
+                                shard_id=shard_id,
+                            )
+                            .on_conflict_do_nothing(
+                                index_elements=[ShardRegistry.tenant_id, ShardRegistry.app_id],
+                            )
+                        )
+                        await session.execute(stmt_binding)
+                        logger.info(
+                            "ip_seed_tenant_shard_bound",
                             tenant_id=t_id,
-                            app_id=actual_app_id,
-                            shard_id=IP_SHARD_ID,
+                            shard_id=shard_id,
                         )
-                        .on_conflict_do_nothing(
-                            index_elements=[ShardRegistry.tenant_id, ShardRegistry.app_id],
-                        )
-                    )
-                    await session.execute(stmt_binding)
-                    logger.info(
-                        "ip_seed_tenant_shard_bound",
-                        tenant_id=t_id,
-                        shard_id=IP_SHARD_ID,
-                    )
             else:
                 logger.info("ip_seed_shard_skipped_no_dsn")
 

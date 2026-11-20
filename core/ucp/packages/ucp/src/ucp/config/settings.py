@@ -1,10 +1,9 @@
-import typing
 from functools import lru_cache
 
 from identity import PlatformIdentitySettings
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infra.config import load_settings_safely
+from pydantic_settings import SettingsConfigDict
+from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
@@ -17,7 +16,7 @@ class UcpAwsSettings(PlatformAwsSettings):
     )
 
 
-class SqsSettings(BaseSettings):
+class SqsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
     ucp_identity_sync_queue_url: str = Field(
         validation_alias="SQS_UCP_IDENTITY_SYNC_QUEUE_URL", default=""
@@ -25,7 +24,7 @@ class SqsSettings(BaseSettings):
     ucp_jobs_queue_url: str = Field(validation_alias="SQS_UCP_JOBS_QUEUE_URL", default="")
 
 
-class AppSettings(BaseSettings):
+class AppSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     use_localstack: bool = Field(validation_alias="USE_LOCALSTACK", default=False)
@@ -36,19 +35,19 @@ class AppSettings(BaseSettings):
         validation_alias="OUTBOX_SWEEPER_CRON_INTERVAL", default=5
     )
 
-    database: PlatformDatabaseSettings = Field(
-        default_factory=lambda: typing.cast(PlatformDatabaseSettings, {})
-    )
-    aws: UcpAwsSettings = Field(default_factory=lambda: typing.cast(UcpAwsSettings, {}))
-    sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
-    identity: PlatformIdentitySettings = Field(
-        default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
-    )
+    database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
+    aws: UcpAwsSettings = Field(default_factory=UcpAwsSettings)
+    sqs: SqsSettings = Field(default_factory=SqsSettings)
+    identity: PlatformIdentitySettings = Field(default_factory=PlatformIdentitySettings)
 
-    zitadel_api_url_value: str = Field(validation_alias="IDENTITY_API_URL", default="")
-    zitadel_machine_key_value: str = Field(validation_alias="IDENTITY_MACHINE_KEY", default="")
-    zitadel_default_user_password_value: str = Field(
+    idp_api_url_value: str = Field(validation_alias="IDENTITY_API_URL", default="")
+    idp_machine_key_value: str = Field(validation_alias="IDENTITY_MACHINE_KEY", default="")
+    idp_default_user_password_value: str = Field(
         validation_alias="IDENTITY_DEFAULT_USER_PASSWORD", default=""
+    )
+    control_plane_project_id_value: str = Field(
+        validation_alias="IDENTITY_UCP_PROJECT_ID",
+        default="",
     )
 
     @property
@@ -84,32 +83,20 @@ class AppSettings(BaseSettings):
         return self.sqs.ucp_jobs_queue_url
 
     @property
-    def zitadel_api_url(self) -> str:
-        return self.zitadel_api_url_value
+    def idp_api_url(self) -> str:
+        return self.idp_api_url_value
 
     @property
-    def zitadel_machine_key(self) -> str:
-        return self.zitadel_machine_key_value
+    def idp_machine_key(self) -> str:
+        return self.idp_machine_key_value
 
     @property
-    def zitadel_ucp_project_id(self) -> str:
-        return self.identity.ucp_project_id
+    def control_plane_project_id(self) -> str:
+        return self.control_plane_project_id_value
 
     @property
-    def zitadel_tenant_role_group(self) -> str:
-        return self.identity.tenant_role_group
-
-    @property
-    def zitadel_platform_org_id(self) -> str:
-        return self.identity.platform_org_id
-
-    @property
-    def zitadel_issuer(self) -> str:
-        return self.identity.issuer
-
-    @property
-    def zitadel_default_user_password(self) -> str:
-        return self.zitadel_default_user_password_value
+    def idp_default_user_password(self) -> str:
+        return self.idp_default_user_password_value
 
 
 @lru_cache

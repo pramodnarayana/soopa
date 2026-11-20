@@ -1043,3 +1043,84 @@ async def test_delivery_route_registry_propagates_causation_depth_with_dynamic_r
     )
     qrn_outcome = await deliv_disp.dispatch_envelope(qrn_env)
     assert qrn_outcome == ConsumerAction.ACK
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_routes_command_stream_to_stitch_dispatcher_bypassing_replication() -> (
+    None
+):
+    uow = FakeDataPlaneUoW()
+    uow_provider = FakeDataPlaneUoWProvider(uow)
+    storage = FakeTieredStorage()
+    stitch_dispatcher = FakeStitchDispatcher(started_run_ids=("wf_run_hes_extract",))
+    stitch_tick = FakeStitchTickExecutor()
+
+    body: JsonDict = {
+        "start_date": "2026-10-01T00:00:00Z",
+        "end_date": "2026-10-03T00:00:00Z",
+        "hes_connection_ids": ["conn_hes_01"],
+        "destination_connection_id": "conn_dest_kafka",
+        "destination_topic": "telemetry.readings.inbound",
+    }
+    raw_bytes = json.dumps(body).encode("utf-8")
+    rec = InboundRecord.create(
+        tenant_id="t_01",
+        connection_id="conn_cmd_01",
+        app_id="telemetry_source",
+        stream_name="historical_extract_requests",
+        payload_bytes=raw_bytes,
+        is_inlined=True,
+        request_body=body,
+        trace_id="tr_cmd_01",
+        correlation_id="corr_cmd_01",
+        ingestion_mode=IngestionMode.PUSH_FULL,
+    )
+    rec.id = "inb_cmd_1"
+    uow.inbound_records.records["inb_cmd_1"] = rec
+
+    registry = IpOrchestratorRouteRegistry(
+        dp_uow_provider=uow_provider,
+        normalize_use_case=FakeNormalizeExecutor(),
+        backfill_use_case=FakeBackfillExecutor(),
+        tiered_storage=storage,
+        stitch_dispatcher=stitch_dispatcher,
+        stitch_worker_tick=stitch_tick,
+        stream_definition_resolver=lambda t, c, s: None,
+        max_chunk_concurrency=4,
+    )
+    dispatcher = EventEnvelopeDispatcher()
+    registry.register_routes(dispatcher)
+
+    envelope = EventEnvelope(
+        id="evt_cmd_1",
+        source="ip.data_plane",
+        event_type=IpEventType.INBOUND_RECORD_CREATED.value,
+        tenant_id="t_01",
+        idempotency_key="idem_evt_cmd_1",
+        trace_id="tr_cmd_01",
+        correlation_id="corr_cmd_01",
+        lane=EventProcessingLane.REALTIME,
+        payload={
+            "connection_id": "conn_cmd_01",
+            "stream_name": "historical_extract_requests",
+            "record_ids": ["inb_cmd_1"],
+        },
+    )
+
+    action = await dispatcher.dispatch_envelope(envelope)
+    assert action == ConsumerAction.ACK
+    # CRITICAL: Verify replication was completely bypassed!
+    assert len(uow.replica_records.merged_candidates) == 0
+
+    # CRITICAL: Verify dispatch to stitch dispatcher
+    assert len(stitch_dispatcher.commands) == 1
+    cmd = stitch_dispatcher.commands[0]
+    assert cmd.tenant_id == "t_01"
+    assert cmd.canonical_event_type == "command.historical_extract_requests"
+    assert cmd.event_id == "cmd:inb_cmd_1"
+    assert cmd.trace_id == "tr_cmd_01"
+    assert cmd.correlation_id == "corr_cmd_01"
+    assert cmd.payload["hes_connection_ids"] == ["conn_hes_01"]
+    assert cmd.payload["destination_connection_id"] == "conn_dest_kafka"
+    assert cmd.payload["source_inbound_record_id"] == "inb_cmd_1"
+    assert len(stitch_tick.commands) > 0

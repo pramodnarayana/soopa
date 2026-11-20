@@ -16,7 +16,7 @@ from helpers.delivery_fakes import (
     seed_oauth2_connection,
 )
 from ip.engine.adapters.outbound.auth.token_refresh_lock import InMemoryTokenRefreshLockAdapter
-from ip.engine.adapters.outbound.stitches.step_handlers import ExecuteHttpActionStepHandler
+from ip.engine.adapters.outbound.stitches.handlers import ExecuteHttpActionStepHandler
 from ip.engine.application.use_cases.connections.token_manager_service import TokenManagerService
 from ip.engine.application.use_cases.delivery.deliver_outbound_record_use_case import (
     DeliverOutboundBatchCommand,

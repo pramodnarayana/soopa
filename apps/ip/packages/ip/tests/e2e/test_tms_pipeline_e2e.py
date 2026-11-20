@@ -53,7 +53,7 @@ from ip.solutions.domains.tms.canonical import (
     TmsEntityType,
 )
 from ip.solutions.domains.tms.repository import SqlAlchemyTmsDomainRepository
-from ip.solutions.domains.tms.transformers import MercuryGateLoadTransformerV1
+from ip.solutions.domains.tms.transformers import MercuryGateLoadTransformer
 from seedwork.domain.types import JsonDict
 from sqlalchemy import select
 
@@ -137,7 +137,7 @@ async def test_full_l1_to_l5_tms_pipeline_vertical_slice_on_postgres(
     )
     assert replica is not None
 
-    transformer = MercuryGateLoadTransformerV1()
+    transformer = MercuryGateLoadTransformer()
     replica_snapshot = ReplicaSnapshot(
         id=replica.id,
         connection_id=conn.id,

@@ -3,19 +3,8 @@ import json
 import httpx
 import pytest
 from fastapi import FastAPI
-from seedwork.events import EventEnvelope
-
-from unified_api.adapters.inbound.http.dependencies.edi.services import get_outbox_publisher
 
 pytestmark = pytest.mark.integration
-
-
-class _InMemoryOutboxPublisher:
-    def __init__(self) -> None:
-        self.published: list[EventEnvelope] = []
-
-    async def publish(self, event: EventEnvelope) -> None:
-        self.published.append(event)
 
 
 @pytest.mark.asyncio
@@ -263,100 +252,89 @@ async def test_dashboard_explorer_outbound_submission_and_transactions(
     assert dash_res.status_code == 200
     assert dash_res.json()["status"] == "active"
 
-    edi_sub_app: FastAPI | None = app.state.edi_app
-    assert edi_sub_app is not None
-    publisher = _InMemoryOutboxPublisher()
-    edi_sub_app.dependency_overrides[get_outbox_publisher] = lambda: publisher
+    submit_res = await auth_client.post(
+        "/api/v1/edi_json",
+        headers={"Idempotency-Key": "idem-edi-json-001"},
+        json={
+            "trading_partner_id": "ACME_ERP_01",
+            "transaction_type": "850",
+            "payload": {"po_number": "PO-777", "items": [{"sku": "SKU-1", "qty": 5}]},
+        },
+    )
+    assert submit_res.status_code == 202, submit_res.text
+    trace_id = submit_res.json()["trace_id"]
 
-    try:
-        submit_res = await auth_client.post(
-            "/api/v1/edi_json",
-            headers={"Idempotency-Key": "idem-edi-json-001"},
-            json={
-                "trading_partner_id": "ACME_ERP_01",
-                "transaction_type": "850",
-                "payload": {"po_number": "PO-777", "items": [{"sku": "SKU-1", "qty": 5}]},
-            },
-        )
-        assert submit_res.status_code == 202, submit_res.text
-        trace_id = submit_res.json()["trace_id"]
-        assert len(publisher.published) >= 1
+    # Explorer endpoints
+    exp_msgs = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/edi/explorer/edi-messages",
+        json={"filters": [{"field": "direction", "operator": "eq", "value": "OUTBOUND"}]},
+    )
+    assert exp_msgs.status_code == 200
 
-        # Explorer endpoints
-        exp_msgs = await auth_client.post(
-            f"/api/v1/tenants/{tenant_id}/edi/explorer/edi-messages",
-            json={"filters": [{"field": "direction", "operator": "eq", "value": "OUTBOUND"}]},
-        )
-        assert exp_msgs.status_code == 200
+    exp_json = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/edi/explorer/edi-json",
+        json={"filters": [{"field": "trace_id", "operator": "eq", "value": trace_id}]},
+    )
+    assert exp_json.status_code == 200
+    assert len(exp_json.json()["items"]) == 1
 
-        exp_json = await auth_client.post(
-            f"/api/v1/tenants/{tenant_id}/edi/explorer/edi-json",
-            json={"filters": [{"field": "trace_id", "operator": "eq", "value": trace_id}]},
-        )
-        assert exp_json.status_code == 200
-        assert len(exp_json.json()["items"]) == 1
+    exp_invalid = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/edi/explorer/edi-messages",
+        json={"filters": [{"field": "disallowed_sql_col", "operator": "eq", "value": "x"}]},
+    )
+    assert exp_invalid.status_code == 422
 
-        exp_invalid = await auth_client.post(
-            f"/api/v1/tenants/{tenant_id}/edi/explorer/edi-messages",
-            json={"filters": [{"field": "disallowed_sql_col", "operator": "eq", "value": "x"}]},
-        )
-        assert exp_invalid.status_code == 422
+    # Transactions endpoints
+    json_thread = await auth_client.get(
+        f"/api/v1/tenants/{tenant_id}/edi/transactions/json",
+        params={"key": "po_number", "value": "PO-777"},
+    )
+    assert json_thread.status_code == 200
 
-        # Transactions endpoints
-        json_thread = await auth_client.get(
-            f"/api/v1/tenants/{tenant_id}/edi/transactions/json",
-            params={"key": "po_number", "value": "PO-777"},
-        )
-        assert json_thread.status_code == 200
+    trace_res = await auth_client.get(f"/api/v1/tenants/{tenant_id}/edi/transactions/{trace_id}")
+    assert trace_res.status_code == 200
+    assert len(trace_res.json()["edi_json"]) == 1
 
-        trace_res = await auth_client.get(
-            f"/api/v1/tenants/{tenant_id}/edi/transactions/{trace_id}"
-        )
-        assert trace_res.status_code == 200
-        assert len(trace_res.json()["edi_json"]) == 1
+    missing_trace = await auth_client.get(
+        f"/api/v1/tenants/{tenant_id}/edi/transactions/trc_nonexistent"
+    )
+    assert missing_trace.status_code == 404
 
-        missing_trace = await auth_client.get(
-            f"/api/v1/tenants/{tenant_id}/edi/transactions/trc_nonexistent"
-        )
-        assert missing_trace.status_code == 404
+    lineage_res = await auth_client.get(
+        f"/api/v1/tenants/{tenant_id}/edi/transactions/{trace_id}/lineage"
+    )
+    assert lineage_res.status_code == 200
 
-        lineage_res = await auth_client.get(
-            f"/api/v1/tenants/{tenant_id}/edi/transactions/{trace_id}/lineage"
-        )
-        assert lineage_res.status_code == 200
+    replay_missing = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/edi/transactions/trc_nonexistent/replay",
+        json={"checkpoint": "TRANSFORM"},
+    )
+    assert replay_missing.status_code == 404
 
-        replay_missing = await auth_client.post(
-            f"/api/v1/tenants/{tenant_id}/edi/transactions/trc_nonexistent/replay",
-            json={"checkpoint": "TRANSFORM"},
-        )
-        assert replay_missing.status_code == 404
+    mod_replay_missing = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/edi/transactions/trc_nonexistent/modify-and-replay",
+        json={"modified_payload": "ISA*00*..."},
+    )
+    assert mod_replay_missing.status_code == 404
 
-        mod_replay_missing = await auth_client.post(
-            f"/api/v1/tenants/{tenant_id}/edi/transactions/trc_nonexistent/modify-and-replay",
-            json={"modified_payload": "ISA*00*..."},
-        )
-        assert mod_replay_missing.status_code == 404
+    replay_ok = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/edi/transactions/{trace_id}/replay",
+        json={"checkpoint": "TRANSFORM"},
+    )
+    assert replay_ok.status_code == 202
+    replay_body = replay_ok.json()
+    assert replay_body["status"] == "accepted"
+    assert replay_body["trace_id"] == trace_id
+    assert replay_body["replay_trace_id"] != trace_id
 
-        replay_ok = await auth_client.post(
-            f"/api/v1/tenants/{tenant_id}/edi/transactions/{trace_id}/replay",
-            json={"checkpoint": "TRANSFORM"},
-        )
-        assert replay_ok.status_code == 202
-        replay_body = replay_ok.json()
-        assert replay_body["status"] == "accepted"
-        assert replay_body["trace_id"] == trace_id
-        assert replay_body["replay_trace_id"] != trace_id
+    bulk_replay_transform_missing = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/edi/transactions/bulk-replay",
+        json={"trace_ids": [trace_id], "checkpoint": "TRANSFORM"},
+    )
+    assert bulk_replay_transform_missing.status_code == 404
 
-        bulk_replay_transform_missing = await auth_client.post(
-            f"/api/v1/tenants/{tenant_id}/edi/transactions/bulk-replay",
-            json={"trace_ids": [trace_id], "checkpoint": "TRANSFORM"},
-        )
-        assert bulk_replay_transform_missing.status_code == 404
-
-        bulk_replay_delivery = await auth_client.post(
-            f"/api/v1/tenants/{tenant_id}/edi/transactions/bulk-replay",
-            json={"trace_ids": [trace_id], "checkpoint": "DELIVERY"},
-        )
-        assert bulk_replay_delivery.status_code == 404
-    finally:
-        edi_sub_app.dependency_overrides.pop(get_outbox_publisher, None)
+    bulk_replay_delivery = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/edi/transactions/bulk-replay",
+        json={"trace_ids": [trace_id], "checkpoint": "DELIVERY"},
+    )
+    assert bulk_replay_delivery.status_code == 404

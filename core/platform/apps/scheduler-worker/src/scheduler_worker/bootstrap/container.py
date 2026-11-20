@@ -35,12 +35,14 @@ class Container(containers.DeclarativeContainer):
     sweep_use_case = providers.Factory(
         JobSweeperUseCase,
         uow_factory=uow_factory.provider,
+        active_namespaces=config.active_namespaces,
     )
 
     claim_use_case = providers.Factory(
         JobExecutorUseCase,
         uow_factory=uow_factory.provider,
         dispatcher=job_dispatcher,
+        active_namespaces=config.active_namespaces,
     )
 
     worker = providers.Factory(

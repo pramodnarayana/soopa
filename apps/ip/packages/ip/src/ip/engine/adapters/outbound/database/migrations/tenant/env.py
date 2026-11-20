@@ -38,7 +38,7 @@ def _resolve_tenant_db_url() -> str:
     if shard_override:
         return shard_override
     global_url = str(settings.global_url)
-    return get_test_shard_url_sync(global_url)
+    return get_test_shard_url_sync(global_url, app_slug="ip")
 
 
 def include_object(

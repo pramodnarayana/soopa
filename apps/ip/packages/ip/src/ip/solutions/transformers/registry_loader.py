@@ -7,41 +7,40 @@ from ip.engine.ports.outbound.transformer_port import (
     TransformerPort,
     TransformerRegistryPort,
 )
-from ip.solutions.domains.energy.transformers.ami.meter_reading import (
+from ip.solutions.domains.energy.itron.meter_reading_transformer import (
+    ItronMeterReadingTransformer,
+)
+from ip.solutions.domains.energy.itron.service_point_transformer import (
+    ItronServicePointTransformer,
+)
+from ip.solutions.domains.energy.landis.meter_reading_transformer import (
+    AmiMeterReadingTransformer,
     AmiMeterReadingTransformerV1,
     AmiMeterReadingTransformerV2,
 )
-from ip.solutions.domains.energy.transformers.ami.service_point import (
-    AmiServicePointTransformerV1,
+from ip.solutions.domains.energy.landis.service_point_transformer import (
+    AmiServicePointTransformer,
 )
-from ip.solutions.domains.energy.transformers.itron.meter_reading import (
-    ItronMeterReadingTransformerV1,
-)
-from ip.solutions.domains.energy.transformers.itron.service_point import (
-    ItronServicePointTransformerV1,
-)
-from ip.solutions.domains.energy.transformers.sap.billing_reading import (
+from ip.solutions.domains.energy.sap.billing_reading_transformer import (
     SapBillingReadingTransformer,
 )
 from ip.solutions.domains.tms.transformers import (
-    MercuryGateCarrierTransformerV1,
-    MercuryGateLoadTransformerV1,
-    MercuryGateLoadTransformerV2,
+    MercuryGateCarrierTransformer,
+    MercuryGateLoadTransformer,
 )
 
 _DEFAULT_ENERGY_TRANSFORMERS: tuple[TransformerPort, ...] = (
     AmiMeterReadingTransformerV1(),
     AmiMeterReadingTransformerV2(),
-    AmiServicePointTransformerV1(),
-    ItronMeterReadingTransformerV1(),
-    ItronServicePointTransformerV1(),
+    AmiServicePointTransformer(),
+    ItronMeterReadingTransformer(),
+    ItronServicePointTransformer(),
     SapBillingReadingTransformer(),
 )
 
 _DEFAULT_TMS_TRANSFORMERS: tuple[TransformerPort, ...] = (
-    MercuryGateLoadTransformerV1(),
-    MercuryGateLoadTransformerV2(),
-    MercuryGateCarrierTransformerV1(),
+    MercuryGateLoadTransformer(),
+    MercuryGateCarrierTransformer(),
 )
 
 
@@ -59,14 +58,14 @@ def create_default_transformer_registry() -> TransformerRegistry:
 
 
 __all__ = [
+    "AmiMeterReadingTransformer",
     "AmiMeterReadingTransformerV1",
     "AmiMeterReadingTransformerV2",
-    "AmiServicePointTransformerV1",
-    "ItronMeterReadingTransformerV1",
-    "ItronServicePointTransformerV1",
-    "MercuryGateCarrierTransformerV1",
-    "MercuryGateLoadTransformerV1",
-    "MercuryGateLoadTransformerV2",
+    "AmiServicePointTransformer",
+    "ItronMeterReadingTransformer",
+    "ItronServicePointTransformer",
+    "MercuryGateCarrierTransformer",
+    "MercuryGateLoadTransformer",
     "SapBillingReadingTransformer",
     "create_default_transformer_registry",
     "register_default_transformers",

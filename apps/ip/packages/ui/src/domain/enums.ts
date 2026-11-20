@@ -17,6 +17,10 @@ export const AuthType = {
   BASIC: 'BASIC_AUTH',
   BASIC_AUTH: 'BASIC_AUTH',
   NO_AUTH: 'NO_AUTH',
+  CUSTOM: 'CUSTOM',
+  MTLS: 'MTLS',
+  SASL_PLAINTEXT: 'SASL_PLAINTEXT',
+  SASL_SSL: 'SASL_SSL',
 } as const;
 export type AuthTypeValue = (typeof AuthType)[keyof typeof AuthType];
 
@@ -40,9 +44,34 @@ export const ConnectorPropertyKey = {
   CLIENT_SECRET: 'client_secret',
   SCOPES: 'scopes',
   TIMEOUT_SECONDS: 'timeout_seconds',
+  BOOTSTRAP_SERVERS: 'bootstrap_servers',
+  SECURITY_PROTOCOL: 'security_protocol',
+  SASL_MECHANISM: 'sasl_mechanism',
+  DEFAULT_TOPIC: 'default_topic',
+  PARTITION_KEY_FIELD: 'partition_key_field',
+  ENDPOINT_SLUG: 'endpoint_slug',
+  VERIFICATION_STRATEGY: 'verification_strategy',
+  SECRET_TOKEN: 'secret_token',
+  WEBHOOK_MODALITY: 'webhook_modality',
 } as const;
 export type ConnectorPropertyKeyValue =
   (typeof ConnectorPropertyKey)[keyof typeof ConnectorPropertyKey];
+
+export const WebhookModality = {
+  DYNAMIC: 'DYNAMIC',
+  COMMAND: 'COMMAND',
+  DATA: 'DATA',
+} as const;
+export type WebhookModalityValue = (typeof WebhookModality)[keyof typeof WebhookModality];
+
+export const EngineConnectorId = {
+  HTTP: 'http',
+  SFTP: 'sftp',
+  KAFKA: 'kafka',
+  REDPANDA: 'redpanda',
+  WEBHOOK: 'webhook',
+} as const;
+export type EngineConnectorIdValue = (typeof EngineConnectorId)[keyof typeof EngineConnectorId];
 
 export const ConnectorDirection = {
   SOURCE: 'SOURCE',
@@ -194,6 +223,13 @@ export const ConnectorRuntimeArchitecture = {
 export type ConnectorRuntimeArchitectureValue =
   | (typeof ConnectorRuntimeArchitecture)[keyof typeof ConnectorRuntimeArchitecture]
   | (string & {});
+
+export const ConnectorRole = {
+  OUTBOUND_CLIENT: 'OUTBOUND_CLIENT',
+  INBOUND_GATEWAY: 'INBOUND_GATEWAY',
+  BIDIRECTIONAL: 'BIDIRECTIONAL',
+} as const;
+export type ConnectorRoleValue = (typeof ConnectorRole)[keyof typeof ConnectorRole];
 
 export const CatalogAppCategory = {
   API: 'API',

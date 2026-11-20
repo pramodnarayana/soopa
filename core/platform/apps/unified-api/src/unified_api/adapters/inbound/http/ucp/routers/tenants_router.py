@@ -298,21 +298,21 @@ class SubscriptionResponse(BaseModel):
 
 
 @router.get(
-    "/{id}/subscriptions",
+    "/{tenant_id}/subscriptions",
     response_model=list[SubscriptionResponse],
     dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
 )
 @inject
 async def get_subscriptions(
     request: Request,
-    id: str,
+    tenant_id: str,
     session: AsyncSession = Depends(get_db_session),
     tenant_repo_factory: Callable[..., TenantRepositoryPort] = Depends(
         Provide[Container.tenant_repo.provider]
     ),
 ) -> list[SubscriptionResponse]:
     tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
-    tenant = await resolve_tenant(id, tenant_repo)
+    tenant = await resolve_tenant(tenant_id, tenant_repo)
 
     return [
         SubscriptionResponse(
@@ -323,50 +323,65 @@ async def get_subscriptions(
 
 
 @router.post(
-    "/{id}/subscriptions",
+    "/{tenant_id}/subscriptions",
     response_model=SubscriptionResponse,
     dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
 )
 @inject
 async def subscribe_app(
     request: Request,
-    id: str,
+    tenant_id: str,
     dto: SubscribeAppRequest,
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
+    tenant_repo_factory: Callable[..., TenantRepositoryPort] = Depends(
+        Provide[Container.tenant_repo.provider]
+    ),
     use_case_factory: Callable[..., SubscribeAppUseCase] = Depends(
         Provide[Container.subscribe_app_use_case.provider]
     ),
 ) -> SubscriptionResponse:
+    tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
+    tenant = await resolve_tenant(tenant_id, tenant_repo)
+
     use_case: SubscribeAppUseCase = use_case_factory(uow__session=session)
-    command = SubscribeAppCommand(tenant_id=id, app_id=dto.appId)
+    command = SubscribeAppCommand(tenant_id=tenant.id, app_id=dto.appId)
 
     res = await use_case.execute(command, idempotency_key)
     if res.is_err:
         raise_http_for_ucp_error(res.unwrap_err())
 
     return SubscriptionResponse(
-        id=f"{id}_{dto.appId}", appId=dto.appId, tenantId=id, status=LifecycleStatus.ACTIVE
+        id=f"{tenant.id}_{dto.appId}",
+        appId=dto.appId,
+        tenantId=tenant.id,
+        status=LifecycleStatus.ACTIVE,
     )
 
 
 @router.delete(
-    "/{id}/subscriptions/{app_id}",
+    "/{tenant_id}/subscriptions/{app_id}",
     dependencies=[Depends(RequireCapability(Capability.PLATFORM_ADMIN))],
 )
 @inject
 async def unsubscribe_app(
     request: Request,
-    id: str,
+    tenant_id: str,
     app_id: str,
     idempotency_key: str | None = Header(None, alias="idempotency-key"),
     session: AsyncSession = Depends(get_db_session),
+    tenant_repo_factory: Callable[..., TenantRepositoryPort] = Depends(
+        Provide[Container.tenant_repo.provider]
+    ),
     use_case_factory: Callable[..., UnsubscribeAppUseCase] = Depends(
         Provide[Container.unsubscribe_app_use_case.provider]
     ),
 ) -> dict[str, bool]:
+    tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
+    tenant = await resolve_tenant(tenant_id, tenant_repo)
+
     use_case: UnsubscribeAppUseCase = use_case_factory(uow__session=session)
-    command = UnsubscribeAppCommand(tenant_id=id, app_id=app_id)
+    command = UnsubscribeAppCommand(tenant_id=tenant.id, app_id=app_id)
 
     res = await use_case.execute(command, idempotency_key)
     if res.is_err:

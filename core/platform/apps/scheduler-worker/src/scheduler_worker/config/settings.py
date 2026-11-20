@@ -5,8 +5,8 @@ from collections.abc import Mapping
 from functools import lru_cache
 
 from pydantic import Field, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infra.config import load_settings_safely
+from pydantic_settings import SettingsConfigDict
+from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
@@ -35,7 +35,22 @@ def discover_jobs_queue_url_map(
     return queue_map
 
 
-class SqsSettings(BaseSettings):
+def parse_active_namespaces(enabled_apps: str | None = None) -> list[str] | None:
+    """
+    Derives active job namespaces from the ENABLED_APPS configuration.
+    - If enabled_apps is None, empty, or '*', returns None (all namespaces claimable).
+    - Otherwise returns ['platform'] + deduplicated lowercase enabled apps.
+    """
+    if not enabled_apps:
+        return None
+    raw = enabled_apps.strip()
+    if not raw or raw == "*":
+        return None
+    parsed = [app.strip().lower() for app in raw.split(",") if app.strip()]
+    return list(dict.fromkeys(["platform", *parsed]))
+
+
+class SqsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
     data_plane_jobs_queue_url: str = Field(
         validation_alias="SQS_DATA_PLANE_JOBS_QUEUE_URL", default=""
@@ -56,9 +71,14 @@ class SqsSettings(BaseSettings):
     ucp_jobs_queue_url: str = Field(validation_alias="SQS_UCP_JOBS_QUEUE_URL", default="")
 
 
-class AppSettings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
+class AppSettings(CleanBaseSettings):
+    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
 
+    enabled_apps: str = Field(
+        validation_alias="ENABLED_APPS",
+        default="",
+        description="Comma-separated list of enabled bounded contexts (e.g. 'edi', 'ip').",
+    )
     scheduler_poll_interval_seconds: int = Field(
         validation_alias="SCHEDULER_POLL_INTERVAL_SECONDS", default=5, gt=0
     )
@@ -69,6 +89,11 @@ class AppSettings(BaseSettings):
     database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
     aws: PlatformAwsSettings = Field(default_factory=PlatformAwsSettings)
     sqs: SqsSettings = Field(default_factory=SqsSettings)
+
+    @computed_field
+    @property
+    def active_namespaces(self) -> list[str] | None:
+        return parse_active_namespaces(self.enabled_apps)
 
     @computed_field
     @property

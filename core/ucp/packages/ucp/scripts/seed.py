@@ -9,26 +9,26 @@ import sys
 import structlog
 from database.provider import DatabaseProvider
 from database.utils import normalize_to_asyncpg
-from seedwork.infra.config import load_repo_env
 
 from ucp.bootstrap.identity_bootstrap import (
     PlatformSeedConfig,
-    ShardSeedSpec,
     seed_platform_bootstrap,
 )
-
-load_repo_env(override=False)
+from ucp.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
-    database_url = os.environ.get("DATABASE_URL", "")
+    settings = get_settings()
+    database_url = settings.database_url
     if not database_url:
         logger.error("seed_missing_database_url")
         sys.exit(1)
 
-    platform_org_id = os.environ.get("IDENTITY_PLATFORM_ORG_ID", "")
+    platform_org_id = settings.identity.platform_org_id or os.environ.get(
+        "IDENTITY_PLATFORM_ORG_ID", ""
+    )
     if not platform_org_id:
         logger.error("seed_missing_identity_platform_org_id")
         sys.exit(1)
@@ -38,29 +38,10 @@ async def main() -> None:
         logger.error("seed_missing_identity_platform_admin_id")
         sys.exit(1)
 
-    edi_shard_dsn = (
-        os.environ.get("DATABASE__SHARD_OVERRIDES__EDI_SHARD_1")
-        or os.environ.get("SHARD_OVERRIDES__EDI_SHARD_1")
-        or os.environ.get("EDI_DATABASE_URL", "")
+    company_domain = os.environ.get("COMPANY_DOMAIN", "flowwolf.io").strip()
+    platform_admin_email = (
+        os.environ.get("IDENTITY_PLATFORM_ADMIN_EMAIL", "").strip() or f"admin@{company_domain}"
     )
-    if edi_shard_dsn:
-        edi_shard_dsn = normalize_to_asyncpg(edi_shard_dsn)
-    ip_shard_dsn = (
-        os.environ.get("DATABASE__SHARD_OVERRIDES__IP_SHARD_1")
-        or os.environ.get("SHARD_OVERRIDES__IP_SHARD_1")
-        or os.environ.get("IP_DATABASE_URL", "")
-    )
-    extra_shards: tuple[ShardSeedSpec, ...] = ()
-    if ip_shard_dsn:
-        extra_shards = (
-            ShardSeedSpec(
-                shard_id="ip_shard_1",
-                name="IP Primary Shard",
-                dsn=normalize_to_asyncpg(ip_shard_dsn),
-            ),
-        )
-
-    edi_project_id = os.environ.get("IDENTITY_EDI_PROJECT_ID", "")
 
     db_provider = DatabaseProvider.from_url(normalize_to_asyncpg(database_url))
     try:
@@ -69,9 +50,7 @@ async def main() -> None:
             config=PlatformSeedConfig(
                 platform_org_id=platform_org_id,
                 platform_admin_id=platform_admin_id,
-                edi_shard_dsn=edi_shard_dsn,
-                edi_project_id=edi_project_id,
-                extra_shards=extra_shards,
+                platform_admin_email=platform_admin_email,
             ),
         )
     except Exception:

@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from ip.engine.adapters.outbound.stitches import (
+    DurableWorkflowOrchestratorAdapter,
     EmitNotificationStepHandler,
     InMemoryStitchCatalogRegistry,
     NotificationOutboxPort,
@@ -24,12 +25,15 @@ from ip.engine.domain.dispatch.enums import (
 )
 from ip.engine.domain.replication.replica_record import ReplicaRecord
 from ip.engine.domain.stitch.enums import StitchStepType
-from ip.engine.domain.stitch.stitch import (
+from ip.engine.domain.stitch.steps import (
     EmitNotificationStepInput,
     ExecuteHttpActionStepInput,
     ExecuteHttpActionStepOutput,
     QueryReplicaStepInput,
-    Stitch,
+)
+from ip.engine.domain.stitch.stitch import Stitch
+from ip.engine.ports.outbound.workflow_orchestrator_port import (
+    SignalWorkflowEventCommand,
 )
 from notification.domain.constants import NotificationEventType
 from orchestration.application.default_error_policy import DefaultStepErrorPolicy
@@ -271,25 +275,8 @@ async def test_canonical_event_triggers_stitch_through_signal_resolution_to_stag
         Stitch(
             id="sub_trigger_incident",
             tenant_id="ten_alpha",
-            workflow_id="synthetic.incident_resolution_stitch",
-            workflow_version=1,
+            target_workflow_id="synthetic.incident_resolution_stitch",
             canonical_event_type="canonical.incident_event.normalized",
-            is_trigger=True,
-            idempotency_key_field="incident_id",
-            concurrency_key_field="resource_id",
-        )
-    )
-    # Register signal stitch on `canonical.resource_resolved.normalized`
-    stitch_catalog.register_stitch(
-        Stitch(
-            id="sub_signal_resolved",
-            tenant_id="ten_alpha",
-            workflow_id="synthetic.incident_resolution_stitch",
-            workflow_version=1,
-            canonical_event_type="canonical.resource_resolved.normalized",
-            is_trigger=False,
-            condition_event_key="canonical.resource_resolved.normalized",
-            resource_hint_field="resource_id",
         )
     )
 
@@ -323,10 +310,13 @@ async def test_canonical_event_triggers_stitch_through_signal_resolution_to_stag
         match_resolver=match_resolver,
     )
 
-    dispatcher = DispatchCanonicalEventToStitchesUseCase(
-        stitch_catalog=stitch_catalog,
+    orchestrator = DurableWorkflowOrchestratorAdapter(
         start_run_use_case=start_run,
         resolve_matches_use_case=match_resolver,
+    )
+    dispatcher = DispatchCanonicalEventToStitchesUseCase(
+        stitch_catalog=stitch_catalog,
+        orchestrator=orchestrator,
     )
     worker_tick = ExecuteStitchWorkerTickUseCase(
         claim_steps_use_case=claim_steps,
@@ -351,13 +341,13 @@ async def test_canonical_event_triggers_stitch_through_signal_resolution_to_stag
     assert len(disp1.started_run_ids) == 1
     run_id = disp1.started_run_ids[0]
 
-    # Duplicate canonical event with same incident_id is deduplicated!
+    # Duplicate canonical event with same event_id is deduplicated!
     disp_dup = (
         await dispatcher.execute(
             DispatchCanonicalEventToStitchesCommand(
                 tenant_id="ten_alpha",
                 canonical_event_type="canonical.incident_event.normalized",
-                event_id="evt_2",
+                event_id="evt_1",
                 payload={"incident_id": "inc_900", "resource_id": "res_777"},
                 trace_id="trc_stitch_1",
                 now=now,
@@ -380,20 +370,20 @@ async def test_canonical_event_triggers_stitch_through_signal_resolution_to_stag
     run_after_tick1 = (await uow.runs.get_by_id("ten_alpha", run_id)).unwrap()
     assert run_after_tick1.status == RunStatus.WAITING
 
-    # 3. Dispatch L3 Canonical Resource Resolved Event -> satisfies `wait_resolved` and queues `notify_ops`!
+    # 3. Signal event to orchestrator -> satisfies `wait_resolved` and queues `notify_ops`!
     disp_signal = (
-        await dispatcher.execute(
-            DispatchCanonicalEventToStitchesCommand(
+        await orchestrator.signal_event(
+            SignalWorkflowEventCommand(
                 tenant_id="ten_alpha",
-                canonical_event_type="canonical.resource_resolved.normalized",
-                event_id="evt_3",
+                workflow_id="synthetic.incident_resolution_stitch",
+                event_key="canonical.resource_resolved.normalized",
+                resource_hint="res_777",
                 payload={"resource_id": "res_777", "resolved_at": "2026-10-25T12:05:00Z"},
-                trace_id="trc_stitch_2",
                 now=now + timedelta(minutes=5),
             )
         )
     ).unwrap()
-    assert len(disp_signal.signalled_step_ids) == 1
+    assert len(disp_signal.queued_step_ids) == 1
 
     # 4. Worker tick 2 claims and executes `notify_ops` -> drops Stage-1 `notification.requested` envelope in outbox!
     tick2 = (
@@ -530,10 +520,8 @@ async def test_stitch_worker_tick_marks_unregistered_step_handler_failed() -> No
     sub = Stitch(
         id="sub_unreg",
         tenant_id="ten_alpha",
-        workflow_id="synthetic.unregistered_step_stitch",
-        workflow_version=1,
+        target_workflow_id="synthetic.unregistered_step_stitch",
         canonical_event_type="canonical.test.event",
-        is_trigger=True,
     )
     stitch_catalog.register_stitch(sub)
     assert (
@@ -548,8 +536,10 @@ async def test_stitch_worker_tick_marks_unregistered_step_handler_failed() -> No
 
     dispatcher = DispatchCanonicalEventToStitchesUseCase(
         stitch_catalog=stitch_catalog,
-        start_run_use_case=start_run,
-        resolve_matches_use_case=match_resolver,
+        orchestrator=DurableWorkflowOrchestratorAdapter(
+            start_run_use_case=start_run,
+            resolve_matches_use_case=match_resolver,
+        ),
     )
     await dispatcher.execute(
         DispatchCanonicalEventToStitchesCommand(
@@ -647,17 +637,17 @@ async def test_stitch_worker_tick_catches_unhandled_handler_exception() -> None:
     sub = Stitch(
         id="sub_crash",
         tenant_id="ten_alpha",
-        workflow_id="synthetic.crash_stitch",
-        workflow_version=1,
+        target_workflow_id="synthetic.crash_stitch",
         canonical_event_type="canonical.test.event",
-        is_trigger=True,
     )
     stitch_catalog.register_stitch(sub)
 
     dispatcher = DispatchCanonicalEventToStitchesUseCase(
         stitch_catalog=stitch_catalog,
-        start_run_use_case=start_run,
-        resolve_matches_use_case=match_resolver,
+        orchestrator=DurableWorkflowOrchestratorAdapter(
+            start_run_use_case=start_run,
+            resolve_matches_use_case=match_resolver,
+        ),
     )
     await dispatcher.execute(
         DispatchCanonicalEventToStitchesCommand(
@@ -726,17 +716,17 @@ async def test_stitch_filter_conditions_skip_non_matching_canonical_payload(
         Stitch(
             id="ip_stc_filtered_1",
             tenant_id="ten_alpha",
-            workflow_id="synthetic.filtered_stitch",
-            workflow_version=1,
+            target_workflow_id="synthetic.filtered_stitch",
             canonical_event_type="canonical.order.v1",
-            is_trigger=True,
             filter_conditions={"status": "APPROVED", "region": "EU"},
         )
     )
     dispatcher = DispatchCanonicalEventToStitchesUseCase(
         stitch_catalog=stitch_catalog,
-        start_run_use_case=start_run,
-        resolve_matches_use_case=match_resolver,
+        orchestrator=DurableWorkflowOrchestratorAdapter(
+            start_run_use_case=start_run,
+            resolve_matches_use_case=match_resolver,
+        ),
     )
     res = await dispatcher.execute(
         DispatchCanonicalEventToStitchesCommand(
@@ -788,17 +778,17 @@ async def test_stitch_filter_conditions_start_run_on_matching_canonical_payload(
         Stitch(
             id="ip_stc_filtered_2",
             tenant_id="ten_alpha",
-            workflow_id="synthetic.filtered_stitch",
-            workflow_version=1,
+            target_workflow_id="synthetic.filtered_stitch",
             canonical_event_type="canonical.order.v1",
-            is_trigger=True,
             filter_conditions={"status": "APPROVED", "region": "EU"},
         )
     )
     dispatcher = DispatchCanonicalEventToStitchesUseCase(
         stitch_catalog=stitch_catalog,
-        start_run_use_case=start_run,
-        resolve_matches_use_case=match_resolver,
+        orchestrator=DurableWorkflowOrchestratorAdapter(
+            start_run_use_case=start_run,
+            resolve_matches_use_case=match_resolver,
+        ),
     )
     res = await dispatcher.execute(
         DispatchCanonicalEventToStitchesCommand(

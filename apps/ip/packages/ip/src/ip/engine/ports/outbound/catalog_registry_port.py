@@ -7,7 +7,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from ip.engine.domain.connection.enums import ConnectorArchitectureType
+from ip.engine.domain.connection.enums import ConnectorArchitectureType, ConnectorRole
 from ip.engine.domain.connection.http_spec import DeclarativeManifest
 from ip.engine.domain.exceptions import ConnectorNotFoundError, Result
 from ip.engine.ports.outbound.connector_port import AppSpecDTO, ConnectorPort
@@ -24,6 +24,7 @@ class CatalogAppSummaryDTO:
     description: str | None = None
     connector_type: str = ConnectorArchitectureType.DECLARATIVE_HTTP
     icon_url: str | None = None
+    role: str = ConnectorRole.OUTBOUND_CLIENT.value
 
 
 class CatalogRegistryPort(Protocol):

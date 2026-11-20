@@ -209,6 +209,9 @@ class WorkflowRun(AggregateRoot):
     parent_run_id: str | None = None
     trace_id: str
     correlation_id: str | None = None
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
+    replay_count: int = 0
     failure_code: str | None = None
     failure_detail: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -225,6 +228,9 @@ class WorkflowRun(AggregateRoot):
         idempotency_key: str,
         trace_id: str,
         correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
         concurrency_key: str | None = None,
         priority: Priority | None = None,
         parent_run_id: str | None = None,
@@ -275,6 +281,9 @@ class WorkflowRun(AggregateRoot):
             parent_run_id=parent_run_id,
             trace_id=trace_id,
             correlation_id=correlation_id,
+            parent_trace_id=parent_trace_id,
+            original_trace_id=original_trace_id or trace_id,
+            replay_count=replay_count,
             created_at=timestamp,
             steps=steps,
         )

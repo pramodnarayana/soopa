@@ -12,6 +12,7 @@ import contextlib
 from collections.abc import AsyncIterator
 
 import structlog
+from sqlalchemy import exc
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from database.exceptions import DatabaseConfigurationError
 from database.listener import NotifyListenerConnectionPort, connect_notify_listener
 from database.utils import normalize_to_asyncpg
 
@@ -45,41 +47,71 @@ def get_async_engine(
                               Set to `0` when connecting through PgBouncer in
                               `transaction` pooling mode.
     """
-    url = normalize_to_asyncpg(url)
+    clean_url = url.strip() if url else ""
+    if not clean_url:
+        logger.error("database_url_validation_failed", reason="URL string is empty or unconfigured")
+        raise DatabaseConfigurationError(
+            "Cannot initialize database engine: database connection URL is empty or unconfigured."
+        )
+
+    try:
+        normalized_url = normalize_to_asyncpg(clean_url)
+    except Exception as norm_err:
+        logger.error(
+            "database_url_normalization_failed",
+            reason=str(norm_err),
+            url=clean_url,
+        )
+        raise DatabaseConfigurationError(
+            f"Failed to normalize database connection URL: {norm_err}",
+            url=clean_url,
+        ) from norm_err
+
     connect_args: dict[str, int | dict[str, str]] = {}
     if server_settings:
         connect_args["server_settings"] = server_settings
-    if statement_cache_size is not None and not url.startswith("sqlite"):
+    if statement_cache_size is not None and not normalized_url.startswith("sqlite"):
         connect_args["statement_cache_size"] = statement_cache_size
 
-    if url.startswith("sqlite"):
-        engine = (
-            create_async_engine(
-                url,
+    try:
+        if normalized_url.startswith("sqlite"):
+            engine = (
+                create_async_engine(
+                    normalized_url,
+                    echo=echo,
+                    pool_pre_ping=pool_pre_ping,
+                    connect_args=connect_args,
+                )
+                if connect_args
+                else create_async_engine(normalized_url, echo=echo, pool_pre_ping=pool_pre_ping)
+            )
+        elif connect_args:
+            engine = create_async_engine(
+                normalized_url,
                 echo=echo,
                 pool_pre_ping=pool_pre_ping,
+                pool_size=pool_size,
+                max_overflow=max_overflow,
                 connect_args=connect_args,
             )
-            if connect_args
-            else create_async_engine(url, echo=echo, pool_pre_ping=pool_pre_ping)
+        else:
+            engine = create_async_engine(
+                normalized_url,
+                echo=echo,
+                pool_pre_ping=pool_pre_ping,
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+            )
+    except exc.ArgumentError as arg_err:
+        logger.error(
+            "database_url_parse_failed",
+            reason=str(arg_err),
+            url=clean_url,
         )
-    elif connect_args:
-        engine = create_async_engine(
-            url,
-            echo=echo,
-            pool_pre_ping=pool_pre_ping,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-            connect_args=connect_args,
-        )
-    else:
-        engine = create_async_engine(
-            url,
-            echo=echo,
-            pool_pre_ping=pool_pre_ping,
-            pool_size=pool_size,
-            max_overflow=max_overflow,
-        )
+        raise DatabaseConfigurationError(
+            f"Failed to parse database connection URL '{clean_url}': {arg_err}",
+            url=clean_url,
+        ) from arg_err
 
     logger.info(
         "database_engine_created",

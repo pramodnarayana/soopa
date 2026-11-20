@@ -65,6 +65,8 @@ DYNAMIC_IDENTITY_KEYS: tuple[str, ...] = (
     "VITE_IDENTITY_UCP_WEB_CLIENT_ID",
     "IDENTITY_UCP_API_CLIENT_ID",
     "IDENTITY_EDI_API_CLIENT_ID",
+    "IDENTITY_OAUTH_CLIENT_ID",
+    "IDENTITY_AUDIENCE",
     "IDENTITY_MACHINE_KEY",
     "IDENTITY_PLATFORM_ADMIN_ID",
 )
@@ -403,6 +405,8 @@ def _provision_zitadel_resources(pat_token: str, root_dir: Path) -> dict[str, st
         "VITE_IDENTITY_UCP_WEB_CLIENT_ID": ucp_web_client_id,
         "IDENTITY_UCP_API_CLIENT_ID": ucp_api_client_id,
         "IDENTITY_EDI_API_CLIENT_ID": edi_api_client_id,
+        "IDENTITY_OAUTH_CLIENT_ID": ucp_web_client_id,
+        "IDENTITY_AUDIENCE": f"api-gateway,{ucp_proj_id},{edi_proj_id},{ucp_web_client_id},{ucp_api_client_id},{edi_api_client_id}",
         "IDENTITY_MACHINE_KEY": jwt_profile_json,
         "IDENTITY_PLATFORM_ADMIN_ID": admin_id,
         "VITE_UCP_API_URL": "http://localhost:3000",

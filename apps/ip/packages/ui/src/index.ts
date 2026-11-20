@@ -73,6 +73,14 @@ export {
   type SyncedDataInspectionPanelProps,
 } from './presentation/records/SyncedDataInspectionPanel';
 export {
+  DestinationSchemaMonacoEditor,
+  type DestinationSchemaMonacoEditorProps,
+} from './presentation/stitch-mapper/DestinationSchemaMonacoEditor';
+export {
+  IpStitchFieldMapperPage,
+  type IpStitchFieldMapperPageProps,
+} from './presentation/stitch-mapper/IpStitchFieldMapperPage';
+export {
   IpStitchDefinitionPage,
   type IpStitchDefinitionPageProps,
 } from './presentation/stitches/IpStitchDefinitionPage';
@@ -102,6 +110,9 @@ export {
   type IpRepositoriesBundle,
   IpWorkspaceContext,
   type IpWorkspaceContextValue,
+  type RouteStitchMapperParams,
+  type RouteStitchWorkbenchParams,
+  type StitchMapperParams,
   useIpWorkspace,
 } from './provider/IpRepositoriesContext';
 export {

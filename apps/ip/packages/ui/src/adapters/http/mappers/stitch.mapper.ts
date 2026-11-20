@@ -5,6 +5,7 @@ import type {
   StitchRun,
   TriggerStitchEventInput,
   TriggerStitchEventResult,
+  UpdateStitchInput,
 } from '../../../domain/stitch';
 import type {
   StitchDefinitionWire,
@@ -33,15 +34,19 @@ export function mapStitchDefinitionFromWire(wire: StitchDefinitionWire): StitchD
 }
 
 export function mapStitchFromWire(wire: StitchWire): Stitch {
+  const effectiveWorkflowId = wire.target_workflow_id ?? wire.workflow_id ?? '';
   return {
     id: wire.id,
+    name: wire.name ?? '',
+    description: wire.description ?? '',
+    mappingSpecId: wire.mapping_spec_id,
     tenantId: wire.tenant_id,
-    workflowId: wire.workflow_id,
-    workflowVersion: wire.workflow_version,
+    workflowId: effectiveWorkflowId,
+    workflowVersion: wire.workflow_version ?? 1,
     canonicalEventType: wire.canonical_event_type,
-    isTrigger: wire.is_trigger,
+    isTrigger: wire.is_trigger ?? true,
     conditionEventKey: wire.condition_event_key,
-    idempotencyKeyField: wire.idempotency_key_field,
+    idempotencyKeyField: wire.idempotency_key_field ?? '',
     concurrencyKeyField: wire.concurrency_key_field,
     resourceHintField: wire.resource_hint_field,
     isActive: wire.is_active,
@@ -94,6 +99,10 @@ export function mapStitchRunFromWire(wire: StitchRunWire): StitchRun {
 export function mapRegisterStitchToWire(input: RegisterStitchInput): Record<string, unknown> {
   return {
     stitch_id: input.stitchId ?? null,
+    name: input.name ?? '',
+    description: input.description ?? '',
+    mapping_spec_id: input.mappingSpecId ?? null,
+    target_workflow_id: input.workflowId,
     workflow_id: input.workflowId,
     workflow_version: input.workflowVersion,
     canonical_event_type: input.canonicalEventType,
@@ -116,4 +125,14 @@ export function mapTriggerStitchEventToWire(
     trace_id: input.traceId ?? null,
     correlation_id: input.correlationId ?? null,
   };
+}
+
+export function mapUpdateStitchToWire(input: UpdateStitchInput): Record<string, unknown> {
+  const wire: Record<string, unknown> = {};
+  if (input.name !== undefined) wire.name = input.name;
+  if (input.description !== undefined) wire.description = input.description;
+  if (input.mappingSpecId !== undefined) wire.mapping_spec_id = input.mappingSpecId;
+  if (input.filterConditions !== undefined) wire.filter_conditions = input.filterConditions;
+  if (input.isActive !== undefined) wire.is_active = input.isActive;
+  return wire;
 }

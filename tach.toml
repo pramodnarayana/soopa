@@ -179,10 +179,14 @@ depends_on = [
 ]
 
 [[modules]]
+path = "ip.sdk"
+depends_on = []
+
+[[modules]]
 path = "ip.engine.domain"
 depends_on = [
-    "orchestration.domain",
-    "strace.domain"
+    "strace.domain",
+    "ip.sdk"
 ]
 
 [[modules]]
@@ -192,7 +196,8 @@ depends_on = [
     "orchestration.domain",
     "orchestration.ports",
     "strace.domain",
-    "strace.ports"
+    "strace.ports",
+    "ip.sdk"
 ]
 
 [[modules]]
@@ -206,7 +211,8 @@ depends_on = [
     "orchestration.application",
     "strace.domain",
     "strace.ports",
-    "strace.application"
+    "strace.application",
+    "ip.sdk"
 ]
 
 [[modules]]
@@ -216,6 +222,7 @@ depends_on = [
     "ip.engine.ports",
     "ip.engine.application",
     "ip.engine.settings",
+    "ip.sdk",
     "security",
     "database.models",
     "shttp",
@@ -261,7 +268,8 @@ depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
     "ip.engine.adapters",
-    "ip.engine.adapters.outbound.database.migrations"
+    "ip.engine.adapters.outbound.database.migrations",
+    "ip.sdk"
 ]
 
 [[modules]]
@@ -286,7 +294,7 @@ depends_on = [
 ]
 
 [[modules]]
-path = "ip.solutions.stitches"
+path = "ip.solutions.registry_loader"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
@@ -304,6 +312,7 @@ depends_on = [
     "ip.engine.application",
     "ip.engine.adapters",
     "ip.engine.settings",
+    "ip.sdk",
     "database.models",
     "security",
     "shttp",
@@ -337,7 +346,7 @@ depends_on = [
     "ip.engine.settings",
     "ip.solutions.connectors",
     "ip.solutions.domains",
-    "ip.solutions.stitches",
+    "ip.solutions.registry_loader",
     "ip.solutions.transformers",
     "shttp"
 ]

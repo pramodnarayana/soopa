@@ -1,4 +1,5 @@
 import type { CatalogAppsFilter } from '../domain/catalog';
+import type { ListMappingSpecsFilter } from '../domain/mapping-spec';
 import type { ListStitchRunsFilter } from '../domain/stitch';
 import type { ListRecentTracesFilter } from '../domain/trace';
 import type {
@@ -81,6 +82,8 @@ export const ipQueryKeys = {
         version ?? 'latest',
       ] as const,
     list: (tenantId: string) => ['ip', 'tenant', tenantId, 'stitches', 'list'] as const,
+    detail: (tenantId: string, stitchId: string) =>
+      ['ip', 'tenant', tenantId, 'stitches', 'detail', stitchId] as const,
     runs: (tenantId: string, filter?: ListStitchRunsFilter) =>
       [
         'ip',
@@ -94,6 +97,20 @@ export const ipQueryKeys = {
       ] as const,
     run: (tenantId: string, runId: string) =>
       ['ip', 'tenant', tenantId, 'stitches', 'run', runId] as const,
+  },
+  mappingSpecs: {
+    list: (tenantId: string, filter?: ListMappingSpecsFilter) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'mapping-specs',
+        'list',
+        filter?.sourceType ?? 'ALL',
+        filter?.targetConnectionId ?? 'ALL',
+      ] as const,
+    detail: (tenantId: string, mappingSpecId: string) =>
+      ['ip', 'tenant', tenantId, 'mapping-specs', 'detail', mappingSpecId] as const,
   },
   traces: {
     all: (tenantId: string) => ['ip', 'tenant', tenantId, 'traces'] as const,

@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from scheduler.domain.constants import JobStatus
@@ -19,13 +20,21 @@ class FakeJobRepository(JobRepositoryPort):
         self.jobs: dict[str, ScheduledJob] = {}
         self.swept_count = 0
 
-    async def sweep_stuck_jobs(self, lock_lease_ms: int) -> int:
+    async def sweep_stuck_jobs(
+        self,
+        lock_lease_ms: int,
+        active_namespaces: Sequence[str] | None = None,
+    ) -> int:
         count = self.swept_count
         self.swept_count = 0
         return count
 
     async def claim_next_jobs(
-        self, worker_id: str, limit: int, lock_lease_ms: int
+        self,
+        worker_id: str,
+        limit: int,
+        lock_lease_ms: int,
+        active_namespaces: Sequence[str] | None = None,
     ) -> list[ScheduledJob]:
         now = datetime.now(UTC)
         eligible = sorted(
@@ -34,6 +43,7 @@ class FakeJobRepository(JobRepositoryPort):
                 for job in self.jobs.values()
                 if job.status == JobStatus.PENDING
                 and (job.next_run_at is None or _normalize_utc(job.next_run_at) <= now)
+                and (active_namespaces is None or job.app_namespace in active_namespaces)
             ),
             key=lambda job: (
                 job.next_run_at is None,
@@ -54,6 +64,7 @@ class FakeJobRepository(JobRepositoryPort):
                 retry_count=job.retry_count,
                 max_retries=job.max_retries,
                 next_run_at=job.next_run_at,
+                app_namespace=job.app_namespace,
             )
             self.jobs[job.id] = job_copy
             claimed.append(job_copy)
@@ -73,6 +84,7 @@ class FakeJobRepository(JobRepositoryPort):
                 retry_count=0,
                 max_retries=job.max_retries,
                 next_run_at=next_run_at,
+                app_namespace=job.app_namespace,
             )
 
     async def schedule_retry(
@@ -91,6 +103,7 @@ class FakeJobRepository(JobRepositoryPort):
                 retry_count=retry_count,
                 max_retries=job.max_retries,
                 next_run_at=next_run_at,
+                app_namespace=job.app_namespace,
             )
 
     async def mark_completed(self, job_id: str, worker_id: str) -> None:
@@ -107,6 +120,7 @@ class FakeJobRepository(JobRepositoryPort):
                 retry_count=job.retry_count,
                 max_retries=job.max_retries,
                 next_run_at=job.next_run_at,
+                app_namespace=job.app_namespace,
             )
 
     async def mark_failed(self, job_id: str, worker_id: str, error_message: str) -> None:
@@ -123,6 +137,7 @@ class FakeJobRepository(JobRepositoryPort):
                 retry_count=job.retry_count,
                 max_retries=job.max_retries,
                 next_run_at=job.next_run_at,
+                app_namespace=job.app_namespace,
             )
 
 

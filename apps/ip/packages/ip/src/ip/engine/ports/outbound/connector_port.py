@@ -9,6 +9,7 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonDict, JsonValue
 
+from ip.engine.domain.connection.enums import ConnectorRole
 from ip.engine.domain.constants import DEFAULT_IDEMPOTENCY_HEADER
 from ip.engine.domain.exceptions import IpError
 
@@ -108,6 +109,7 @@ class WriteRecordCommand:
     headers: Mapping[str, str] = field(default_factory=dict)
     correlation_id: str | None = None
     attempt_number: int = 1
+    trace_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -209,6 +211,7 @@ class AppSpecDTO:
     category: str
     properties: Sequence[ConnectorPropertyDTO] = ()
     description: str | None = None
+    role: str = ConnectorRole.OUTBOUND_CLIENT.value
 
 
 class ConnectorMetadataPort(Protocol):

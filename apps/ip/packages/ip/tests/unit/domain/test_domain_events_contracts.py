@@ -31,14 +31,14 @@ from ip.engine.domain.replication.events import (
     SyncRunStartedEvent,
 )
 from ip.engine.domain.stitch.events import StitchRegisteredEvent
-from ip.engine.domain.stitch.stitch import (
+from ip.engine.domain.stitch.steps import (
     EmitNotificationStepInput,
     EmitNotificationStepOutput,
     ExecuteHttpActionStepInput,
     QueryReplicaStepInput,
     QueryReplicaStepOutput,
-    Stitch,
 )
+from ip.engine.domain.stitch.stitch import Stitch
 from seedwork.events import EventProcessingLane
 
 
@@ -275,10 +275,8 @@ def test_normalization_dispatch_control_plane_events_expose_routing_headers() ->
     stitch_evt = StitchRegisteredEvent(
         stitch_id="st_1",
         tenant_id="t_1",
-        workflow_id="wf_1",
-        workflow_version=1,
         canonical_event_type="canonical.v1",
-        is_trigger=True,
+        target_workflow_id="wf_1",
         is_active=True,
     )
     assert stitch_evt.event_name == IpEventType.STITCH_REGISTERED
@@ -290,26 +288,12 @@ def test_stitch_aggregate_evaluates_filter_conditions() -> None:
     stitch = Stitch(
         id="st_1",
         tenant_id="t_1",
-        workflow_id="wf_1",
-        workflow_version=1,
+        target_workflow_id="wf_1",
         canonical_event_type="canonical.v1",
-        is_trigger=True,
-        idempotency_key_field="entity_id",
-        concurrency_key_field="account_id",
-        resource_hint_field="region",
         filter_conditions={"status": "ACTIVE", "tier": 2},
     )
     assert stitch.matches_payload({"status": "ACTIVE", "tier": 2, "entity_id": "ent_1"}) is True
     assert stitch.matches_payload({"status": "INACTIVE", "tier": 2}) is False
-    assert (
-        stitch.extract_idempotency_key({"entity_id": "ent_9"}, fallback_event_id="ev_1")
-        == "wf_1:ent_9"
-    )
-    assert stitch.extract_idempotency_key({}, fallback_event_id="ev_1") == "wf_1:ev_1"
-    assert stitch.extract_concurrency_key({"account_id": "acc_1"}) == "acc_1"
-    assert stitch.extract_concurrency_key({}) is None
-    assert stitch.extract_resource_hint({"region": "us_east"}) == "us_east"
-    assert stitch.extract_resource_hint({}) is None
 
 
 def test_stitch_step_dto_codecs_validate_payloads() -> None:

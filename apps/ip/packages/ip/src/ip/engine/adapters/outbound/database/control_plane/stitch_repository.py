@@ -8,8 +8,8 @@ from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchem
 from ip.engine.adapters.outbound.database.models.control_plane import StitchRecord
 from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort
-from seedwork.domain.types import JsonPrimitive
-from sqlalchemy import case, select
+from seedwork.domain.types import JsonDict, JsonPrimitive
+from sqlalchemy import case, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -38,37 +38,41 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
 
     @staticmethod
     def _to_domain_model(record: StitchRecord) -> Stitch:
+        raw_filters = (
+            dict(record.filter_conditions) if isinstance(record.filter_conditions, dict) else {}
+        )
+        idemp_field = str(raw_filters.pop("__idempotency_key_field__", "") or "")
+        conc_field = str(raw_filters.pop("__concurrency_key_field__", "") or "")
         return Stitch(
             id=record.id,
             tenant_id=record.tenant_id,
-            workflow_id=record.workflow_id,
-            workflow_version=record.workflow_version,
+            name=record.name,
+            description=record.description,
+            mapping_spec_id=record.mapping_spec_id,
             canonical_event_type=record.canonical_event_type,
-            is_trigger=record.is_trigger,
-            condition_event_key=record.condition_event_key,
-            idempotency_key_field=record.idempotency_key_field,
-            concurrency_key_field=record.concurrency_key_field,
-            resource_hint_field=record.resource_hint_field,
-            filter_conditions=SqlAlchemyStitchRepository._sanitize_filter_conditions(
-                record.filter_conditions
-            ),
+            target_workflow_id=record.target_workflow_id,
+            filter_conditions=SqlAlchemyStitchRepository._sanitize_filter_conditions(raw_filters),
             is_active=record.is_active,
+            idempotency_key_field=idemp_field,
+            concurrency_key_field=conc_field,
         )
 
     @staticmethod
     def _to_orm_model(stitch: Stitch, now: datetime) -> StitchRecord:
+        raw_filters: JsonDict = dict(stitch.filter_conditions)
+        if stitch.idempotency_key_field:
+            raw_filters["__idempotency_key_field__"] = stitch.idempotency_key_field
+        if stitch.concurrency_key_field:
+            raw_filters["__concurrency_key_field__"] = stitch.concurrency_key_field
         return StitchRecord(
             id=stitch.id,
             tenant_id=stitch.tenant_id,
-            workflow_id=stitch.workflow_id,
-            workflow_version=stitch.workflow_version,
+            name=stitch.name,
+            description=stitch.description,
+            mapping_spec_id=stitch.mapping_spec_id,
             canonical_event_type=stitch.canonical_event_type,
-            is_trigger=stitch.is_trigger,
-            condition_event_key=stitch.condition_event_key,
-            idempotency_key_field=stitch.idempotency_key_field,
-            concurrency_key_field=stitch.concurrency_key_field,
-            resource_hint_field=stitch.resource_hint_field,
-            filter_conditions=dict(stitch.filter_conditions),
+            target_workflow_id=stitch.target_workflow_id,
+            filter_conditions=raw_filters,
             is_active=stitch.is_active,
             created_at=now,
             updated_at=now,
@@ -80,16 +84,18 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         stitch: Stitch,
         now: datetime,
     ) -> None:
+        raw_filters: JsonDict = dict(stitch.filter_conditions)
+        if stitch.idempotency_key_field:
+            raw_filters["__idempotency_key_field__"] = stitch.idempotency_key_field
+        if stitch.concurrency_key_field:
+            raw_filters["__concurrency_key_field__"] = stitch.concurrency_key_field
         record.tenant_id = stitch.tenant_id
-        record.workflow_id = stitch.workflow_id
-        record.workflow_version = stitch.workflow_version
+        record.name = stitch.name
+        record.description = stitch.description
+        record.mapping_spec_id = stitch.mapping_spec_id
         record.canonical_event_type = stitch.canonical_event_type
-        record.is_trigger = stitch.is_trigger
-        record.condition_event_key = stitch.condition_event_key
-        record.idempotency_key_field = stitch.idempotency_key_field
-        record.concurrency_key_field = stitch.concurrency_key_field
-        record.resource_hint_field = stitch.resource_hint_field
-        record.filter_conditions = dict(stitch.filter_conditions)
+        record.target_workflow_id = stitch.target_workflow_id
+        record.filter_conditions = raw_filters
         record.is_active = stitch.is_active
         record.updated_at = now
 
@@ -196,6 +202,38 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
             for s in by_id.values()
             if s.canonical_event_type == canonical_event_type and s.is_active
         ]
+
+    async def list_by_mapping_spec_id(
+        self,
+        *,
+        tenant_id: str,
+        mapping_spec_id: str,
+    ) -> list[Stitch]:
+        """List all Stitches referencing a specific mapping_spec_id."""
+        stmt = (
+            select(StitchRecord)
+            .where(
+                StitchRecord.tenant_id.in_((tenant_id, "*")),
+                StitchRecord.mapping_spec_id == mapping_spec_id,
+            )
+            .order_by(StitchRecord.id.asc())
+        )
+        result = await self.session.execute(stmt)
+        records = result.scalars().all()
+        return [self._to_domain_model(r) for r in records]
+
+    async def delete(
+        self,
+        *,
+        tenant_id: str,
+        stitch_id: str,
+    ) -> None:
+        """Deletes a Stitch record for a tenant."""
+        stmt = delete(StitchRecord).where(
+            StitchRecord.id == stitch_id,
+            StitchRecord.tenant_id == tenant_id,
+        )
+        await self.session.execute(stmt)
 
 
 __all__ = ["SqlAlchemyStitchRepository"]

@@ -19,6 +19,14 @@ export function normalizeAuthType(raw: string): AuthTypeValue | null {
     case 'NO_AUTH':
     case 'NONE':
       return AuthType.NO_AUTH;
+    case 'CUSTOM':
+      return AuthType.CUSTOM;
+    case 'MTLS':
+      return AuthType.MTLS;
+    case 'SASL_PLAINTEXT':
+      return AuthType.SASL_PLAINTEXT;
+    case 'SASL_SSL':
+      return AuthType.SASL_SSL;
     default:
       return isAuthTypeValue(raw) ? raw : null;
   }

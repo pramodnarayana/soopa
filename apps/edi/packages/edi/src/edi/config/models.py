@@ -5,8 +5,8 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infra.config import load_settings_safely
+from pydantic_settings import SettingsConfigDict
+from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
@@ -22,7 +22,7 @@ Each service can use the full AppSettings or cherry-pick specific groups.
 """
 
 
-class S3Settings(BaseSettings):
+class S3Settings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     bucket: str = Field(validation_alias="S3_BUCKET", default="edi-as2-payloads")
@@ -44,7 +44,7 @@ class EdiAwsSettings(PlatformAwsSettings):
     sns_topic_arn: str = Field(validation_alias="SNS_PLATFORM_EVENTS_TOPIC_ARN", default="")
 
 
-class EdiDataPlaneSqsSettings(BaseSettings):
+class EdiDataPlaneSqsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     orchestrator_queue_url: str = Field(
@@ -69,7 +69,7 @@ class EdiDataPlaneSqsSettings(BaseSettings):
     )
 
 
-class EdiControlPlaneSqsSettings(BaseSettings):
+class EdiControlPlaneSqsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     provisioning_queue_url: str = Field(
@@ -82,7 +82,7 @@ class EdiControlPlaneSqsSettings(BaseSettings):
     )
 
 
-class PublicSettings(BaseSettings):
+class PublicSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     base_url: str = Field(
@@ -91,7 +91,7 @@ class PublicSettings(BaseSettings):
     )
 
 
-class SecretsSettings(BaseSettings):
+class SecretsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     mount_path: str = Field(validation_alias="SECRETS_MOUNT_PATH", default=SECRETS_MOUNT_PATH)
@@ -100,7 +100,7 @@ class SecretsSettings(BaseSettings):
     )
 
 
-class CommonSettings(BaseSettings):
+class CommonSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     env: Literal["development", "staging", "production"] = Field(

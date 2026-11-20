@@ -11,7 +11,7 @@ from ip.engine.adapters.outbound.auth.token_refresh_lock import (
     SqlAlchemyTokenRefreshLockAdapter,
 )
 from ip.engine.adapters.outbound.database.models.control_plane import IpOutboxRecord
-from ip.engine.application.use_cases.stitch.stitch_control_plane_use_cases import (
+from ip.engine.application.use_cases.stitch import (
     ListStitchesQuery,
     ListStitchesUseCase,
     RegisterStitchCommand,
@@ -46,12 +46,8 @@ async def test_postgres_stitch_repository_persists_tenant_stitches_with_outbox_e
         RegisterStitchCommand(
             tenant_id=seeded_ip_tenant,
             stitch_id="stitch_energy_custom_pg_01",
-            workflow_id="energy.outage_restoration_stitch",
-            workflow_version=1,
+            target_workflow_id="energy.outage_restoration_stitch",
             canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
-            is_trigger=True,
-            idempotency_key_field="service_point_external_id",
-            concurrency_key_field="meter_serial_number",
         )
     )
     assert reg_res.is_ok
@@ -70,7 +66,7 @@ async def test_postgres_stitch_repository_persists_tenant_stitches_with_outbox_e
         stitch_id="stitch_energy_custom_pg_01",
     )
     assert persisted is not None
-    assert persisted.workflow_id == "energy.outage_restoration_stitch"
+    assert persisted.target_workflow_id == "energy.outage_restoration_stitch"
     assert persisted.canonical_event_type == EnergyEntityType.MDM_SERVICE_POINT.value
 
     cp_outbox_stmt = select(IpOutboxRecord).where(
@@ -99,10 +95,8 @@ async def test_postgres_stitch_repository_supports_wildcard_override_with_confli
         RegisterStitchCommand(
             tenant_id="*",
             stitch_id="stitch_shared_override_test",
-            workflow_id="energy.outage_restoration_stitch",
-            workflow_version=1,
+            target_workflow_id="energy.outage_restoration_stitch",
             canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
-            is_trigger=True,
         )
     )
     assert reg_wildcard_res.is_ok
@@ -111,10 +105,8 @@ async def test_postgres_stitch_repository_supports_wildcard_override_with_confli
         RegisterStitchCommand(
             tenant_id=seeded_ip_tenant,
             stitch_id="stitch_shared_override_test",
-            workflow_id="energy.outage_restoration_stitch",
-            workflow_version=1,
+            target_workflow_id="energy.outage_restoration_stitch",
             canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
-            is_trigger=True,
         )
     )
     assert reg_override_res.is_ok
@@ -130,10 +122,8 @@ async def test_postgres_stitch_repository_supports_wildcard_override_with_confli
         RegisterStitchCommand(
             tenant_id="other_concrete_tenant_999",
             stitch_id="stitch_shared_override_test",
-            workflow_id="energy.outage_restoration_stitch",
-            workflow_version=1,
+            target_workflow_id="energy.outage_restoration_stitch",
             canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
-            is_trigger=True,
         )
     )
     assert reg_conflict_res.is_err

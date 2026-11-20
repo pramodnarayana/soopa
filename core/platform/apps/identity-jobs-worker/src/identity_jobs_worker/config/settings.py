@@ -1,8 +1,8 @@
 from functools import lru_cache
 
 from pydantic import Field, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infra.config import load_settings_safely
+from pydantic_settings import SettingsConfigDict
+from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
@@ -15,14 +15,14 @@ class IdentityOutboxAwsSettings(PlatformAwsSettings):
     )
 
 
-class SqsSettings(BaseSettings):
+class SqsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
     identity_jobs_queue_url: str = Field(
         validation_alias="SQS_IDENTITY_JOBS_QUEUE_URL", default="", min_length=1
     )
 
 
-class AppSettings(BaseSettings):
+class AppSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     database: PlatformDatabaseSettings = Field(default_factory=lambda: PlatformDatabaseSettings())

@@ -146,7 +146,6 @@ def test_dependencies_guard_uninitialized_app_state() -> None:
     state_holder.state.s3_storage = None
     state_holder.state.db_router = None
     state_holder.state.tenant_resolver = None
-    state_holder.state.publisher = None
     state_holder.state.crypto_service = None
 
     scope = {"type": "http", "app": state_holder, "headers": [], "method": "POST", "path": "/"}
@@ -169,11 +168,6 @@ def test_dependencies_guard_uninitialized_app_state() -> None:
     assert exc_tenant.value.status_code == 503
 
     state_holder.state.tenant_resolver = object()
-    with pytest.raises(HTTPException) as exc_pub:
-        get_receive_as2_use_case(req, dummy_session, dummy_vault)
-    assert exc_pub.value.status_code == 503
-
-    state_holder.state.publisher = object()
     with pytest.raises(HTTPException) as exc_crypto:
         get_receive_as2_use_case(req, dummy_session, dummy_vault)
     assert exc_crypto.value.status_code == 503

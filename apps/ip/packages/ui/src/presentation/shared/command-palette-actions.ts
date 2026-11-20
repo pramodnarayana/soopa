@@ -71,6 +71,7 @@ export const CommandPaletteWorkspaceId = {
   CONNECTIONS: 'CONNECTIONS',
   TRANSFORMATIONS: 'TRANSFORMATIONS',
   STITCHES: 'STITCHES',
+  STITCH_MAPPER: 'STITCH_MAPPER',
 } as const;
 
 export type CommandPaletteWorkspaceIdValue =
@@ -116,6 +117,16 @@ export function buildCommandPaletteWorkspaceItems(
       value: 'workspace stitches dag orchestration runs',
       label: 'L4 Stitches & Durable DAG Runs',
       execute: () => navigation.toStitches(),
+    },
+    {
+      id: CommandPaletteWorkspaceId.STITCH_MAPPER,
+      value: 'workspace stitch field mapper wire contract diff preview',
+      label: 'Stitch & Field Mapper',
+      execute: () => {
+        if (navigation.toStitchMapper) {
+          navigation.toStitchMapper();
+        }
+      },
     },
   ];
 }

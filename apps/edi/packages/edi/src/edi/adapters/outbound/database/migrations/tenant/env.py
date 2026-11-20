@@ -29,7 +29,7 @@ if _ini_url:
     TENANT_DB_URL = _ini_url
 else:
     global_url = str(load_settings_safely(PlatformDatabaseSettings).global_url)
-    TENANT_DB_URL = get_test_shard_url_sync(global_url)
+    TENANT_DB_URL = get_test_shard_url_sync(global_url, app_slug="edi")
 
 
 from typing import Any, Literal

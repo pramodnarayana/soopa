@@ -80,7 +80,7 @@ async def global_db_engine():
 @pytest_asyncio.fixture(scope="function")
 async def tenant_db_engine():
     global_url = os.environ["DATABASE_URL"]
-    db_url = await get_test_shard_url_async(global_url)
+    db_url = await get_test_shard_url_async(global_url, app_slug="edi")
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()
@@ -374,11 +374,6 @@ class FakeHostVault:
         pass
 
 
-class FakePublisher:
-    async def publish(self, event):
-        pass
-
-
 @pytest_asyncio.fixture
 async def as2_client(
     sender_keypair: KeyPair,
@@ -466,8 +461,6 @@ async def as2_client(
         global_session=global_db_session, tenant_session=tenant_db_session
     )
     app.state.tenant_resolver = FakeTenantResolver(shard_dsn=shard_dsn)
-
-    app.state.publisher = FakePublisher()
     app.state.crypto_service = SmimeCryptoService()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

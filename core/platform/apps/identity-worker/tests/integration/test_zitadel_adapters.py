@@ -42,11 +42,11 @@ from shttp import HttpClient
 def zitadel_http_client() -> HttpClient:
     settings = get_settings()
     token_provider = ZitadelMachineTokenProvider(
-        api_url=settings.zitadel_api_url,
-        machine_key=settings.zitadel_machine_key,
+        api_url=settings.idp_api_url,
+        machine_key=settings.idp_machine_key,
     )
     return HttpClient(
-        base_url=settings.zitadel_api_url,
+        base_url=settings.idp_api_url,
         token_provider=token_provider,
         default_headers={"Accept": "application/json"},
         allow_private_ips=True,
@@ -102,18 +102,22 @@ async def test_full_zitadel_lifecycle(
     # 1. Test Organization Creation
     test_tenant_id = generate_id("ten")
     test_org_name = f"Test Integration Org {test_tenant_id}"
-    org_id, grant_succeeded = await zitadel_orgs_adapter.create_organization(
-        test_tenant_id, test_org_name
-    )
+    org_id = await zitadel_orgs_adapter.create_organization(test_tenant_id, test_org_name)
     assert org_id == test_tenant_id
-    assert grant_succeeded is True, "Project grant should be successful"
+
+    test_project_id = (
+        os.environ.get("IDENTITY_UCP_PROJECT_ID") or os.environ.get("IDENTITY_IDP_PROJECT_ID") or ""
+    )
 
     try:
         # 2. Test Get Roles
-        roles = await zitadel_projects_adapter.get_roles()
+        roles = await zitadel_projects_adapter.get_roles(test_project_id)
         assert len(roles) > 0
         role_keys = [r.key for r in roles]
         assert "PlatformAdmin" in role_keys or "TenantAdmin" in role_keys
+
+        # Grant project to organization for tenant self-service roles
+        await zitadel_orgs_adapter.grant_project_to_organization(org_id, test_project_id)
 
         # 3. Test Create User
         test_email = f"testuser_{generate_id('usr')}@example.com"

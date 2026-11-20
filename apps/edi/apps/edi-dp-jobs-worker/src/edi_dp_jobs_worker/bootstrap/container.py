@@ -1,14 +1,18 @@
 import structlog
-from database.router import DatabaseRouter
+from database.router import DatabaseRouter, DatabaseRouterPort
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
 from edi.domain.constants import EdiConstants
 from edi.domain.enums import EdiJobName, EdiOutboxSource
+from outbox.adapters.inbound.multi_shard_outbox_drain_relay import MultiShardOutboxDrainRelay
 from outbox.adapters.outbound.sqlalchemy_sharded_outbox_repository import (
     SqlAlchemyShardedOutboxRepository,
 )
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from outbox.ports.outbox_relay_port import OutboxRelayPort
+from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
 from pubsub.provider import PubSubProvider
@@ -29,7 +33,7 @@ from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_retention
 from edi_dp_jobs_worker.application.use_cases.edi_data_retention_cleanup_use_case import (
     EdiDataRetentionCleanupUseCase,
 )
-from edi_dp_jobs_worker.settings import get_settings
+from edi_dp_jobs_worker.settings import WorkerSettings, get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -37,30 +41,70 @@ logger = structlog.get_logger(__name__)
 class WorkerContainer:
     """Dependency Injection container for the EDI Data Plane Jobs Worker."""
 
-    def __init__(self) -> None:
-        self.settings = get_settings()
-        self.db_router = DatabaseRouter(
+    def __init__(
+        self,
+        settings: WorkerSettings | None = None,
+        *,
+        db_router: DatabaseRouterPort | None = None,
+    ) -> None:
+        self.settings = settings or get_settings()
+        self.db_router = db_router or DatabaseRouter(
             global_db_url=self.settings.database.global_url,
             shard_overrides=self.settings.database.shard_overrides,
         )
 
+        self.dp_outbox_relay: OutboxRelayPort | None = None
         self.dp_manager: SqsConsumerManager | None = None
         self.dp_cleanup_job_handler: EdiDataPlaneOutboxCleanupJobHandler | None = None
         self.retention_cleanup_job_handler: EdiDataRetentionCleanupJobHandler | None = None
         self.dp_sweeper_job_handler: EdiDataPlaneOutboxSweeperJobHandler | None = None
 
     def wire(self) -> None:
-        self._wire_scheduled_jobs()
-        self._wire_jobs_consumers()
-
-    def _wire_scheduled_jobs(self) -> None:
-        sharded_outbox_repo = SqlAlchemyShardedOutboxRepository(
+        sharded_drain_repo = SqlAlchemyShardedOutboxRepository(
+            db_router=self.db_router,
+            model_cls=DataPlaneOutbox,
+            app_slug=EdiConstants.EDI_APP_SLUG.value,
+            source=EdiOutboxSource.EDI_DATA_PLANE.value,
+            min_pending_age_seconds=0,
+        )
+        sharded_sweeper_repo = SqlAlchemyShardedOutboxRepository(
             db_router=self.db_router,
             model_cls=DataPlaneOutbox,
             app_slug=EdiConstants.EDI_APP_SLUG.value,
             source=EdiOutboxSource.EDI_DATA_PLANE.value,
             min_pending_age_seconds=60,
         )
+
+        publisher = create_edi_pipeline_publisher(
+            compute_queue_url=self.settings.sqs.compute_queue_url,
+            orchestrator_queue_url=self.settings.sqs.orchestrator_queue_url,
+            deliver_queue_url=self.settings.sqs.deliver_queue_url,
+            region_name=self.settings.aws.resolved_region,
+            endpoint_url=self.settings.aws.endpoint_url,
+        )
+
+        self._wire_outbox_relay(sharded_drain_repo, publisher)
+        self._wire_scheduled_jobs(sharded_sweeper_repo, publisher)
+        self._wire_jobs_consumers()
+
+    def _wire_outbox_relay(
+        self,
+        repository: ShardOutboxDrainPort,
+        publisher: OutboxPublisherPort,
+    ) -> None:
+        self.dp_outbox_relay = MultiShardOutboxDrainRelay(
+            repository=repository,
+            publisher=publisher,
+            batch_size=500,
+            shard_concurrency=5,
+            poll_interval_seconds=0.2,
+        )
+
+    def _wire_scheduled_jobs(
+        self,
+        sharded_outbox_repo: SqlAlchemyShardedOutboxRepository[DataPlaneOutbox],
+        publisher: OutboxPublisherPort,
+    ) -> None:
         self.dp_cleanup_job_handler = EdiDataPlaneOutboxCleanupJobHandler(
             OutboxCleanerUseCase(sharded_outbox_repo)
         )
@@ -70,14 +114,6 @@ class WorkerContainer:
         )
         self.retention_cleanup_job_handler = EdiDataRetentionCleanupJobHandler(
             EdiDataRetentionCleanupUseCase(retention_cleanup_repo)
-        )
-
-        publisher = create_edi_pipeline_publisher(
-            compute_queue_url=self.settings.sqs.compute_queue_url,
-            orchestrator_queue_url=self.settings.sqs.orchestrator_queue_url,
-            deliver_queue_url=self.settings.sqs.deliver_queue_url,
-            region_name=self.settings.aws.resolved_region,
-            endpoint_url=self.settings.aws.endpoint_url,
         )
 
         self.dp_sweeper_job_handler = EdiDataPlaneOutboxSweeperJobHandler(
@@ -115,11 +151,15 @@ class WorkerContainer:
     async def start(self) -> None:
         if self.dp_manager:
             self.dp_manager.start()
+        if self.dp_outbox_relay:
+            self.dp_outbox_relay.start()
 
     async def dispose(self) -> None:
         try:
             if self.dp_manager:
                 await self.dp_manager.stop()
+            if self.dp_outbox_relay:
+                await self.dp_outbox_relay.stop()
         finally:
             if self.db_router:
                 await self.db_router.close_all()

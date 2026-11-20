@@ -72,7 +72,7 @@ async def test_update_connection_use_case_updates_metadata(
     assert update_res.connection is not None
     update_dto = update_res.connection
 
-    assert update_dto.status == "PENDING_AUTH"
+    assert update_dto.status == "ACTIVE"
     assert update_dto.name == "Acme Source Renamed"
     assert update_dto.public_config == {"endpoint_url": "https://api.partner.example.com/v2"}
 

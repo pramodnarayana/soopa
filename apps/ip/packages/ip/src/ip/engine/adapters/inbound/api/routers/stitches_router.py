@@ -1,202 +1,78 @@
-"""FastAPI router for Layer-4 Stitch definitions, stitches, event dispatch, and durable runs."""
+"""FastAPI router for Layer-4 Stitch subscriptions."""
 
 from __future__ import annotations
 
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Response, status
 from fastapi.responses import JSONResponse
 from identity.domain.identity_context import IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
     get_ip_control_plane_uow,
     get_stitch_catalog_registry,
-    get_stitch_shard_gateway,
     get_workflow_definition_registry,
     require_tenant_member,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import from_ip_error
 from ip.engine.adapters.inbound.api.dtos.stitch_dtos import (
     RegisterStitchHttpRequest,
-    StitchDefinitionHttpResponse,
     StitchHttpResponse,
-    StitchNodeHttpResponse,
-    StitchRunHttpResponse,
-    StitchStepRunHttpResponse,
-    TriggerStitchEventHttpRequest,
-    TriggerStitchEventHttpResponse,
+    ToggleStitchStateHttpRequest,
+    UpdateStitchHttpRequest,
+)
+from ip.engine.adapters.inbound.api.routers.stitch_definitions_router import (
+    router as definitions_router,
+)
+from ip.engine.adapters.inbound.api.routers.stitch_runs_router import (
+    router as runs_router,
 )
 from ip.engine.application.use_cases.stitch import (
-    GetStitchDefinitionQuery,
-    GetStitchDefinitionUseCase,
-    GetStitchRunQuery,
-    GetStitchRunUseCase,
-    ListStitchDefinitionsUseCase,
+    DeleteStitchCommand,
+    DeleteStitchUseCase,
+    GetStitchQuery,
+    GetStitchUseCase,
     ListStitchesQuery,
     ListStitchesUseCase,
-    ListStitchRunsQuery,
-    ListStitchRunsUseCase,
     RegisterStitchCommand,
     RegisterStitchUseCase,
-    StitchDefinitionSummaryDTO,
-    StitchRunSummaryDTO,
     StitchSummaryDTO,
-    TriggerStitchEventCommand,
-    TriggerStitchEventUseCase,
+    ToggleStitchStateCommand,
+    ToggleStitchStateUseCase,
+    UpdateStitchCommand,
+    UpdateStitchUseCase,
 )
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
-    StitchShardGatewayPort,
 )
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
-from orchestration.domain.constants import RunStatus
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/ip/stitches",
-    tags=["IP - Stitches & Durable Workflows"],
+    tags=["IP - Stitches"],
 )
 
-
-def _to_definition_response(dto: StitchDefinitionSummaryDTO) -> StitchDefinitionHttpResponse:
-    return StitchDefinitionHttpResponse(
-        workflow_id=dto.workflow_id,
-        version=dto.version,
-        default_priority=dto.default_priority,
-        description=dto.description,
-        nodes=[
-            StitchNodeHttpResponse(
-                node_key=n.node_key,
-                kind=n.kind,
-                step_type=n.step_type,
-                parents=list(n.parents),
-                edge_condition=n.edge_condition,
-                effect_policy=n.effect_policy,
-                wait_event_key=n.wait_event_key,
-                queue_name=n.queue_name,
-            )
-            for n in dto.nodes
-        ],
-    )
+# Mount sub-routers for definitions and runs before /{stitch_id} path parameters
+router.include_router(definitions_router)
+router.include_router(runs_router)
 
 
-def _to_stitch_response(dto: StitchSummaryDTO) -> StitchHttpResponse:
+def to_stitch_http_response(dto: StitchSummaryDTO) -> StitchHttpResponse:
+    """Maps a StitchSummaryDTO to StitchHttpResponse."""
     return StitchHttpResponse(
         id=dto.id,
         tenant_id=dto.tenant_id,
-        workflow_id=dto.workflow_id,
-        workflow_version=dto.workflow_version,
         canonical_event_type=dto.canonical_event_type,
-        is_trigger=dto.is_trigger,
-        condition_event_key=dto.condition_event_key,
-        idempotency_key_field=dto.idempotency_key_field,
-        concurrency_key_field=dto.concurrency_key_field,
-        resource_hint_field=dto.resource_hint_field,
+        target_workflow_id=dto.target_workflow_id,
+        name=dto.name,
+        description=dto.description,
+        mapping_spec_id=dto.mapping_spec_id,
         filter_conditions=dict(dto.filter_conditions),
         is_active=dto.is_active,
     )
-
-
-def _to_run_response(dto: StitchRunSummaryDTO) -> StitchRunHttpResponse:
-    return StitchRunHttpResponse(
-        run_id=dto.run_id,
-        tenant_id=dto.tenant_id,
-        workflow_id=dto.workflow_id,
-        workflow_version=dto.workflow_version,
-        status=dto.status,
-        priority=dto.priority,
-        concurrency_key=dto.concurrency_key,
-        idempotency_key=dto.idempotency_key,
-        trace_id=dto.trace_id,
-        correlation_id=dto.correlation_id,
-        failure_code=dto.failure_code,
-        failure_detail=dto.failure_detail,
-        created_at=dto.created_at,
-        started_at=dto.started_at,
-        finished_at=dto.finished_at,
-        steps=[
-            StitchStepRunHttpResponse(
-                step_run_id=s.step_run_id,
-                node_key=s.node_key,
-                status=s.status,
-                retry_count=s.retry_count,
-                app_retry_count=s.app_retry_count,
-                internal_retry_count=s.internal_retry_count,
-                iteration_count=s.iteration_count,
-                failure_code=s.failure_code,
-                failure_detail=s.failure_detail,
-                created_at=s.created_at,
-                finished_at=s.finished_at,
-            )
-            for s in dto.steps
-        ],
-    )
-
-
-@router.get("/definitions", response_model=list[StitchDefinitionHttpResponse])
-async def list_stitch_definitions(
-    tenant_id: str,
-    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    definition_registry: Annotated[
-        WorkflowDefinitionRegistryPort, Depends(get_workflow_definition_registry)
-    ],
-) -> list[StitchDefinitionHttpResponse]:
-    """Lists all registered Stitch WorkflowDefinition DAGs."""
-    logger.info("http_list_stitch_definitions.received", tenant_id=tenant_id)
-    use_case = ListStitchDefinitionsUseCase(definition_registry=definition_registry)
-    dtos = use_case.execute()
-    logger.info(
-        "http_list_stitch_definitions.completed",
-        tenant_id=tenant_id,
-        definition_count=len(dtos),
-    )
-    return [_to_definition_response(d) for d in dtos]
-
-
-@router.get("/definitions/{workflow_id}", response_model=StitchDefinitionHttpResponse)
-async def get_stitch_definition(
-    tenant_id: str,
-    workflow_id: str,
-    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    definition_registry: Annotated[
-        WorkflowDefinitionRegistryPort, Depends(get_workflow_definition_registry)
-    ],
-    version: Annotated[int | None, Query(ge=1)] = None,
-) -> StitchDefinitionHttpResponse | JSONResponse:
-    """Retrieves a specific Stitch WorkflowDefinition DAG by ID and optional version."""
-    logger.info(
-        "http_get_stitch_definition.received",
-        tenant_id=tenant_id,
-        workflow_id=workflow_id,
-        version=version,
-    )
-    use_case = GetStitchDefinitionUseCase(definition_registry=definition_registry)
-    res = use_case.execute(
-        GetStitchDefinitionQuery(
-            workflow_id=workflow_id,
-            version=version,
-        )
-    )
-    if res.is_err:
-        err = res.unwrap_err()
-        logger.error(
-            "http_get_stitch_definition.failed",
-            tenant_id=tenant_id,
-            workflow_id=workflow_id,
-            version=version,
-            error_code=err.code.value,
-        )
-        return from_ip_error(err)
-    dto = res.unwrap()
-    logger.info(
-        "http_get_stitch_definition.completed",
-        tenant_id=tenant_id,
-        workflow_id=dto.workflow_id,
-        version=dto.version,
-    )
-    return _to_definition_response(dto)
 
 
 @router.get("", response_model=list[StitchHttpResponse])
@@ -215,7 +91,7 @@ async def list_stitches(
         tenant_id=tenant_id,
         stitch_count=len(dtos),
     )
-    return [_to_stitch_response(s) for s in dtos]
+    return [to_stitch_http_response(s) for s in dtos]
 
 
 @router.post(
@@ -233,12 +109,11 @@ async def register_stitch(
         WorkflowDefinitionRegistryPort, Depends(get_workflow_definition_registry)
     ],
 ) -> StitchHttpResponse | JSONResponse:
-    """Registers or updates a Stitch connecting a canonical event to a Stitch workflow."""
+    """Registers or updates a Stitch connecting a canonical event to an automated workflow."""
     logger.info(
         "http_register_stitch.received",
         tenant_id=tenant_id,
-        workflow_id=body.workflow_id,
-        workflow_version=body.workflow_version,
+        target_workflow_id=body.target_workflow_id,
         canonical_event_type=body.canonical_event_type,
     )
     use_case = RegisterStitchUseCase(
@@ -249,15 +124,15 @@ async def register_stitch(
     res = await use_case.execute(
         RegisterStitchCommand(
             tenant_id=tenant_id,
+            name=body.name,
+            description=body.description,
+            mapping_spec_id=body.mapping_spec_id,
             stitch_id=body.stitch_id,
-            workflow_id=body.workflow_id,
-            workflow_version=body.workflow_version,
             canonical_event_type=body.canonical_event_type,
-            is_trigger=body.is_trigger,
-            condition_event_key=body.condition_event_key,
+            target_workflow_id=body.target_workflow_id or body.workflow_id or "",
+            workflow_id=body.workflow_id or body.target_workflow_id,
             idempotency_key_field=body.idempotency_key_field,
             concurrency_key_field=body.concurrency_key_field,
-            resource_hint_field=body.resource_hint_field,
             filter_conditions=body.filter_conditions,
             is_active=body.is_active,
         )
@@ -267,7 +142,7 @@ async def register_stitch(
         logger.error(
             "http_register_stitch.failed",
             tenant_id=tenant_id,
-            workflow_id=body.workflow_id,
+            target_workflow_id=body.target_workflow_id,
             error_code=err.code.value,
         )
         return from_ip_error(err)
@@ -276,141 +151,136 @@ async def register_stitch(
         "http_register_stitch.completed",
         tenant_id=tenant_id,
         stitch_id=dto.id,
-        workflow_id=dto.workflow_id,
+        target_workflow_id=dto.target_workflow_id,
     )
-    return _to_stitch_response(dto)
+    return to_stitch_http_response(dto)
 
 
-@router.post(
-    "/dispatch",
-    response_model=TriggerStitchEventHttpResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def dispatch_stitch_event(
+@router.get("/{stitch_id}", response_model=StitchHttpResponse)
+async def get_stitch(
     tenant_id: str,
-    body: TriggerStitchEventHttpRequest,
+    stitch_id: str,
     _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    shard_gateway: Annotated[StitchShardGatewayPort, Depends(get_stitch_shard_gateway)],
-) -> TriggerStitchEventHttpResponse | JSONResponse:
-    """Dispatches a canonical event to matching Stitches on the tenant Data Plane shard."""
-    logger.info(
-        "http_dispatch_stitch_event.received",
-        tenant_id=tenant_id,
-        canonical_event_type=body.canonical_event_type,
-    )
-    use_case = TriggerStitchEventUseCase(shard_gateway=shard_gateway)
-    res = await use_case.execute(
-        TriggerStitchEventCommand(
-            tenant_id=tenant_id,
-            canonical_event_type=body.canonical_event_type,
-            payload=body.payload,
-            event_id=body.event_id,
-            trace_id=body.trace_id,
-            correlation_id=body.correlation_id,
-        )
-    )
+    uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    stitch_catalog: Annotated[StitchCatalogRegistryPort, Depends(get_stitch_catalog_registry)],
+) -> StitchHttpResponse | JSONResponse:
+    """Retrieves a single Stitch by ID from the Control Plane."""
+    logger.info("http_get_stitch.received", tenant_id=tenant_id, stitch_id=stitch_id)
+    use_case = GetStitchUseCase(stitch_catalog=stitch_catalog, uow=uow)
+    res = await use_case.execute(GetStitchQuery(tenant_id=tenant_id, stitch_id=stitch_id))
     if res.is_err:
         err = res.unwrap_err()
         logger.error(
-            "http_dispatch_stitch_event.failed",
+            "http_get_stitch.failed",
             tenant_id=tenant_id,
-            canonical_event_type=body.canonical_event_type,
+            stitch_id=stitch_id,
             error_code=err.code.value,
         )
         return from_ip_error(err)
-
     dto = res.unwrap()
-    logger.info(
-        "http_dispatch_stitch_event.completed",
-        tenant_id=tenant_id,
-        started_count=len(dto.started_run_ids),
-        deduplicated_count=len(dto.deduplicated_run_ids),
-        signalled_count=len(dto.signalled_step_ids),
-    )
-    return TriggerStitchEventHttpResponse(
-        started_run_ids=list(dto.started_run_ids),
-        deduplicated_run_ids=list(dto.deduplicated_run_ids),
-        signalled_step_ids=list(dto.signalled_step_ids),
-    )
+    logger.info("http_get_stitch.completed", tenant_id=tenant_id, stitch_id=stitch_id)
+    return to_stitch_http_response(dto)
 
 
-@router.get("/runs", response_model=list[StitchRunHttpResponse])
-async def list_stitch_runs(
+@router.patch("/{stitch_id}", response_model=StitchHttpResponse)
+async def update_stitch(
     tenant_id: str,
+    stitch_id: str,
+    body: UpdateStitchHttpRequest,
     _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    shard_gateway: Annotated[StitchShardGatewayPort, Depends(get_stitch_shard_gateway)],
-    workflow_id: Annotated[str | None, Query()] = None,
-    status_filter: Annotated[RunStatus | None, Query(alias="status")] = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-) -> list[StitchRunHttpResponse] | JSONResponse:
-    """Lists recent durable Stitch WorkflowRuns on the tenant Data Plane shard."""
-    logger.info(
-        "http_list_stitch_runs.received",
-        tenant_id=tenant_id,
-        workflow_id=workflow_id,
-        status=status_filter.value if status_filter is not None else None,
-        limit=limit,
-    )
-    use_case = ListStitchRunsUseCase(shard_gateway=shard_gateway)
+    uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    stitch_catalog: Annotated[StitchCatalogRegistryPort, Depends(get_stitch_catalog_registry)],
+) -> StitchHttpResponse | JSONResponse:
+    """Updates mutable Stitch properties (name, description, mapping_spec_id, filters, state)."""
+    logger.info("http_update_stitch.received", tenant_id=tenant_id, stitch_id=stitch_id)
+    use_case = UpdateStitchUseCase(uow=uow, stitch_catalog=stitch_catalog)
     res = await use_case.execute(
-        ListStitchRunsQuery(
+        UpdateStitchCommand(
             tenant_id=tenant_id,
-            workflow_id=workflow_id,
-            status=status_filter,
-            limit=limit,
+            stitch_id=stitch_id,
+            name=body.name,
+            description=body.description,
+            mapping_spec_id=body.mapping_spec_id,
+            filter_conditions=body.filter_conditions,
+            is_active=body.is_active,
         )
     )
     if res.is_err:
         err = res.unwrap_err()
         logger.error(
-            "http_list_stitch_runs.failed",
+            "http_update_stitch.failed",
             tenant_id=tenant_id,
+            stitch_id=stitch_id,
             error_code=err.code.value,
         )
         return from_ip_error(err)
-    dtos = res.unwrap()
-    logger.info(
-        "http_list_stitch_runs.completed",
-        tenant_id=tenant_id,
-        count=len(dtos),
-    )
-    return [_to_run_response(d) for d in dtos]
+    dto = res.unwrap()
+    logger.info("http_update_stitch.completed", tenant_id=tenant_id, stitch_id=stitch_id)
+    return to_stitch_http_response(dto)
 
 
-@router.get("/runs/{run_id}", response_model=StitchRunHttpResponse)
-async def get_stitch_run(
+@router.patch("/{stitch_id}/state", response_model=StitchHttpResponse)
+async def toggle_stitch_state(
     tenant_id: str,
-    run_id: str,
+    stitch_id: str,
+    body: ToggleStitchStateHttpRequest,
     _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    shard_gateway: Annotated[StitchShardGatewayPort, Depends(get_stitch_shard_gateway)],
-) -> StitchRunHttpResponse | JSONResponse:
-    """Inspects a durable Stitch WorkflowRun and its StepRun states on the tenant Data Plane shard."""
+    uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    stitch_catalog: Annotated[StitchCatalogRegistryPort, Depends(get_stitch_catalog_registry)],
+) -> StitchHttpResponse | JSONResponse:
+    """Explicitly activates or pauses a Stitch runtime dispatch."""
     logger.info(
-        "http_get_stitch_run.received",
+        "http_toggle_stitch_state.received",
         tenant_id=tenant_id,
-        run_id=run_id,
+        stitch_id=stitch_id,
+        is_active=body.is_active,
     )
-    use_case = GetStitchRunUseCase(shard_gateway=shard_gateway)
+    use_case = ToggleStitchStateUseCase(uow=uow, stitch_catalog=stitch_catalog)
     res = await use_case.execute(
-        GetStitchRunQuery(
-            tenant_id=tenant_id,
-            run_id=run_id,
-        )
+        ToggleStitchStateCommand(tenant_id=tenant_id, stitch_id=stitch_id, is_active=body.is_active)
     )
     if res.is_err:
         err = res.unwrap_err()
         logger.error(
-            "http_get_stitch_run.failed",
+            "http_toggle_stitch_state.failed",
             tenant_id=tenant_id,
-            run_id=run_id,
+            stitch_id=stitch_id,
             error_code=err.code.value,
         )
         return from_ip_error(err)
     dto = res.unwrap()
     logger.info(
-        "http_get_stitch_run.completed",
+        "http_toggle_stitch_state.completed",
         tenant_id=tenant_id,
-        run_id=run_id,
-        status=dto.status,
+        stitch_id=stitch_id,
+        is_active=dto.is_active,
     )
-    return _to_run_response(dto)
+    return to_stitch_http_response(dto)
+
+
+@router.delete("/{stitch_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_stitch(
+    tenant_id: str,
+    stitch_id: str,
+    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
+    uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    stitch_catalog: Annotated[StitchCatalogRegistryPort, Depends(get_stitch_catalog_registry)],
+) -> Response:
+    """Permanently deletes a Stitch and unregisters it from the runtime dispatch catalog."""
+    logger.info("http_delete_stitch.received", tenant_id=tenant_id, stitch_id=stitch_id)
+    use_case = DeleteStitchUseCase(uow=uow, stitch_catalog=stitch_catalog)
+    res = await use_case.execute(DeleteStitchCommand(tenant_id=tenant_id, stitch_id=stitch_id))
+    if res.is_err:
+        err = res.unwrap_err()
+        logger.error(
+            "http_delete_stitch.failed",
+            tenant_id=tenant_id,
+            stitch_id=stitch_id,
+            error_code=err.code.value,
+        )
+        return from_ip_error(err)
+    logger.info("http_delete_stitch.completed", tenant_id=tenant_id, stitch_id=stitch_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+__all__ = ["router", "to_stitch_http_response"]

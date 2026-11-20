@@ -7,6 +7,7 @@ import type {
   StitchRun,
   TriggerStitchEventInput,
   TriggerStitchEventResult,
+  UpdateStitchInput,
 } from '../../../domain/stitch';
 import type { StitchRepositoryPort } from '../../../ports/stitch-repository.port';
 import {
@@ -16,6 +17,7 @@ import {
   mapStitchRunFromWire,
   mapTriggerStitchEventFromWire,
   mapTriggerStitchEventToWire,
+  mapUpdateStitchToWire,
 } from '../mappers/stitch.mapper';
 import { parseAndMapResult } from '../parse-wire';
 import {
@@ -90,6 +92,24 @@ export class HttpStitchRepository implements StitchRepositoryPort {
     );
   }
 
+  public async getStitch(
+    tenantId: string,
+    stitchId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<Stitch, ApiProblem>> {
+    const raw = await this.httpClient.get<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/stitches/${encodeURIComponent(stitchId)}`,
+      { signal },
+    );
+    return parseAndMapResult(
+      raw,
+      StitchWireSchema,
+      mapStitchFromWire,
+      `GET /ip/stitches/${stitchId}`,
+      this.logger,
+    );
+  }
+
   public async registerStitch(
     tenantId: string,
     input: RegisterStitchInput,
@@ -105,6 +125,52 @@ export class HttpStitchRepository implements StitchRepositoryPort {
       'POST /ip/stitches',
       this.logger,
     );
+  }
+
+  public async updateStitch(
+    tenantId: string,
+    stitchId: string,
+    input: UpdateStitchInput,
+  ): Promise<Result<Stitch, ApiProblem>> {
+    const raw = await this.httpClient.patch<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/stitches/${encodeURIComponent(stitchId)}`,
+      mapUpdateStitchToWire(input),
+    );
+    return parseAndMapResult(
+      raw,
+      StitchWireSchema,
+      mapStitchFromWire,
+      `PATCH /ip/stitches/${stitchId}`,
+      this.logger,
+    );
+  }
+
+  public async toggleStitchState(
+    tenantId: string,
+    stitchId: string,
+    isActive: boolean,
+  ): Promise<Result<Stitch, ApiProblem>> {
+    const raw = await this.httpClient.patch<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/stitches/${encodeURIComponent(stitchId)}/state`,
+      { is_active: isActive },
+    );
+    return parseAndMapResult(
+      raw,
+      StitchWireSchema,
+      mapStitchFromWire,
+      `PATCH /ip/stitches/${stitchId}/state`,
+      this.logger,
+    );
+  }
+
+  public async deleteStitch(tenantId: string, stitchId: string): Promise<Result<void, ApiProblem>> {
+    const raw = await this.httpClient.delete<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/stitches/${encodeURIComponent(stitchId)}`,
+    );
+    if (!raw.ok) {
+      return raw;
+    }
+    return { ok: true, value: undefined };
   }
 
   public async dispatchEvent(

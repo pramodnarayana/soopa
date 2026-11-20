@@ -29,6 +29,7 @@ class StreamDefinition:
     sync_mode: SyncMode = SyncMode.INCREMENTAL
     deletion_marker: DeletionMarker | None = None
     extractor_id: str = "declarative"
+    stream_type: str = "DATA"
 
 
 @dataclass(frozen=True)

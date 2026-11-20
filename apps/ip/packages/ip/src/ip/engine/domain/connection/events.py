@@ -108,3 +108,36 @@ class ConnectionErrorRecordedEvent(DomainEvent):
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
+
+
+@dataclass(frozen=True)
+class ConnectionPolicySavedEvent(DomainEvent):
+    policy_id: str
+    tenant_id: str
+    connection_id: str
+    max_query_window_days: int
+    max_entities_per_call: int
+    max_concurrency: int
+    rate_limit_rpm: int
+    is_enabled: bool
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.CONNECTION_POLICY_SAVED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class ConnectionPolicyDeletedEvent(DomainEvent):
+    policy_id: str
+    tenant_id: str
+    connection_id: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.CONNECTION_POLICY_DELETED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id

@@ -2,8 +2,8 @@ from typing import Protocol
 
 
 class OrganizationProviderPort(Protocol):
-    async def create_organization(self, tenant_id: str, name: str) -> tuple[str, bool]:
-        """Creates an organization and returns (org_id, grant_succeeded)"""
+    async def create_organization(self, tenant_id: str, name: str) -> str:
+        """Creates an organization in the IdP and returns its IdP organization ID."""
         ...
 
     async def delete_organization(self, org_id: str) -> None:

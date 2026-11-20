@@ -71,7 +71,7 @@ class ProcessInboundAs2MessageUseCase:
         dp_factory: DataPlaneUnitOfWorkFactoryPort,
         secret_store: SecretStorePort,
         crypto_service: CryptoServicePort,
-        publisher: OutboxPublisherPort,
+        publisher: OutboxPublisherPort | None = None,
     ):
         self.control_plane_uow = control_plane_uow
         self.dp_factory = dp_factory
@@ -541,17 +541,7 @@ class ProcessInboundAs2MessageUseCase:
                 idempotency_key=edi_message_id,
             )
 
-            envelopes = await dp_uow.edi_messages.save(edi_message_aggregate)
-
+            await dp_uow.edi_messages.save(edi_message_aggregate)
             await dp_uow.commit()
-
-            # Synchronous Dispatch to SQS (Best Effort Tail-Polling)
-            try:
-                for envelope in envelopes:
-                    await self.publisher.publish(envelope)
-                    await dp_uow.outbox.mark_completed(envelope.id)
-                await dp_uow.commit()
-            except Exception as e:
-                logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
 
             return edi_message_id

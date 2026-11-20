@@ -2,6 +2,7 @@ export { HttpCatalogRepository } from './repositories/http-catalog.repository';
 export { HttpConnectionRepository } from './repositories/http-connection.repository';
 export { HttpConnectionEntityRepository } from './repositories/http-connection-entity.repository';
 export { HttpIntervalRepository } from './repositories/http-interval.repository';
+export { HttpMappingSpecRepository } from './repositories/http-mapping-spec.repository';
 export { HttpRecordRepository } from './repositories/http-record.repository';
 export { HttpSimulatorRepository } from './repositories/http-simulator.repository';
 export { HttpStitchRepository } from './repositories/http-stitch.repository';

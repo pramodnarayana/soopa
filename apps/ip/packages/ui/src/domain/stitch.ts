@@ -21,6 +21,9 @@ export interface StitchDefinition {
 
 export interface Stitch {
   readonly id: string;
+  readonly name?: string;
+  readonly description?: string;
+  readonly mappingSpecId?: string | null;
   readonly tenantId: string;
   readonly workflowId: string;
   readonly workflowVersion: number;
@@ -74,6 +77,9 @@ export interface TriggerStitchEventResult {
 
 export interface RegisterStitchInput {
   readonly stitchId?: string | null;
+  readonly name?: string;
+  readonly description?: string;
+  readonly mappingSpecId?: string | null;
   readonly workflowId: string;
   readonly workflowVersion: number;
   readonly canonicalEventType: string;
@@ -83,6 +89,14 @@ export interface RegisterStitchInput {
   readonly concurrencyKeyField?: string | null;
   readonly resourceHintField?: string | null;
   readonly isActive: boolean;
+}
+
+export interface UpdateStitchInput {
+  readonly name?: string;
+  readonly description?: string;
+  readonly mappingSpecId?: string | null;
+  readonly filterConditions?: Record<string, unknown>;
+  readonly isActive?: boolean;
 }
 
 export interface TriggerStitchEventInput {

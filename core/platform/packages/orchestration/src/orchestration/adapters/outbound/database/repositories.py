@@ -162,6 +162,35 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
             self._to_domain_model(rec, steps_by_run.get(rec.id, [])) for rec in run_records
         )
 
+    async def list_by_parent_run_id(
+        self, tenant_id: str, parent_run_id: str
+    ) -> Sequence[WorkflowRun]:
+        run_stmt = (
+            select(WorkflowRunModel)
+            .where(
+                WorkflowRunModel.tenant_id == tenant_id,
+                WorkflowRunModel.parent_run_id == parent_run_id,
+            )
+            .order_by(WorkflowRunModel.created_at.asc())
+        )
+        run_records = (await self._session.execute(run_stmt)).scalars().all()
+        if not run_records:
+            return ()
+
+        run_ids = [rec.id for rec in run_records]
+        step_stmt = select(WorkflowStepRunModel).where(
+            WorkflowStepRunModel.tenant_id == tenant_id,
+            WorkflowStepRunModel.run_id.in_(run_ids),
+        )
+        all_step_records = (await self._session.execute(step_stmt)).scalars().all()
+        steps_by_run: dict[str, list[WorkflowStepRunModel]] = {}
+        for step_rec in all_step_records:
+            steps_by_run.setdefault(step_rec.run_id, []).append(step_rec)
+
+        return tuple(
+            self._to_domain_model(rec, steps_by_run.get(rec.id, [])) for rec in run_records
+        )
+
     async def save(self, run: WorkflowRun) -> None:
         existing_stmt = select(WorkflowRunModel).where(
             WorkflowRunModel.tenant_id == run.tenant_id,
@@ -277,6 +306,9 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
             parent_run_id=run.parent_run_id,
             trace_id=run.trace_id,
             correlation_id=run.correlation_id,
+            parent_trace_id=run.parent_trace_id,
+            original_trace_id=run.original_trace_id,
+            replay_count=run.replay_count,
             failure_code=run.failure_code,
             failure_detail=run.failure_detail,
             created_at=run.created_at,
@@ -315,6 +347,9 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
             parent_run_id=record.parent_run_id,
             trace_id=record.trace_id,
             correlation_id=record.correlation_id,
+            parent_trace_id=record.parent_trace_id,
+            original_trace_id=record.original_trace_id,
+            replay_count=record.replay_count,
             failure_code=record.failure_code,
             failure_detail=record.failure_detail,
             created_at=record.created_at,

@@ -36,6 +36,8 @@ dependencies = [
     "fastapi==0.136.0",
     "alembic>=1.13.0",
     "croniter>=6.2.4",
+    "aiokafka>=0.12.0",
+    "confluent-kafka>=2.4.0",
 ]
 
 [tool.uv.sources]

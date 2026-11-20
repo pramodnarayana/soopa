@@ -48,5 +48,23 @@ class StitchRepositoryPort(Protocol):
         """Lists all active Stitches matching a tenant (or '*') and canonical_event_type."""
         ...
 
+    async def list_by_mapping_spec_id(
+        self,
+        *,
+        tenant_id: str,
+        mapping_spec_id: str,
+    ) -> list[Stitch]:
+        """Lists all Stitches referencing a specific mapping_spec_id."""
+        ...
+
+    async def delete(
+        self,
+        *,
+        tenant_id: str,
+        stitch_id: str,
+    ) -> None:
+        """Deletes a Stitch record for a tenant."""
+        ...
+
 
 __all__ = ["StitchRepositoryPort"]

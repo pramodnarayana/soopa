@@ -458,6 +458,14 @@ class DeliverOutboundRecordUseCase:
         resolved_creds: ResolvedConnectionCredentialsDTO,
         idempotency_key: str,
     ) -> tuple[WriteResultDTO, bool]:
+        merged_headers = dict(command.headers)
+        if command.trace_id:
+            merged_headers.setdefault("x-trace-id", command.trace_id)
+            merged_headers.setdefault("trace_id", command.trace_id)
+        if command.correlation_id:
+            merged_headers.setdefault("x-correlation-id", command.correlation_id)
+            merged_headers.setdefault("correlation_id", command.correlation_id)
+
         write_cmd = WriteRecordCommand(
             stream_name=command.stream_name,
             operation=command.operation,
@@ -465,9 +473,10 @@ class DeliverOutboundRecordUseCase:
             record_id=command.record_id,
             idempotency_key=idempotency_key,
             idempotency_header_name=command.idempotency_header_name,
-            headers=dict(command.headers),
+            headers=merged_headers,
             correlation_id=command.correlation_id,
             attempt_number=command.attempt_number,
+            trace_id=command.trace_id,
         )
         write_result = await connector.write_record(
             stream_name=command.stream_name,

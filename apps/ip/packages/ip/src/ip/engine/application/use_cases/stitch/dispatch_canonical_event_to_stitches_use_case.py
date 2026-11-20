@@ -1,4 +1,4 @@
-"""Use case bridging L3 Canonical Events to Stitch WorkflowRun triggers and WAIT_FOR_EVENT signals."""
+"""Use case bridging L3 Canonical Events to Stitch WorkflowRun triggers."""
 
 from __future__ import annotations
 
@@ -6,21 +6,18 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import structlog
-from orchestration.application.use_cases import (
-    ResolveMatchConditionsCommand,
-    ResolveMatchConditionsUseCase,
-    StartRunCommand,
-    StartRunUseCase,
-)
-from orchestration.domain.constants import ConditionKind
-from orchestration.domain.exceptions import Result, WorkflowError
 from seedwork.domain.types import JsonDict
 
+from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
 )
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.workflow_orchestrator_port import (
+    StartWorkflowRunCommand,
+    WorkflowOrchestratorPort,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -35,35 +32,32 @@ class DispatchCanonicalEventToStitchesCommand:
     payload: JsonDict
     trace_id: str
     correlation_id: str | None = None
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(frozen=True, kw_only=True)
 class DispatchCanonicalEventResultDTO:
-    """Summary of Stitch runs started and waiting steps signalled by a canonical event."""
+    """Summary of Stitch runs started by a canonical event."""
 
     started_run_ids: tuple[str, ...]
     deduplicated_run_ids: tuple[str, ...]
-    signalled_step_ids: tuple[str, ...]
+    signalled_step_ids: tuple[str, ...] = ()
 
 
 class DispatchCanonicalEventToStitchesUseCase:
-    """Routes an incoming L3 Canonical Event to matching Stitches:
-    - `is_trigger=True`: starts (or deduplicates) a durable `WorkflowRun` via `StartRunUseCase`.
-    - `is_trigger=False`: evaluates `ConditionKind.CANONICAL_EVENT` matches via `ResolveMatchConditionsUseCase`.
-    """
+    """Routes an incoming L3 Canonical Event to matching Stitches and starts durable WorkflowRuns."""
 
     def __init__(
         self,
         *,
         stitch_catalog: StitchCatalogRegistryPort,
-        start_run_use_case: StartRunUseCase,
-        resolve_matches_use_case: ResolveMatchConditionsUseCase,
+        orchestrator: WorkflowOrchestratorPort,
         control_plane_uow: IpControlPlaneUnitOfWorkPort | None = None,
     ) -> None:
         self._stitch_catalog = stitch_catalog
-        self._start_run_use_case = start_run_use_case
-        self._resolve_matches_use_case = resolve_matches_use_case
+        self._orchestrator = orchestrator
         self._control_plane_uow = control_plane_uow
 
     async def _resolve_stitches_for_event(
@@ -95,14 +89,13 @@ class DispatchCanonicalEventToStitchesUseCase:
 
     async def execute(
         self, command: DispatchCanonicalEventToStitchesCommand
-    ) -> Result[DispatchCanonicalEventResultDTO, WorkflowError]:
+    ) -> Result[DispatchCanonicalEventResultDTO, IpError]:
         stitches = await self._resolve_stitches_for_event(
             tenant_id=command.tenant_id,
             canonical_event_type=command.canonical_event_type,
         )
         started_run_ids: list[str] = []
         deduplicated_run_ids: list[str] = []
-        signalled_step_ids: list[str] = []
 
         for stitch in stitches:
             if not stitch.is_active:
@@ -112,52 +105,43 @@ class DispatchCanonicalEventToStitchesUseCase:
                     "stitch_event_filtered_out",
                     tenant_id=command.tenant_id,
                     stitch_id=stitch.id,
-                    workflow_id=stitch.workflow_id,
+                    target_workflow_id=stitch.target_workflow_id,
                     canonical_event_type=command.canonical_event_type,
                 )
                 continue
 
-            if stitch.is_trigger:
-                idempotency_key = stitch.extract_idempotency_key(command.payload, command.event_id)
-                concurrency_key = stitch.extract_concurrency_key(command.payload)
-                start_res = await self._start_run_use_case.execute(
-                    StartRunCommand(
-                        tenant_id=command.tenant_id,
-                        workflow_id=stitch.workflow_id,
-                        workflow_version=stitch.workflow_version,
-                        idempotency_key=idempotency_key,
-                        input_payload=command.payload,
-                        trace_id=command.trace_id,
-                        correlation_id=command.correlation_id,
-                        concurrency_key=concurrency_key,
-                        deduplicate_if_exists=True,
-                        now=command.now,
-                    )
+            idempotency_key = (
+                stitch.extract_idempotency_key(command.payload, command.event_id)
+                if hasattr(stitch, "extract_idempotency_key")
+                else f"{stitch.target_workflow_id}:{command.event_id}"
+            )
+            concurrency_key = (
+                stitch.extract_concurrency_key(command.payload)
+                if hasattr(stitch, "extract_concurrency_key")
+                else None
+            ) or command.correlation_id
+            start_res = await self._orchestrator.start_run(
+                StartWorkflowRunCommand(
+                    tenant_id=command.tenant_id,
+                    workflow_id=stitch.target_workflow_id,
+                    idempotency_key=idempotency_key,
+                    concurrency_key=concurrency_key,
+                    input_payload=command.payload,
+                    trace_id=command.trace_id,
+                    correlation_id=command.correlation_id,
+                    parent_trace_id=command.parent_trace_id,
+                    original_trace_id=command.original_trace_id,
+                    deduplicate_if_exists=True,
+                    now=command.now,
                 )
-                if start_res.is_err:
-                    return Result.err(start_res.unwrap_err())
-                dto = start_res.unwrap()
-                if dto.was_deduplicated:
-                    deduplicated_run_ids.append(dto.run_id)
-                else:
-                    started_run_ids.append(dto.run_id)
+            )
+            if start_res.is_err:
+                return Result.err(start_res.unwrap_err())
+            dto = start_res.unwrap()
+            if dto.was_deduplicated:
+                deduplicated_run_ids.append(dto.run_id)
             else:
-                event_key = stitch.condition_event_key or command.canonical_event_type
-                resource_hint = stitch.extract_resource_hint(command.payload)
-                sig_res = await self._resolve_matches_use_case.execute(
-                    ResolveMatchConditionsCommand(
-                        tenant_id=command.tenant_id,
-                        workflow_id=stitch.workflow_id,
-                        condition_kind=ConditionKind.CANONICAL_EVENT,
-                        event_key=event_key,
-                        resource_hint=resource_hint,
-                        payload=command.payload,
-                        now=command.now,
-                    )
-                )
-                if sig_res.is_err:
-                    return Result.err(sig_res.unwrap_err())
-                signalled_step_ids.extend(sig_res.unwrap().queued_step_ids)
+                started_run_ids.append(dto.run_id)
 
         logger.info(
             "canonical_event_dispatched_to_stitches",
@@ -165,14 +149,13 @@ class DispatchCanonicalEventToStitchesUseCase:
             canonical_event_type=command.canonical_event_type,
             started_count=len(started_run_ids),
             deduplicated_count=len(deduplicated_run_ids),
-            signalled_count=len(signalled_step_ids),
         )
 
         return Result.ok(
             DispatchCanonicalEventResultDTO(
                 started_run_ids=tuple(started_run_ids),
                 deduplicated_run_ids=tuple(deduplicated_run_ids),
-                signalled_step_ids=tuple(signalled_step_ids),
+                signalled_step_ids=(),
             )
         )
 

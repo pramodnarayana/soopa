@@ -74,12 +74,15 @@ class FakeIdentitySyncUnitOfWork(IdentitySyncUnitOfWorkPort):
 class FakeOrganizationProvider(OrganizationProviderPort):
     def __init__(self) -> None:
         self.created_orgs: dict[str, str] = {}
-        self.grant_succeeded = True
+        self.granted_projects: list[tuple[str, str]] = []
+        self.fail_create_org = False
 
-    async def create_organization(self, tenant_id: str, name: str) -> tuple[str, bool]:
+    async def create_organization(self, tenant_id: str, name: str) -> str:
+        if self.fail_create_org:
+            raise IdentityProviderPortError("Failed to create organization in IdP")
         org_id = f"idp_org_{tenant_id}"
         self.created_orgs[tenant_id] = name
-        return org_id, self.grant_succeeded
+        return org_id
 
     async def update_organization_name(self, org_id: str, name: str) -> None:
         pass
@@ -91,7 +94,7 @@ class FakeOrganizationProvider(OrganizationProviderPort):
         pass
 
     async def grant_project_to_organization(self, org_id: str, project_id: str) -> None:
-        pass
+        self.granted_projects.append((org_id, project_id))
 
     async def revoke_project_from_organization(self, org_id: str, project_id: str) -> None:
         pass
@@ -121,13 +124,29 @@ class FakeUserIdentityProvider(UserIdentityProviderPort):
         self.user_status[user_id] = "active"
         return user_id, True
 
-    async def assign_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
+    async def get_user_by_email(self, org_id: str, email: str) -> str | None:
+        for u_id, data in self.users.items():
+            if data.get("email") == email:
+                return u_id
+        return None
+
+    async def assign_tenant_role(
+        self, user_id: str, org_id: str, role: str, project_id: str | None = None
+    ) -> None:
         if self.fail_role_assignment:
             raise RuntimeError("role assignment failed")
         self.user_roles[user_id] = role
 
-    async def update_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
+    async def update_tenant_role(
+        self, user_id: str, org_id: str, role: str, project_id: str | None = None
+    ) -> None:
         self.user_roles[user_id] = role
+
+    async def remove_tenant_role(
+        self, user_id: str, org_id: str, project_id: str | None = None
+    ) -> None:
+        if user_id in self.user_roles:
+            del self.user_roles[user_id]
 
     async def update_user_profile(
         self,
@@ -192,13 +211,16 @@ def uow_factory(test_data):
 
 async def test_handle_tenant_provisioned(fakes, uow_factory, test_data) -> None:
     org_idp, user_idp = fakes
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
+    service = IdentitySyncService(
+        org_idp, user_idp, uow_factory, control_plane_project_id="proj_cp_1"
+    )
 
     unprovisioned_id = test_data["unprovisioned_tenant_id"]
     await service.handle_tenant_provisioned(unprovisioned_id)
 
     assert org_idp.created_orgs[unprovisioned_id] == "Pending Org"
     assert test_data["tenants"][unprovisioned_id].idp_tenant_id == f"idp_org_{unprovisioned_id}"
+    assert (f"idp_org_{unprovisioned_id}", "proj_cp_1") in org_idp.granted_projects
 
 
 async def test_handle_tenant_provisioned_idempotent_when_already_synced(
@@ -212,15 +234,15 @@ async def test_handle_tenant_provisioned_idempotent_when_already_synced(
     assert org_idp.created_orgs == {}
 
 
-async def test_handle_tenant_provisioned_raises_when_project_grant_fails(
+async def test_handle_tenant_provisioned_raises_when_org_creation_fails(
     fakes, uow_factory, test_data
 ) -> None:
     org_idp, user_idp = fakes
-    org_idp.grant_succeeded = False
+    org_idp.fail_create_org = True
     service = IdentitySyncService(org_idp, user_idp, uow_factory)
 
     unprovisioned_id = test_data["unprovisioned_tenant_id"]
-    with pytest.raises(IdentityProviderPortError, match="project grant could not be assigned"):
+    with pytest.raises(IdentityProviderPortError, match="Failed to create organization in IdP"):
         await service.handle_tenant_provisioned(unprovisioned_id)
 
     assert test_data["tenants"][unprovisioned_id].idp_tenant_id is None

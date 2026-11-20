@@ -2,6 +2,8 @@
 
 from enum import StrEnum
 
+from ip.engine.domain.connection.enums import WebhookModality
+
 
 class VerificationStrategy(StrEnum):
     """Supported cryptographic and perimeter authentication mechanisms for incoming webhooks."""
@@ -28,4 +30,5 @@ class PayloadSemantic(StrEnum):
 __all__ = [
     "PayloadSemantic",
     "VerificationStrategy",
+    "WebhookModality",
 ]

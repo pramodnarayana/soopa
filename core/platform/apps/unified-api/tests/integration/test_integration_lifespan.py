@@ -132,8 +132,7 @@ async def test_purge_non_platform_tenants_and_self_healing_platform_seed_preserv
         config=PlatformSeedConfig(
             platform_org_id=colliding_org_id,
             platform_admin_id="usr_live_zitadel_admin_999",
-            edi_shard_dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_test",
-            edi_project_id="proj_edi_live_999",
+            platform_admin_email="admin@flowwolf.io",
         ),
     )
 

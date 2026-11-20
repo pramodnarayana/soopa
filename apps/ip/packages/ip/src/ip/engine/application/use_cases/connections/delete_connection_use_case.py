@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import structlog
 
 from ip.engine.application.responses import ConnectionDTO, ConnectionOperationResultDTO
+from ip.engine.domain.connection.enums import EngineConnectorId
 from ip.engine.domain.exceptions import ConnectionNotFoundError
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
@@ -42,6 +43,12 @@ class DeleteConnectionUseCase:
                 return ConnectionOperationResultDTO.from_error(not_found_err)
 
             connection.mark_deleted()
+            if connection.app_id == EngineConnectorId.WEBHOOK.value:
+                endpoints = await self._uow.webhook_endpoints.list_by_tenant(command.tenant_id)
+                for ep in endpoints:
+                    if ep.bound_connection_id == connection.id:
+                        ep.deactivate()
+                        await self._uow.webhook_endpoints.save(ep)
             await self._uow.connections.delete(connection)
             await self._uow.commit()
 

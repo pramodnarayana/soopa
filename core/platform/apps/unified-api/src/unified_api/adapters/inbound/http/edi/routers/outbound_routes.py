@@ -11,13 +11,11 @@ from edi.domain.routing.enums import EdiDirection
 from edi.domain.routing.outbound_route import OutboundRoute
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, status
-from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.types import UNSET
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
 from unified_api.adapters.inbound.http.dependencies.edi.headers import get_idempotency_key
-from unified_api.adapters.inbound.http.dependencies.edi.services import get_outbox_publisher
 from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     CreateOutboundRouteRequest,
     OutboundRouteItem,
@@ -64,7 +62,6 @@ async def list_outbound_routes(
     limit: int = 100,
     offset: int = 0,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> list[OutboundRouteItem]:
     """List all Outbound Routes for the current Tenant."""
@@ -78,7 +75,6 @@ async def list_outbound_routes(
 async def create_outbound_route(
     request: CreateOutboundRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> RouteResponse:
@@ -114,7 +110,6 @@ async def update_outbound_route(
     route_id: str,
     request: UpdateRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
@@ -142,7 +137,6 @@ async def update_outbound_route(
 async def delete_outbound_route(
     route_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:

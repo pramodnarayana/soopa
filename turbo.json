@@ -15,8 +15,6 @@
     "SQS_*",
     "SNS_*",
     "S3_*",
-    "IDENTITY_*",
-    "ZITADEL_*",
     "SECRETS_*",
     "STORAGE_*",
     "AS2_*",

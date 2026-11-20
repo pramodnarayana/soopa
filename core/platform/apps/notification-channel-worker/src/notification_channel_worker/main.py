@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import inspect
 from collections.abc import Awaitable
 from typing import cast
@@ -49,8 +48,10 @@ class NotificationChannelWorkerModule(LaunchableWorker):
     async def stop(self) -> None:
         logger.info("notification_channel_worker_shutting_down")
         for consumer in self.consumers:
-            with contextlib.suppress(Exception):
+            try:
                 await consumer.stop()
+            except Exception:
+                logger.exception("notification_channel_consumer_stop_failed")
         await cast(Awaitable[None], self.container.shutdown_resources())
 
 

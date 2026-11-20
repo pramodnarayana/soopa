@@ -89,6 +89,7 @@ def test_main_seed_ip_domain_and_isolated_seed_runner() -> None:
     edi_scripts: list[str] = []
     run_domain_seeds("edi", script_executor=edi_scripts.append)
     assert edi_scripts == [
+        "apps/edi/scripts/seed.py",
         "apps/edi/scripts/seed_jobs.py",
         "apps/edi/apps/edi-as2-server/scripts/seed.py",
     ]

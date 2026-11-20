@@ -91,6 +91,17 @@ class InMemoryWorkflowRunRepository(WorkflowRunRepositoryPort):
         matching.sort(key=lambda r: r.created_at, reverse=True)
         return tuple(matching[:limit])
 
+    async def list_by_parent_run_id(
+        self, tenant_id: str, parent_run_id: str
+    ) -> Sequence[WorkflowRun]:
+        matching = [
+            deepcopy(run)
+            for (tid, _rid), run in self.runs.items()
+            if tid == tenant_id and run.parent_run_id == parent_run_id
+        ]
+        matching.sort(key=lambda r: r.created_at)
+        return tuple(matching)
+
     async def save(self, run: WorkflowRun) -> None:
         for event in run.domain_events:
             self.drained_events.append(serialize_domain_event(event))

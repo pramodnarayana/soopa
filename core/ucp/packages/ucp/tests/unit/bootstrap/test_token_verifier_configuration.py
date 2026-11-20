@@ -34,26 +34,20 @@ def clear_lru_cache():
 def _make_settings(issuer: str, api_url: str):
     """
     Build a minimal settings stub that satisfies all attributes accessed by
-    get_token_verifier(). We must explicitly include the @property delegates
-    (zitadel_ucp_project_id, zitadel_platform_org_id) that AppSettings exposes,
-    because SimpleNamespace does not automatically derive them from `identity.*`.
+    get_token_verifier().
     """
     identity = SimpleNamespace(
         issuer=issuer,
-        ucp_project_id="test-project-id",
         oauth_client_id="test-client-id",
         platform_org_id="test-org-id",
         tenant_role_group="TenantAdmin",
         allow_private_ips=False,
+        accepted_audiences=("test-project-id", "test-client-id"),
     )
     return SimpleNamespace(
-        # Raw fields
-        zitadel_issuer=issuer,
-        zitadel_api_url_value=api_url,
+        idp_api_url=api_url,
         identity=identity,
-        # @property delegates that AppSettings exposes
-        zitadel_ucp_project_id="test-project-id",
-        zitadel_platform_org_id="test-org-id",
+        control_plane_project_id="test-project-id",
     )
 
 

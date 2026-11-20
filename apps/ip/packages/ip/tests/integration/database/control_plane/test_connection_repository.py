@@ -33,7 +33,7 @@ async def test_connection_repository_persists_aggregate_with_outbox_event(
         tenant_id=seeded_ip_tenant,
         app_id="acme_source",
         name="Primary Partner Source",
-        auth_type=AuthType.API_KEY,
+        auth_type=AuthType.OAUTH2,
         public_config={"endpoint_url": "https://api.partner.example.com"},
         encrypted_credentials=b"kid:k1:encrypted_payload",
         endpoint_for_fingerprint="https://api.partner.example.com",
@@ -114,7 +114,7 @@ async def test_connection_partial_unique_index_allows_replacing_deactivated_fing
     rep_res = await repo.save(conn_replacement)
     assert rep_res.is_ok is True
 
-    active_list = await repo.list_by_tenant(seeded_ip_tenant, status=ConnectionStatus.PENDING_AUTH)
+    active_list = await repo.list_by_tenant(seeded_ip_tenant, status=ConnectionStatus.ACTIVE)
     assert len(active_list) == 1
     assert active_list[0].id == conn_replacement.id
 

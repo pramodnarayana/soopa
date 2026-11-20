@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 
 from ip.engine.adapters.outbound.database.data_plane.mappers import trace_event_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import (
@@ -19,15 +22,22 @@ from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.enums import PipelineStage
 from ip.engine.domain.intervals.enums import BatchManifestStatus
 from ip.engine.domain.trace import IpTraceStatus, map_outbound_status_to_trace_status
+from orchestration.adapters.outbound.database.models import WorkflowRunModel
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonDict
 from seedwork.events import EventProcessingLane
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
-from sqlalchemy import case
+from sqlalchemy import SQLColumnExpression, case, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from strace.domain import TraceEvent, TraceStageAttemptRow
-from strace.orm import TraceEventSpec, TraceStageSpec, TraceStageSpecPort
+from sqlalchemy.orm import InstrumentedAttribute
+from strace.domain import TraceEvent, TraceStageAttemptRow, TraceStatus
+from strace.orm import (
+    TenantTraceLineageOrmModel,
+    TraceEventSpec,
+    TraceStageSpec,
+    TraceStageSpecPort,
+)
 
 
 def _ip_trace_event_to_orm(event: TraceEvent) -> IpTraceEventModel:
@@ -97,6 +107,152 @@ def map_manifest_status_to_trace_status(status: BatchManifestStatus | str) -> Ip
     if resolved is BatchManifestStatus.QUARANTINED:
         return IpTraceStatus.DEAD_LETTERED
     return IpTraceStatus.INGESTED
+
+
+def map_workflow_status_to_trace_status(status: str) -> IpTraceStatus:
+    """Maps a WorkflowRun status token to its corresponding IpTraceStatus."""
+    if status in ("QUEUED", "RUNNING", "WAITING"):
+        return IpTraceStatus.PENDING
+    if status == "SUCCEEDED":
+        return IpTraceStatus.PROCESSED
+    if status in ("FAILED", "CANCELLED"):
+        return IpTraceStatus.FAILED
+    return IpTraceStatus.UNKNOWN
+
+
+@dataclass(frozen=True, kw_only=True)
+class WorkflowTraceStageSpec(TraceStageSpecPort):
+    """Custom TraceStageSpecPort implementation for durable workflow runs."""
+
+    model_cls: type[WorkflowRunModel]
+    timestamp_col: InstrumentedAttribute[datetime]
+    to_attempt_row: Callable[[WorkflowRunModel], TraceStageAttemptRow]
+    correlation_cols: tuple[InstrumentedAttribute[str | None], ...] = ()
+    status_col: SQLColumnExpression[str] | None = None
+    static_status: TraceStatus | str | None = None
+
+    def get_model_cls(self) -> type[TenantTraceLineageOrmModel]:
+        return cast(type[TenantTraceLineageOrmModel], self.model_cls)
+
+    async def fetch_lineage_attempts(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        root_trace_id: str,
+    ) -> list[TraceStageAttemptRow]:
+        stmt = (
+            select(self.model_cls)
+            .where(
+                self.model_cls.tenant_id == tenant_id,
+                or_(
+                    self.model_cls.trace_id == root_trace_id,
+                    self.model_cls.original_trace_id == root_trace_id,
+                ),
+            )
+            .order_by(self.timestamp_col.asc())
+        )
+        res = await session.execute(stmt)
+        return [self.to_attempt_row(row) for row in res.scalars().all()]
+
+    async def fetch_attempts_for_trace_ids(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        trace_ids: Sequence[str],
+    ) -> list[TraceStageAttemptRow]:
+        if not trace_ids:
+            return []
+        stmt = (
+            select(self.model_cls)
+            .where(
+                self.model_cls.tenant_id == tenant_id,
+                self.model_cls.trace_id.in_(trace_ids),
+            )
+            .order_by(self.timestamp_col.asc())
+        )
+        res = await session.execute(stmt)
+        return [self.to_attempt_row(row) for row in res.scalars().all()]
+
+    async def find_correlation_attempts(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        correlation_id: str,
+        limit: int,
+    ) -> list[TraceStageAttemptRow]:
+        if not self.correlation_cols:
+            return []
+        corr_predicate = or_(*(col == correlation_id for col in self.correlation_cols))
+        stmt = (
+            select(self.model_cls)
+            .where(
+                self.model_cls.tenant_id == tenant_id,
+                corr_predicate,
+            )
+            .order_by(self.timestamp_col.desc())
+            .limit(limit)
+        )
+        res = await session.execute(stmt)
+        return [self.to_attempt_row(row) for row in res.scalars().all()]
+
+    async def list_recent_attempts(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        limit: int,
+        status: TraceStatus | str | None = None,
+        min_replay_count: int | None = None,
+        downstream_models: Sequence[type[TenantTraceLineageOrmModel]] = (),
+    ) -> list[TraceStageAttemptRow]:
+        stmt = select(self.model_cls).where(self.model_cls.tenant_id == tenant_id)
+        if min_replay_count is not None:
+            stmt = stmt.where(self.model_cls.replay_count >= min_replay_count)
+        if status is not None and self.status_col is not None:
+            status_val = status.value if hasattr(status, "value") else str(status)
+            stmt = stmt.where(self.status_col == status_val)
+        stmt = stmt.order_by(self.timestamp_col.desc()).limit(limit)
+        res = await session.execute(stmt)
+        return [self.to_attempt_row(row) for row in res.scalars().all()]
+
+
+def build_workflow_trace_stage_spec(
+    workflow_run_model_cls: type[WorkflowRunModel],
+) -> TraceStageSpecPort:
+    """Builds a declarative TraceStageSpecPort for durable workflow runs."""
+    status_col = case(
+        (
+            workflow_run_model_cls.status.in_(("QUEUED", "RUNNING", "WAITING")),
+            IpTraceStatus.PENDING.value,
+        ),
+        (workflow_run_model_cls.status == "SUCCEEDED", IpTraceStatus.PROCESSED.value),
+        (
+            workflow_run_model_cls.status.in_(("FAILED", "CANCELLED")),
+            IpTraceStatus.FAILED.value,
+        ),
+        else_=IpTraceStatus.UNKNOWN.value,
+    )
+    correlation_col = getattr(workflow_run_model_cls, "correlation_id", None)
+    corr_cols = (correlation_col,) if correlation_col is not None else ()
+    return WorkflowTraceStageSpec(
+        model_cls=workflow_run_model_cls,
+        timestamp_col=workflow_run_model_cls.created_at,
+        status_col=status_col,
+        correlation_cols=corr_cols,
+        to_attempt_row=lambda wf: TraceStageAttemptRow(
+            trace_id=wf.trace_id,
+            correlation_id=getattr(wf, "correlation_id", None),
+            status=map_workflow_status_to_trace_status(wf.status),
+            primary_layer=PipelineStage.HYDRATE,
+            created_at=wf.created_at,
+            replay_count=getattr(wf, "replay_count", 0),
+            parent_trace_id=getattr(wf, "parent_trace_id", None),
+            original_trace_id=getattr(wf, "original_trace_id", None),
+        ),
+    )
 
 
 IP_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
@@ -217,5 +373,7 @@ def stage_workflow_outbox_event(
 __all__ = [
     "IP_TRACE_EVENT_SPEC",
     "IP_TRACE_STAGE_SPECS",
+    "build_workflow_trace_stage_spec",
+    "map_workflow_status_to_trace_status",
     "stage_workflow_outbox_event",
 ]

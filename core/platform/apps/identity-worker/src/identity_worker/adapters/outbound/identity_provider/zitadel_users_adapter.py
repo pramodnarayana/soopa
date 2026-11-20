@@ -52,8 +52,7 @@ class ZitadelUsersAdapter(UserIdentityProviderPort):
     ) -> None:
         self._http_client = http_client
         self.settings = settings
-        self.ucp_project_id = self.settings.zitadel_ucp_project_id
-        self.default_user_password = self.settings.zitadel_default_user_password
+        self.default_user_password = self.settings.idp_default_user_password
 
     def _mask_email(self, email: str) -> str:
         parts = email.split("@")
@@ -100,41 +99,50 @@ class ZitadelUsersAdapter(UserIdentityProviderPort):
         )
 
         if res.status_code in (200, 201):
-            logger.info("successfully_created_user_in_zitadel", user_id=user_id, org_id=org_id)
-            return user_id, True
+            data = res.json()
+            actual_id = str(data.get("userId") or data.get("id") or user_id)
+            logger.info("successfully_created_user_in_zitadel", user_id=actual_id, org_id=org_id)
+            return actual_id, True
 
-        if res.status_code == 409:
+        is_already_existing = res.status_code == 409 or (
+            res.status_code == 400 and "Errors.User.AlreadyExisting" in res.text
+        )
+        if is_already_existing:
             logger.info(
                 "user_conflict_attempting_deterministic_recovery",
                 email=self._mask_email(email),
                 org_id=org_id,
                 user_id=user_id,
             )
-            # Deterministic idempotency: Verify if user exists with OUR specific UUID
+            # Deterministic idempotency: Verify if user exists in target organization
+            recovered_id = await self.get_user_by_email(org_id, email)
+            if not recovered_id and org_id != self.settings.platform_org_id:
+                recovered_id = await self.get_user_by_email(self.settings.platform_org_id, email)
+
+            if recovered_id:
+                logger.info(
+                    "recovered_existing_user_from_zitadel",
+                    user_id=recovered_id,
+                    email=self._mask_email(email),
+                )
+                return recovered_id, False
+
+            # Check if user exists with our specific UUID
             get_res = await self._http_client.get(
                 f"/management/v1/users/{user_id}",
                 headers={"x-zitadel-orgid": org_id},
             )
             if get_res.status_code == 200:
-                logger.info("recovered_existing_user_from_zitadel", user_id=user_id)
+                logger.info("recovered_existing_user_by_id_from_zitadel", user_id=user_id)
                 return user_id, False
-            if get_res.status_code == 404:
-                logger.error(
-                    "genuine_duplicate_user_email",
-                    email=self._mask_email(email),
-                )
-                raise IdentityProviderPortError(
-                    f"Email '{self._mask_email(email)}' is already taken."
-                )
 
             logger.error(
-                "failed_to_recover_existing_user",
+                "genuine_duplicate_user_email",
                 email=self._mask_email(email),
-                user_id=user_id,
-                status_code=get_res.status_code,
-                body=get_res.text,
+                status_code=res.status_code,
+                body=res.text,
             )
-            raise IdentityProviderPortError("Failed to recover existing user")
+            raise IdentityProviderPortError(f"Email '{self._mask_email(email)}' is already taken.")
 
         logger.error(
             "error_creating_user_in_zitadel",
@@ -174,22 +182,74 @@ class ZitadelUsersAdapter(UserIdentityProviderPort):
         data = res.json()
         results = data.get("result", [])
         if not results:
+            # Fallback search by emailAddress in case username differs
+            email_res = await self._http_client.post(
+                "/management/v1/users/_search",
+                headers={"x-zitadel-orgid": org_id},
+                json={
+                    "query": {"limit": 1},
+                    "queries": [
+                        {
+                            "emailQuery": {
+                                "emailAddress": email,
+                                "method": "TEXT_QUERY_METHOD_EQUALS_IGNORE_CASE",
+                            }
+                        }
+                    ],
+                },
+            )
+            if not email_res.is_error:
+                results = email_res.json().get("result", [])
+
+        if not results:
             return None
 
         user_id = results[0].get("id")
         return user_id or None
 
-    async def _get_project_grant_id(self, org_id: str) -> str:
-        """Internal helper to get the UCP Project Grant ID for an organization."""
-        empty_queries: list[JsonValue] = []
+    async def _get_project_and_grant_id(
+        self, org_id: str, project_id: str | None = None
+    ) -> tuple[str, str]:
+        """Resolves the (project_id, grant_id) for an organization."""
+        target_project_id = project_id or self.settings.control_plane_project_id
+        if target_project_id:
+            grant_search_res = await self._http_client.post(
+                f"/management/v1/projects/{target_project_id}/grants/_search",
+                headers={"x-zitadel-orgid": self.settings.platform_org_id},
+                json={"queries": []},
+            )
+            if grant_search_res.is_error:
+                logger.error(
+                    "failed_to_search_project_grants",
+                    project_id=target_project_id,
+                    status_code=grant_search_res.status_code,
+                    body=grant_search_res.text,
+                )
+                raise IdentityProviderPortError(
+                    f"Failed to lookup project grants for project {target_project_id}"
+                )
+
+            grant_search_data = grant_search_res.json()
+            parsed_grant_data = ZitadelProjectGrantsResponse.model_validate(grant_search_data)
+            project_grant = next(
+                (g for g in parsed_grant_data.result if g.granted_org_id == org_id), None
+            )
+            if project_grant:
+                grant_id = project_grant.grant_id or project_grant.id
+                if not grant_id:
+                    raise IdentityProviderPortError("Grant ID missing in Zitadel response")
+                return target_project_id, grant_id
+
+        # If project_id is not passed, resolve granted projects for this org
         grant_search_res = await self._http_client.post(
-            f"/management/v1/projects/{self.ucp_project_id}/grants/_search",
-            headers={"x-zitadel-orgid": self.settings.zitadel_platform_org_id},
-            json={"queries": empty_queries},
+            "/management/v1/projectgrants/_search",
+            headers={"x-zitadel-orgid": org_id},
+            json={"queries": []},
         )
         if grant_search_res.is_error:
             logger.error(
-                "failed_to_search_project_grants",
+                "failed_to_search_org_project_grants",
+                org_id=org_id,
                 status_code=grant_search_res.status_code,
                 body=grant_search_res.text,
             )
@@ -197,33 +257,33 @@ class ZitadelUsersAdapter(UserIdentityProviderPort):
 
         grant_search_data = grant_search_res.json()
         parsed_grant_data = ZitadelProjectGrantsResponse.model_validate(grant_search_data)
+        if not parsed_grant_data.result:
+            raise IdentityProviderPortError(f"No project grants found for org {org_id}")
 
-        project_grant = next(
-            (g for g in parsed_grant_data.result if g.granted_org_id == org_id), None
-        )
-        if not project_grant:
-            raise IdentityProviderPortError(f"No UCP project grant found for org {org_id}")
+        target_grant = parsed_grant_data.result[0]
+        resolved_project_id = target_grant.project_id
+        resolved_grant_id = target_grant.grant_id or target_grant.id
+        if not resolved_project_id or not resolved_grant_id:
+            raise IdentityProviderPortError(f"Invalid project grant metadata for org {org_id}")
+        return resolved_project_id, resolved_grant_id
 
-        grant_id = project_grant.grant_id or project_grant.id
-        if not grant_id:
-            raise IdentityProviderPortError("Grant ID missing in Zitadel response")
-
-        return grant_id
-
-    async def assign_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
+    async def assign_tenant_role(
+        self, user_id: str, org_id: str, role: str, project_id: str | None = None
+    ) -> None:
         logger.info(
             "assigning_role_to_user_in_zitadel",
             role=role,
             user_id=user_id,
             org_id=org_id,
+            project_id=project_id,
         )
-        grant_id = await self._get_project_grant_id(org_id)
+        resolved_project_id, grant_id = await self._get_project_and_grant_id(org_id, project_id)
         role_keys: list[JsonValue] = [role]
         res = await self._http_client.post(
             f"/management/v1/users/{user_id}/grants",
             headers={"x-zitadel-orgid": org_id},
             json={
-                "projectId": self.ucp_project_id,
+                "projectId": resolved_project_id,
                 "projectGrantId": grant_id,
                 "roleKeys": role_keys,
             },
@@ -243,12 +303,15 @@ class ZitadelUsersAdapter(UserIdentityProviderPort):
         )
         raise IdentityProviderPortError("Failed to assign role to user in identity provider")
 
-    async def update_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
+    async def update_tenant_role(
+        self, user_id: str, org_id: str, role: str, project_id: str | None = None
+    ) -> None:
         logger.info(
             "updating_role_for_user_in_zitadel",
             role=role,
             user_id=user_id,
             org_id=org_id,
+            project_id=project_id,
         )
         grants_res = await self._http_client.post(
             "/management/v1/users/grants/_search",
@@ -267,14 +330,17 @@ class ZitadelUsersAdapter(UserIdentityProviderPort):
         grants_data = grants_res.json()
         parsed_grants = ZitadelProjectGrantsResponse.model_validate(grants_data)
 
-        user_grant = next(
-            (g for g in parsed_grants.result if g.project_id == self.ucp_project_id), None
+        user_grant = (
+            next((g for g in parsed_grants.result if g.project_id == project_id), None)
+            if project_id
+            else (parsed_grants.result[0] if parsed_grants.result else None)
         )
 
         if user_grant:
+            grant_id = user_grant.grant_id or user_grant.id
             role_keys: list[JsonValue] = [role]
             update_res = await self._http_client.put(
-                f"/management/v1/users/{user_id}/grants/{user_grant.id}",
+                f"/management/v1/users/{user_id}/grants/{grant_id}",
                 headers={"x-zitadel-orgid": org_id},
                 json={"roleKeys": role_keys},
             )
@@ -287,13 +353,16 @@ class ZitadelUsersAdapter(UserIdentityProviderPort):
                 )
                 raise IdentityProviderPortError("Failed to update role")
         else:
-            await self.assign_tenant_role(user_id, org_id, role)
+            await self.assign_tenant_role(user_id, org_id, role, project_id)
 
-    async def remove_tenant_role(self, user_id: str, org_id: str) -> None:
+    async def remove_tenant_role(
+        self, user_id: str, org_id: str, project_id: str | None = None
+    ) -> None:
         logger.info(
             "removing_role_for_user_in_zitadel",
             user_id=user_id,
             org_id=org_id,
+            project_id=project_id,
         )
         limit = 100
         offset = 0
@@ -333,11 +402,16 @@ class ZitadelUsersAdapter(UserIdentityProviderPort):
             if offset >= total_result or not parsed_grants.result:
                 break
 
-        user_grant = next((g for g in all_grants if g.project_id == self.ucp_project_id), None)
+        target_grants = (
+            [g for g in all_grants if g.project_id == project_id] if project_id else all_grants
+        )
 
-        if user_grant:
+        for user_grant in target_grants:
+            grant_id = user_grant.grant_id or user_grant.id
+            if not grant_id:
+                continue
             del_res = await self._http_client.delete(
-                f"/management/v1/users/{user_id}/grants/{user_grant.id}",
+                f"/management/v1/users/{user_id}/grants/{grant_id}",
                 headers={"x-zitadel-orgid": org_id},
             )
             if del_res.status_code not in (200, 204, 404):

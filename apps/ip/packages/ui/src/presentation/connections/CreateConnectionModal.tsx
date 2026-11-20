@@ -21,10 +21,11 @@ import {
   useCheckConnectionMutation,
   useCreateConnectionMutation,
 } from '../../application/use-connection-queries';
-import type { AppSpec, CatalogAppSummary } from '../../domain/catalog';
+import { type AppSpec, type CatalogAppSummary, isIngressGateway } from '../../domain/catalog';
 import { normalizeAuthType } from '../../domain/catalog-auth';
 import type { ConnectionCheckResult } from '../../domain/connection';
-import { ConnectorPropertyKey, UNIVERSAL_SIMULATOR_APP_ID } from '../../domain/enums';
+import { AuthType, ConnectorPropertyKey, UNIVERSAL_SIMULATOR_APP_ID } from '../../domain/enums';
+import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { buildFailedCheckProblem, isConnectionSnapshotVerified } from './connection-preflight';
 import { isPropertyVisible, SpecFormRenderer, splitSpecFormValues } from './SpecFormRenderer';
@@ -115,7 +116,9 @@ function VerifiedSpecConfigurator({
 
   const checkMutation = useCheckConnectionMutation();
   const createMutation = useCreateConnectionMutation();
+  const { tenantSlug, baseUrl } = useIpWorkspace();
   const isUniversalSimulator = spec.appId === UNIVERSAL_SIMULATOR_APP_ID;
+  const isIngress = isIngressGateway(spec);
 
   const currentSnapshot = useMemo(() => JSON.stringify(formValues), [formValues]);
   const isVerified = isConnectionSnapshotVerified(currentSnapshot, verifiedSnapshot, checkResult);
@@ -136,12 +139,33 @@ function VerifiedSpecConfigurator({
   const canSave = hasRequiredFields && !createMutation.isPending;
 
   const resolveEffectiveAuthType = (): string => {
+    const secProtocolVal =
+      (formValues[ConnectorPropertyKey.SECURITY_PROTOCOL] as string | undefined) ??
+      (spec.properties.find((p) => p.name === ConnectorPropertyKey.SECURITY_PROTOCOL)
+        ?.defaultValue as string | undefined);
+
+    if (secProtocolVal) {
+      const normalized = secProtocolVal.trim().toUpperCase();
+      if (normalized === 'PLAINTEXT' || normalized === 'SSL') {
+        return AuthType.NO_AUTH;
+      }
+      if (normalized === 'SASL_PLAINTEXT') {
+        return AuthType.SASL_PLAINTEXT;
+      }
+      if (normalized === 'SASL_SSL') {
+        return AuthType.SASL_SSL;
+      }
+    }
+
+    const directAuth = formValues[ConnectorPropertyKey.AUTH_TYPE] as string | undefined;
+    if (directAuth && directAuth.trim().length > 0) {
+      return directAuth;
+    }
+
     const defaultAuthFromProps = spec.properties.find(
       (p) => p.name === ConnectorPropertyKey.AUTH_TYPE,
     )?.defaultValue;
-    const raw =
-      (formValues[ConnectorPropertyKey.AUTH_TYPE] as string | undefined) ??
-      (typeof defaultAuthFromProps === 'string' ? defaultAuthFromProps : spec.authType);
+    const raw = typeof defaultAuthFromProps === 'string' ? defaultAuthFromProps : spec.authType;
     return raw;
   };
 
@@ -191,7 +215,11 @@ function VerifiedSpecConfigurator({
       return;
     }
     const { publicConfig, rawCredentials } = splitSpecFormValues(spec.properties, formValues);
-    const endpointForFingerprint = isUniversalSimulator ? connectionName.trim() : undefined;
+    const endpointForFingerprint = isUniversalSimulator
+      ? connectionName.trim()
+      : isIngress && typeof formValues[ConnectorPropertyKey.ENDPOINT_SLUG] === 'string'
+        ? (formValues[ConnectorPropertyKey.ENDPOINT_SLUG] as string).trim()
+        : undefined;
     const res = await createMutation.mutateAsync({
       appId: spec.appId,
       name: connectionName.trim(),
@@ -227,9 +255,11 @@ function VerifiedSpecConfigurator({
           properties={spec.properties}
           values={formValues}
           onChangeValue={(name, val) => setFormValues((prev) => ({ ...prev, [name]: val }))}
+          tenantSlug={tenantSlug}
+          baseUrl={baseUrl}
         />
 
-        {isVerified && checkResult ? (
+        {!isIngress && isVerified && checkResult ? (
           <div className="flex items-center gap-2 rounded-xl border border-status-healthy-border bg-status-healthy-bg px-3.5 py-2.5 text-xs text-status-healthy-fg">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             <span>
@@ -241,23 +271,27 @@ function VerifiedSpecConfigurator({
       </div>
 
       <DialogFooter className="gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={checkMutation.isPending}
-          onClick={() => void handleRunPreflight()}
-          className="gap-1.5"
-        >
-          <PlugZap className="h-4 w-4" />
-          <span>{checkMutation.isPending ? 'Testing...' : 'Test Connection'}</span>
-        </Button>
+        {!isIngress ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={checkMutation.isPending}
+            onClick={() => void handleRunPreflight()}
+            className="gap-1.5"
+          >
+            <PlugZap className="h-4 w-4" />
+            <span>{checkMutation.isPending ? 'Testing...' : 'Test Connection'}</span>
+          </Button>
+        ) : null}
         <Button
           type="button"
           disabled={!canSave}
           onClick={() => void handleSave()}
           className="gap-1.5"
         >
-          <span>{createMutation.isPending ? 'Saving...' : 'Save'}</span>
+          <span>
+            {createMutation.isPending ? 'Saving...' : isIngress ? 'Create Endpoint' : 'Save'}
+          </span>
         </Button>
       </DialogFooter>
     </>

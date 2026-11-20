@@ -29,6 +29,7 @@ from ip.engine.domain.dispatch.enums import (
 from ip.engine.domain.exceptions import (
     ConnectionDeactivatedError,
     ConnectionNotFoundError,
+    ConnectionPendingAuthError,
     InvalidCredentialsError,
     IpError,
     IpErrorCode,
@@ -151,6 +152,14 @@ class TokenManagerService:
                     connection_id=command.connection_id,
                 )
                 return Result.fail(ConnectionDeactivatedError.for_id(command.connection_id))
+
+            if connection.status is ConnectionStatus.PENDING_AUTH:
+                logger.error(
+                    "token_manager_connection_pending_auth",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                )
+                return Result.fail(ConnectionPendingAuthError.for_connection(command.connection_id))
 
             fast_creds: JsonDict = (
                 self._cipher.decrypt(connection.encrypted_credentials)
@@ -282,6 +291,9 @@ class TokenManagerService:
 
             if locked_conn.status is ConnectionStatus.DEACTIVATED:
                 return Result.fail(ConnectionDeactivatedError.for_id(command.connection_id))
+
+            if locked_conn.status is ConnectionStatus.PENDING_AUTH:
+                return Result.fail(ConnectionPendingAuthError.for_connection(command.connection_id))
 
             db_creds: JsonDict = (
                 self._cipher.decrypt(locked_conn.encrypted_credentials)

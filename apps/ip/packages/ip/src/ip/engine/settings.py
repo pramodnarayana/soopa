@@ -5,11 +5,11 @@ from __future__ import annotations
 from functools import lru_cache
 
 from pydantic import AliasChoices, Field, SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infra.config import load_settings_safely
+from pydantic_settings import SettingsConfigDict
+from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 
 
-class IpEngineSettings(BaseSettings):
+class IpEngineSettings(CleanBaseSettings):
     """Unified configuration for IP Engine API, Orchestrator, Delivery, and Jobs workers.
 
     Reads strictly from environment variables / resolved repo env file in compliance with

@@ -13,7 +13,7 @@ from orchestration.application.services.registries import (
     InMemoryPredicateRegistry,
     InMemoryStepHandlerRegistry,
 )
-from orchestration.bootstrap import create_workflow_uow
+from orchestration.bootstrap import WorkflowRunModel, create_workflow_uow
 from orchestration.ports.inbound.step_handler_port import (
     StepHandlerRegistryPort,
     WorkflowDefinitionRegistryPort,
@@ -35,7 +35,7 @@ from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
 from security.ports.cipher_port import CipherPort
 from security.provider import SecurityProvider
-from shttp import HttpRequestAuthenticator
+from shttp import HttpClient, HttpRequestAuthenticator
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.provider import StorageProvider
 from strace.adapters import SqlAlchemyTraceRepository
@@ -50,16 +50,31 @@ from ip.engine.adapters.outbound.auth.token_refresh_lock import (
     SqlAlchemyTokenRefreshLockAdapter,
 )
 from ip.engine.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
+from ip.engine.adapters.outbound.connectors.confluent_kafka_client import (
+    ConfluentKafkaProducerClientFactory,
+)
 from ip.engine.adapters.outbound.connectors.generic_http_connector import GenericHttpConnector
+from ip.engine.adapters.outbound.connectors.kafka_connector import KafkaConnector
+from ip.engine.adapters.outbound.connectors.redpanda_connector import RedpandaConnector
 from ip.engine.adapters.outbound.connectors.sftp_connector import SftpConnector
+from ip.engine.adapters.outbound.connectors.webhook_connector import WebhookConnector
 from ip.engine.adapters.outbound.database.control_plane.connection_entity_repository import (
     SqlAlchemyConnectionEntityRepository,
+)
+from ip.engine.adapters.outbound.database.control_plane.connection_policy_repository import (
+    SqlAlchemyConnectionPolicyRepository,
 )
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
     SqlAlchemyConnectionRepository,
 )
+from ip.engine.adapters.outbound.database.control_plane.mapping_spec_repository import (
+    SqlAlchemyMappingSpecRepository,
+)
 from ip.engine.adapters.outbound.database.control_plane.stitch_repository import (
     SqlAlchemyStitchRepository,
+)
+from ip.engine.adapters.outbound.database.control_plane.stitch_task_config_repository import (
+    SqlAlchemyStitchTaskConfigRepository,
 )
 from ip.engine.adapters.outbound.database.control_plane.sync_run_repository import (
     SqlAlchemySyncRunRepository,
@@ -110,9 +125,15 @@ from ip.engine.adapters.outbound.database.data_plane.replica_record_repository i
 from ip.engine.adapters.outbound.database.data_plane.replica_rejection_repository import (
     SqlAlchemyReplicaRejectionRepository,
 )
+from ip.engine.adapters.outbound.database.data_plane.tenant_lookup_adapters import (
+    TenantAwareNotificationOutboxAdapter,
+    TenantAwareOutboundRecordLookupAdapter,
+    TenantAwareReplicaLookupAdapter,
+)
 from ip.engine.adapters.outbound.database.data_plane.trace_specs import (
     IP_TRACE_EVENT_SPEC,
     IP_TRACE_STAGE_SPECS,
+    build_workflow_trace_stage_spec,
     stage_workflow_outbox_event,
 )
 from ip.engine.adapters.outbound.database.data_plane.uow import (
@@ -135,15 +156,17 @@ from ip.engine.adapters.outbound.intervals.interval_batch_normalizer import (
 from ip.engine.adapters.outbound.intervals.interval_rollup_repository import (
     ColumnarIntervalRollupRepositoryAdapter,
 )
-from ip.engine.adapters.outbound.stitches.step_handlers import (
+from ip.engine.adapters.outbound.stitches.handlers import (
+    EgressPublishStepHandler,
     EmitNotificationStepHandler,
     ExecuteHttpActionStepHandler,
-    OutboundDeliveryStagerPort,
-    OutboundRecordLookupPort,
+    HttpDispatchStepHandler,
+    L1PersistStepHandler,
+    L2ReplicaStepHandler,
+    NormalizerStepHandler,
     QueryReplicaStepHandler,
-    TenantAwareNotificationOutboxAdapter,
-    TenantAwareOutboundRecordLookupAdapter,
-    TenantAwareReplicaLookupAdapter,
+    SliceRangeStepHandler,
+    UiFieldMapperStepHandler,
 )
 from ip.engine.adapters.outbound.stitches.stitch_adapters import (
     IpStitchCanonicalDispatcherAdapter,
@@ -156,6 +179,7 @@ from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
     DEFAULT_IP_PAYLOAD_BUCKET,
     TieredStorageAdapter,
 )
+from ip.engine.application.compiler.pipeline_compiler import UniversalPipelineCompiler
 from ip.engine.application.use_cases.connections.discover_catalog_use_case import (
     DiscoverCatalogUseCase,
 )
@@ -280,11 +304,21 @@ from ip.engine.ports.outbound.catalog_registry_port import (
     CatalogConnectorMapping,
 )
 from ip.engine.ports.outbound.columnar_batch_processor_port import ColumnarBatchProcessorPort
+from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.connector_port import ConnectorPort, DestinationConnectorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
 from ip.engine.ports.outbound.interval_rollup_repository_port import IntervalRollupRepositoryPort
+from ip.engine.ports.outbound.mapping_spec_repository_port import (
+    MappingSpecRepositoryPort,
+)
+from ip.engine.ports.outbound.outbound_delivery_stager_port import (
+    OutboundDeliveryStagerPort,
+)
+from ip.engine.ports.outbound.outbound_record_lookup_port import (
+    OutboundRecordLookupPort,
+)
 from ip.engine.ports.outbound.record_extractor_port import RecordExtractorRegistry
 from ip.engine.ports.outbound.stitch_catalog_registry_port import StitchCatalogRegistryPort
 from ip.engine.ports.outbound.tenant_repository_port import TenantRepositoryPort
@@ -298,6 +332,7 @@ from ip.engine.ports.outbound.uow import (
     IpTenantResolverPort,
 )
 from ip.engine.settings import IpEngineSettings
+from ip.sdk.registry import DomainFunctionRegistry
 
 DomainRepositoryFactory = Callable[[AsyncSession], object]
 
@@ -331,6 +366,13 @@ def create_engine_catalog_registry(
     )
     sftp = SftpConnector(allow_local=allow_private_ips)
     registry.register_connector(sftp, SftpConnector.default_catalog_summary())
+    kafka_factory = ConfluentKafkaProducerClientFactory()
+    kafka = KafkaConnector(client_factory=kafka_factory)
+    registry.register_connector(kafka, KafkaConnector.default_catalog_summary())
+    redpanda = RedpandaConnector(client_factory=kafka_factory)
+    registry.register_connector(redpanda, RedpandaConnector.default_catalog_summary())
+    webhook = WebhookConnector()
+    registry.register_connector(webhook, WebhookConnector.default_catalog_summary())
     return registry
 
 
@@ -361,10 +403,13 @@ def create_ip_control_plane_uow(
     return SqlAlchemyIpControlPlaneUnitOfWork(
         global_session,
         connections=SqlAlchemyConnectionRepository(global_session),
+        connection_policies=SqlAlchemyConnectionPolicyRepository(global_session),
         entities=SqlAlchemyConnectionEntityRepository(global_session),
         sync_runs=SqlAlchemySyncRunRepository(global_session),
         transformations=SqlAlchemyTransformationRepository(global_session),
+        mapping_specs=SqlAlchemyMappingSpecRepository(global_session),
         stitches=SqlAlchemyStitchRepository(global_session),
+        stitch_task_configs=SqlAlchemyStitchTaskConfigRepository(global_session),
         webhook_endpoints=SqlAlchemyWebhookEndpointRepository(global_session),
     )
 
@@ -413,7 +458,7 @@ def create_ip_data_plane_uow(
         traces=SqlAlchemyTraceRepository(
             tenant_session,
             event_spec=IP_TRACE_EVENT_SPEC,
-            stage_specs=IP_TRACE_STAGE_SPECS,
+            stage_specs=(*IP_TRACE_STAGE_SPECS, build_workflow_trace_stage_spec(WorkflowRunModel)),
         ),
         batch_manifests=SqlAlchemyBatchManifestRepository(tenant_session),
         domain_repositories=resolved_domain_repos,
@@ -698,8 +743,13 @@ def create_default_step_handler_registry(
     uow_provider: IpDataPlaneUnitOfWorkProviderPort,
     delivery_stager: OutboundDeliveryStagerPort,
     outbound_lookup: OutboundRecordLookupPort,
+    tiered_storage: TieredStoragePort | None = None,
+    connection_repo: ConnectionRepositoryPort | None = None,
+    mapping_spec_repo: MappingSpecRepositoryPort | None = None,
+    domain_registry: DomainFunctionRegistry | None = None,
+    http_client: HttpClient | None = None,
 ) -> InMemoryStepHandlerRegistry:
-    """Creates and populates an InMemoryStepHandlerRegistry with all 3 built-in IP Stitch step handlers."""
+    """Creates and populates an InMemoryStepHandlerRegistry with all built-in IP Stitch step handlers."""
     registry = InMemoryStepHandlerRegistry()
     registry.register(
         QueryReplicaStepHandler(replica_lookup=TenantAwareReplicaLookupAdapter(uow_provider))
@@ -711,6 +761,23 @@ def create_default_step_handler_registry(
         ExecuteHttpActionStepHandler(
             delivery_stager=delivery_stager,
             outbound_lookup=outbound_lookup,
+        )
+    )
+    registry.register(SliceRangeStepHandler())
+    registry.register(
+        HttpDispatchStepHandler(
+            registry=domain_registry,
+            connection_repository=connection_repo,
+            http_client=http_client,
+        )
+    )
+    registry.register(L1PersistStepHandler(storage=tiered_storage))
+    registry.register(L2ReplicaStepHandler(uow_provider=uow_provider))
+    registry.register(NormalizerStepHandler(registry=domain_registry))
+    registry.register(UiFieldMapperStepHandler(mapping_spec_repository=mapping_spec_repo))
+    registry.register(
+        EgressPublishStepHandler(
+            notification_outbox=TenantAwareNotificationOutboxAdapter(uow_provider)
         )
     )
     return registry
@@ -939,6 +1006,10 @@ class Container(containers.DeclarativeContainer):
         uow_provider=dp_uow_provider,
         delivery_stager=session_scoped_outbound_delivery_stager,
         outbound_lookup=outbound_record_lookup,
+        tiered_storage=tiered_storage,
+    )
+    pipeline_compiler = providers.Factory(
+        UniversalPipelineCompiler,
     )
     predicate_registry = providers.Singleton(InMemoryPredicateRegistry)
 

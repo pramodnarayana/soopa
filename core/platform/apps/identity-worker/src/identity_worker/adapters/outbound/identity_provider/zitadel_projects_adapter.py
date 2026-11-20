@@ -22,10 +22,9 @@ class ZitadelProjectsAdapter(ProjectProviderPort):
     def __init__(self, http_client: HttpClient, settings: AppSettings) -> None:
         self._http_client = http_client
         self.settings = settings
-        self.ucp_project_id = settings.zitadel_ucp_project_id
 
     def _platform_headers(self) -> dict[str, str]:
-        return {"x-zitadel-orgid": self.settings.zitadel_platform_org_id}
+        return {"x-zitadel-orgid": self.settings.platform_org_id}
 
     _MAX_SEARCH_PAGES = 1_000
 
@@ -183,14 +182,13 @@ class ZitadelProjectsAdapter(ProjectProviderPort):
             f"Failed to delete project grant: HTTP {response.status_code} {response.text}"
         )
 
-    async def get_roles(self, project_id: str | None = None) -> list[IdpRole]:
-        target_project_id = project_id or self.ucp_project_id
-        logger.info("fetching_roles_for_project", project_id=target_project_id)
+    async def get_roles(self, project_id: str) -> list[IdpRole]:
+        logger.info("fetching_roles_for_project", project_id=project_id)
         headers = self._platform_headers()
 
         try:
             data = await self._search_all(
-                endpoint=f"/management/v1/projects/{target_project_id}/roles/_search",
+                endpoint=f"/management/v1/projects/{project_id}/roles/_search",
                 headers=headers,
             )
             parsed_data = ZitadelRolesResponse.model_validate({"result": data})
@@ -203,7 +201,7 @@ class ZitadelProjectsAdapter(ProjectProviderPort):
         except IdentityProviderPortError:
             raise
         except Exception as e:
-            logger.exception("error_fetching_roles", project_id=target_project_id)
+            logger.exception("error_fetching_roles", project_id=project_id)
             raise IdentityProviderPortError("Failed to fetch roles") from e
 
     async def get_users(self, org_id: str) -> list[IdpUser]:

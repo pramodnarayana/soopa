@@ -12,7 +12,7 @@ from helpers.delivery_fakes import (
     FakeTieredStorage,
     seed_oauth2_connection,
 )
-from ip.engine.adapters.outbound.stitches.step_handlers import ExecuteHttpActionStepHandler
+from ip.engine.adapters.outbound.stitches.handlers import ExecuteHttpActionStepHandler
 from ip.engine.application.use_cases.delivery.stage_outbound_delivery_use_case import (
     StageOutboundDeliveryCommand,
     StageOutboundDeliveryUseCase,

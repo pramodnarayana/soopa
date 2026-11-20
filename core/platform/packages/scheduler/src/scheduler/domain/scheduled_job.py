@@ -18,6 +18,7 @@ class ScheduledJob:
     retry_count: int
     max_retries: int
     next_run_at: datetime | None
+    app_namespace: str | None = None
 
 
 __all__ = ["ScheduledJob"]

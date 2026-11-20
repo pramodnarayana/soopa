@@ -45,6 +45,9 @@ class WorkflowRunModel(WorkflowBase):
             postgresql_where=text("status IN ('QUEUED', 'RUNNING', 'WAITING')"),
         ),
         Index("idx_wf_runs_trace", "tenant_id", "trace_id"),
+        Index("idx_wf_runs_corr", "tenant_id", "correlation_id"),
+        Index("idx_wf_runs_parent", "tenant_id", "parent_run_id"),
+        Index("idx_wf_runs_orig_trace", "tenant_id", "original_trace_id"),
     )
 
     id: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -58,6 +61,11 @@ class WorkflowRunModel(WorkflowBase):
     parent_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
     correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    parent_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    original_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    replay_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     failure_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -36,6 +36,11 @@ import type {
   IntervalLineageTrace,
   IntervalWindowCompleteness,
 } from '../domain/intervals';
+import type {
+  ListMappingSpecsFilter,
+  MappingSpec,
+  SaveMappingSpecInput,
+} from '../domain/mapping-spec';
 import {
   type CreateSimulatorEntityInput,
   PushCadenceMode,
@@ -54,6 +59,7 @@ import type {
   StitchRun,
   TriggerStitchEventInput,
   TriggerStitchEventResult,
+  UpdateStitchInput,
 } from '../domain/stitch';
 import type { SyncRun, TriggerSyncRunInput } from '../domain/sync-run';
 import type {
@@ -84,6 +90,7 @@ import type {
   GetReconciliationParams,
   IntervalRepositoryPort,
 } from '../ports/interval-repository.port';
+import type { MappingSpecRepositoryPort } from '../ports/mapping-spec-repository.port';
 import type {
   ListGemRecordsFilter,
   ListInboundRecordsFilter,
@@ -96,7 +103,13 @@ import type { StitchRepositoryPort } from '../ports/stitch-repository.port';
 import type { SyncRunRepositoryPort } from '../ports/sync-run-repository.port';
 import type { TraceRepositoryPort } from '../ports/trace-repository.port';
 import type { TransformationRepositoryPort } from '../ports/transformation-repository.port';
-import type { IpNavigationPort, IpRepositoriesBundle } from '../provider/IpRepositoriesContext';
+import type {
+  IpNavigationPort,
+  IpRepositoriesBundle,
+  RouteStitchMapperParams,
+  RouteStitchWorkbenchParams,
+  StitchMapperParams,
+} from '../provider/IpRepositoriesContext';
 import {
   SEED_CATALOG_APPS,
   SEED_CONNECTION,
@@ -932,6 +945,82 @@ export class InMemoryTransformationRepository implements TransformationRepositor
   }
 }
 
+export class InMemoryMappingSpecRepository implements MappingSpecRepositoryPort {
+  public readonly specs: MappingSpec[];
+
+  constructor(specs: readonly MappingSpec[] = []) {
+    this.specs = [...specs];
+  }
+
+  public async saveMappingSpec(
+    tenantId: string,
+    input: SaveMappingSpecInput,
+  ): Promise<Result<MappingSpec, ApiProblem>> {
+    const existingIdx = input.mappingSpecId
+      ? this.specs.findIndex((s) => s.id === input.mappingSpecId && s.tenantId === tenantId)
+      : -1;
+
+    const id = input.mappingSpecId ?? `ip_fmap_${this.specs.length + 1}`;
+    const version = existingIdx >= 0 ? this.specs[existingIdx].version : 1;
+    const spec: MappingSpec = {
+      id,
+      tenantId,
+      name: input.name,
+      description: input.description ?? '',
+      sourceType: input.sourceType,
+      targetConnectionId: input.targetConnectionId,
+      targetEntityName: input.targetEntityName,
+      version,
+      rules: input.rules,
+      isActive: input.isActive ?? true,
+    };
+
+    if (existingIdx >= 0) {
+      this.specs[existingIdx] = spec;
+    } else {
+      this.specs.push(spec);
+    }
+    return ok(spec);
+  }
+
+  public async getMappingSpec(
+    tenantId: string,
+    mappingSpecId: string,
+  ): Promise<Result<MappingSpec, ApiProblem>> {
+    const spec = this.specs.find((s) => s.id === mappingSpecId && s.tenantId === tenantId);
+    if (!spec) {
+      return err(notFoundProblem(`MappingSpec '${mappingSpecId}' not found.`));
+    }
+    return ok(spec);
+  }
+
+  public async listMappingSpecs(
+    tenantId: string,
+    filter?: ListMappingSpecsFilter,
+  ): Promise<Result<readonly MappingSpec[], ApiProblem>> {
+    return ok(
+      this.specs.filter(
+        (s) =>
+          s.tenantId === tenantId &&
+          (!filter?.sourceType || s.sourceType === filter.sourceType) &&
+          (!filter?.targetConnectionId || s.targetConnectionId === filter.targetConnectionId),
+      ),
+    );
+  }
+
+  public async deleteMappingSpec(
+    tenantId: string,
+    mappingSpecId: string,
+  ): Promise<Result<void, ApiProblem>> {
+    const idx = this.specs.findIndex((s) => s.id === mappingSpecId && s.tenantId === tenantId);
+    if (idx === -1) {
+      return err(notFoundProblem(`MappingSpec '${mappingSpecId}' not found.`));
+    }
+    this.specs.splice(idx, 1);
+    return ok(undefined);
+  }
+}
+
 export class InMemoryStitchRepository implements StitchRepositoryPort {
   private readonly definitions: StitchDefinition[];
   public readonly stitches: Stitch[];
@@ -963,7 +1052,14 @@ export class InMemoryStitchRepository implements StitchRepositoryPort {
   }
 
   public async listStitches(tenantId: string): Promise<Result<readonly Stitch[], ApiProblem>> {
-    return ok(this.stitches.filter((s) => s.tenantId === tenantId));
+    return ok(this.stitches.filter((s) => s.tenantId === tenantId || s.tenantId === '*'));
+  }
+
+  public async getStitch(tenantId: string, stitchId: string): Promise<Result<Stitch, ApiProblem>> {
+    const found = this.stitches.find(
+      (s) => s.id === stitchId && (s.tenantId === tenantId || s.tenantId === '*'),
+    );
+    return found ? ok(found) : err(notFoundProblem(`Stitch '${stitchId}' not found.`));
   }
 
   public async registerStitch(
@@ -972,6 +1068,9 @@ export class InMemoryStitchRepository implements StitchRepositoryPort {
   ): Promise<Result<Stitch, ApiProblem>> {
     const created: Stitch = {
       id: input.stitchId ?? `stc_reg_${this.stitches.length + 1}`,
+      name: input.name ?? '',
+      description: input.description ?? '',
+      mappingSpecId: input.mappingSpecId ?? null,
       tenantId,
       workflowId: input.workflowId,
       workflowVersion: input.workflowVersion,
@@ -985,6 +1084,49 @@ export class InMemoryStitchRepository implements StitchRepositoryPort {
     };
     this.stitches.push(created);
     return ok(created);
+  }
+
+  public async updateStitch(
+    tenantId: string,
+    stitchId: string,
+    input: UpdateStitchInput,
+  ): Promise<Result<Stitch, ApiProblem>> {
+    const idx = this.stitches.findIndex(
+      (s) => s.id === stitchId && (s.tenantId === tenantId || s.tenantId === '*'),
+    );
+    if (idx === -1) {
+      return err(notFoundProblem(`Stitch '${stitchId}' not found.`));
+    }
+    const current = this.stitches[idx];
+    const updated: Stitch = {
+      ...current,
+      name: input.name !== undefined ? input.name : current.name,
+      description: input.description !== undefined ? input.description : current.description,
+      mappingSpecId:
+        input.mappingSpecId !== undefined ? input.mappingSpecId : current.mappingSpecId,
+      isActive: input.isActive !== undefined ? input.isActive : current.isActive,
+    };
+    this.stitches[idx] = updated;
+    return ok(updated);
+  }
+
+  public async toggleStitchState(
+    tenantId: string,
+    stitchId: string,
+    isActive: boolean,
+  ): Promise<Result<Stitch, ApiProblem>> {
+    return this.updateStitch(tenantId, stitchId, { isActive });
+  }
+
+  public async deleteStitch(tenantId: string, stitchId: string): Promise<Result<void, ApiProblem>> {
+    const idx = this.stitches.findIndex(
+      (s) => s.id === stitchId && (s.tenantId === tenantId || s.tenantId === '*'),
+    );
+    if (idx === -1) {
+      return err(notFoundProblem(`Stitch '${stitchId}' not found.`));
+    }
+    this.stitches.splice(idx, 1);
+    return ok(undefined);
   }
 
   public async dispatchEvent(
@@ -1432,6 +1574,24 @@ export class InMemoryNavigationFake implements IpNavigationPort {
       connectionId ? `/tenant/ip/intervals?connectionId=${connectionId}` : '/tenant/ip/intervals',
     );
   };
+
+  public readonly toStitchMapper = (params?: StitchMapperParams): void => {
+    const query = new URLSearchParams();
+    if (params?.sourceConnectionId) query.set('sourceConnectionId', params.sourceConnectionId);
+    if (params?.streamName) query.set('stream', params.streamName);
+    if (params?.targetConnectionId) query.set('targetConnectionId', params.targetConnectionId);
+    if (params?.targetTopic) query.set('targetTopic', params.targetTopic);
+    const qs = query.toString();
+    this.visited.push(qs ? `/tenant/ip/stitches/mapper?${qs}` : '/tenant/ip/stitches/mapper');
+  };
+
+  public readonly toRouteStitchMapper = (params?: RouteStitchMapperParams): void => {
+    this.toStitchMapper(params);
+  };
+
+  public readonly toRouteStitchWorkbench = (params?: RouteStitchWorkbenchParams): void => {
+    this.toStitchMapper(params);
+  };
 }
 
 export interface InMemoryIpWorkspaceHarness {
@@ -1441,6 +1601,7 @@ export interface InMemoryIpWorkspaceHarness {
   readonly entities: InMemoryConnectionEntityRepository;
   readonly syncRuns: InMemorySyncRunRepository;
   readonly transformations: InMemoryTransformationRepository;
+  readonly mappingSpecs: InMemoryMappingSpecRepository;
   readonly stitches: InMemoryStitchRepository;
   readonly traces: InMemoryTraceRepository;
   readonly records: InMemoryRecordRepository;
@@ -1507,6 +1668,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
     plugins,
   );
   const transformations = new InMemoryTransformationRepository();
+  const mappingSpecs = new InMemoryMappingSpecRepository();
   const entities = new InMemoryConnectionEntityRepository([SEED_CONNECTION_ENTITY], connections);
   const syncRuns = new InMemorySyncRunRepository();
   const stitches = new InMemoryStitchRepository();
@@ -1522,6 +1684,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
       entities,
       syncRuns,
       transformations,
+      mappingSpecs,
       stitches,
       traces,
       records,
@@ -1533,6 +1696,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
     entities,
     syncRuns,
     transformations,
+    mappingSpecs,
     stitches,
     traces,
     records,

@@ -5,6 +5,7 @@ import type { CatalogRepositoryPort } from '../ports/catalog-repository.port';
 import type { ConnectionEntityRepositoryPort } from '../ports/connection-entity-repository.port';
 import type { ConnectionRepositoryPort } from '../ports/connection-repository.port';
 import type { IntervalRepositoryPort } from '../ports/interval-repository.port';
+import type { MappingSpecRepositoryPort } from '../ports/mapping-spec-repository.port';
 import type { RecordRepositoryPort } from '../ports/record-repository.port';
 import type { SimulatorRepositoryPort } from '../ports/simulator-repository.port';
 import type { StitchRepositoryPort } from '../ports/stitch-repository.port';
@@ -18,12 +19,23 @@ export interface IpRepositoriesBundle {
   readonly entities: ConnectionEntityRepositoryPort;
   readonly syncRuns: SyncRunRepositoryPort;
   readonly transformations: TransformationRepositoryPort;
+  readonly mappingSpecs: MappingSpecRepositoryPort;
   readonly stitches: StitchRepositoryPort;
   readonly traces: TraceRepositoryPort;
   readonly records: RecordRepositoryPort;
   readonly intervals: IntervalRepositoryPort;
   readonly simulator: SimulatorRepositoryPort;
 }
+
+export interface StitchMapperParams {
+  readonly sourceConnectionId?: string;
+  readonly streamName?: string;
+  readonly targetConnectionId?: string;
+  readonly targetTopic?: string;
+}
+
+export type RouteStitchMapperParams = StitchMapperParams;
+export type RouteStitchWorkbenchParams = StitchMapperParams;
 
 export interface IpNavigationPort {
   readonly toCommandCenter: () => void;
@@ -36,6 +48,9 @@ export interface IpNavigationPort {
   readonly toStitchDefinition: (workflowId: string) => void;
   readonly toStitchRun: (runId: string) => void;
   readonly toIntervals?: (connectionId?: string) => void;
+  readonly toStitchMapper?: (params?: StitchMapperParams) => void;
+  readonly toRouteStitchMapper?: (params?: RouteStitchMapperParams) => void;
+  readonly toRouteStitchWorkbench?: (params?: RouteStitchWorkbenchParams) => void;
 }
 
 export interface IpWorkspaceContextValue {

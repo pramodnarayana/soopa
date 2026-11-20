@@ -426,6 +426,26 @@ class FailStepUseCase:
                 workflow_id=final_run.workflow_id,
                 run_id=final_run.id,
             )
+            if final_run.parent_run_id is not None:
+                await self._match_resolver.resolve_in_uow(
+                    uow=uow,
+                    initial_event=MatchEvent(
+                        tenant_id=final_run.tenant_id,
+                        condition_kind=ConditionKind.CANONICAL_EVENT,
+                        event_key=f"child_run.{final_run.workflow_id}.completed",
+                        resource_hint=final_run.parent_run_id,
+                        payload={
+                            "child_run_id": final_run.id,
+                            "child_workflow_id": final_run.workflow_id,
+                            "status": final_run.status.value,
+                            "trace_id": final_run.trace_id,
+                            "correlation_id": final_run.correlation_id,
+                            "failure_code": decision.failure_code.value,
+                        },
+                        occurred_at=command.now,
+                    ),
+                    now=command.now,
+                )
 
         await uow.commit()
 

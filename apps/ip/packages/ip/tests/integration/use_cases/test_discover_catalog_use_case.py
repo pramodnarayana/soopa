@@ -231,7 +231,7 @@ async def test_discover_catalog_connector_not_found_returns_failure(
 
 
 @pytest.mark.asyncio
-async def test_discover_catalog_pending_auth_api_key_returns_pending_auth_error(
+async def test_discover_catalog_pending_auth_oauth2_returns_pending_auth_error(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
@@ -248,9 +248,9 @@ async def test_discover_catalog_pending_auth_api_key_returns_pending_auth_error(
             tenant_id=tenant_id,
             app_id="acme_source",
             name="Pending Auth Conn",
-            auth_type="API_KEY",
-            public_config={"endpoint_url": "https://api.example.com"},
-            raw_credentials={},
+            auth_type="OAUTH2",
+            public_config={"client_id": "oauth_client_123"},
+            raw_credentials={"client_secret": "oauth_secret_456"},
             endpoint_for_fingerprint="https://api.example.com",
         )
     )

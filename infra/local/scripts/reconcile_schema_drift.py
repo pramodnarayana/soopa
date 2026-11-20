@@ -20,7 +20,7 @@ from database.shard_discovery import (
     collect_prefixed_shard_overrides,
     fetch_prefixed_shard_urls,
 )
-from seedwork.infra.config import load_repo_env, load_settings_safely
+from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,7 +51,6 @@ def _load_database_settings(*, skip_dotenv: bool) -> PlatformDatabaseSettings:
     """Load database settings from process environment, optionally skipping ``.env`` hydration."""
     if skip_dotenv:
         return PlatformDatabaseSettings()
-    load_repo_env(override=False)
     return load_settings_safely(PlatformDatabaseSettings)
 
 
