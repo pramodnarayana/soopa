@@ -10,8 +10,8 @@ from ip.solutions.domains.tms.canonical import CanonicalCarrierDTO, CanonicalLoa
 from ip.solutions.domains.tms.models import TmsCarrierRecord, TmsLoadRecord
 from ip.solutions.domains.tms.repository import SqlAlchemyTmsDomainRepository
 from ip.solutions.domains.tms.transformers import (
-    MercuryGateLoadTransformerV1,
-    MercuryGateLoadTransformerV2,
+    MercuryGateCarrierTransformer,
+    MercuryGateLoadTransformer,
 )
 
 
@@ -113,22 +113,22 @@ def test_tms_load_transformer_rejects_non_finite_weight() -> None:
         stream="loads",
         trace_id="ip_trc_02",
     )
-    for transformer in (MercuryGateLoadTransformerV1(), MercuryGateLoadTransformerV2()):
-        for bad_val in ("nan", float("inf"), 10**400):
-            res = transformer.transform(
-                ReplicaSnapshot(
-                    id="rep_tms_nan",
-                    connection_id="conn_01",
-                    stream="loads",
-                    record_key="LD-100",
-                    version=1,
-                    data={"load_id": "LD-100", "total_weight_lbs": bad_val},
-                ),
-                ctx,
-            )
-            assert not res.drafts
-            assert len(res.rejections) == 1
-            assert res.rejections[0].reason == NormalizationRejectionReason.QUALITY_RULE_REJECTED
+    transformer = MercuryGateLoadTransformer()
+    for bad_val in ("nan", float("inf"), 10**400):
+        res = transformer.transform(
+            ReplicaSnapshot(
+                id="rep_tms_nan",
+                connection_id="conn_01",
+                stream="loads",
+                record_key="LD-100",
+                version=1,
+                data={"load_id": "LD-100", "total_weight_lbs": bad_val},
+            ),
+            ctx,
+        )
+        assert not res.drafts
+        assert len(res.rejections) == 1
+        assert res.rejections[0].reason == NormalizationRejectionReason.QUALITY_RULE_REJECTED
 
 
 def test_tms_load_transformer_rejects_non_finite_freight_charge() -> None:
@@ -138,19 +138,94 @@ def test_tms_load_transformer_rejects_non_finite_freight_charge() -> None:
         stream="loads",
         trace_id="ip_trc_02",
     )
-    for transformer in (MercuryGateLoadTransformerV1(), MercuryGateLoadTransformerV2()):
-        for bad_val in ("-inf", float("nan"), -(10**400)):
-            res = transformer.transform(
-                ReplicaSnapshot(
-                    id="rep_tms_nan",
-                    connection_id="conn_01",
-                    stream="loads",
-                    record_key="LD-100",
-                    version=1,
-                    data={"load_id": "LD-100", "freight_charge_usd": bad_val},
-                ),
-                ctx,
-            )
-            assert not res.drafts
-            assert len(res.rejections) == 1
-            assert res.rejections[0].reason == NormalizationRejectionReason.QUALITY_RULE_REJECTED
+    transformer = MercuryGateLoadTransformer()
+    for bad_val in ("-inf", float("nan"), -(10**400)):
+        res = transformer.transform(
+            ReplicaSnapshot(
+                id="rep_tms_nan",
+                connection_id="conn_01",
+                stream="loads",
+                record_key="LD-100",
+                version=1,
+                data={"load_id": "LD-100", "freight_charge_usd": bad_val},
+            ),
+            ctx,
+        )
+        assert not res.drafts
+        assert len(res.rejections) == 1
+        assert res.rejections[0].reason == NormalizationRejectionReason.QUALITY_RULE_REJECTED
+
+
+def test_mercury_gate_load_transformer_maps_valid_load() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        stream="loads",
+        trace_id="ip_trc_02",
+    )
+    transformer = MercuryGateLoadTransformer()
+    assert transformer.transformation_id == "tms.mercury_gate_load"
+    assert transformer.transformation_version == 2
+
+    res = transformer.transform(
+        ReplicaSnapshot(
+            id="rep_tms_01",
+            connection_id="conn_01",
+            stream="loads",
+            record_key="LD-100",
+            version=1,
+            data={
+                "load_id": "LD-100",
+                "carrier_scac": "JBHT",
+                "origin_city": "Dallas",
+                "origin_state": "TX",
+                "destination_city": "Atlanta",
+                "destination_state": "GA",
+                "status": "IN_TRANSIT",
+                "total_weight_lbs": 42000.0,
+                "freight_charge_usd": 2850.0,
+            },
+        ),
+        ctx,
+    )
+    assert not res.rejections
+    assert len(res.drafts) == 1
+    draft = res.drafts[0]
+    assert draft.fields["load_reference_number"] == "LD-100"
+    assert draft.fields["lane_code"] == "TX->GA"
+    assert draft.fields["total_weight_lbs"] == 42000.0
+
+
+def test_mercury_gate_carrier_transformer_maps_valid_carrier() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        stream="carriers",
+        trace_id="ip_trc_03",
+    )
+    transformer = MercuryGateCarrierTransformer()
+    assert transformer.transformation_id == "tms.mercury_gate_carrier"
+    assert transformer.transformation_version == 1
+
+    res = transformer.transform(
+        ReplicaSnapshot(
+            id="rep_tms_02",
+            connection_id="conn_01",
+            stream="carriers",
+            record_key="JBHT",
+            version=1,
+            data={
+                "scac": "JBHT",
+                "carrier_name": "J.B. Hunt Transport",
+                "dot_number": "DOT-123456",
+                "mc_number": "MC-654321",
+                "status": "ACTIVE",
+            },
+        ),
+        ctx,
+    )
+    assert not res.rejections
+    assert len(res.drafts) == 1
+    draft = res.drafts[0]
+    assert draft.fields["scac_code"] == "JBHT"
+    assert draft.fields["carrier_name"] == "J.B. Hunt Transport"

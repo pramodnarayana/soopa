@@ -51,6 +51,9 @@ class StartRunCommand:
     concurrency_key: str | None = None
     priority: Priority | None = None
     parent_run_id: str | None = None
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
+    replay_count: int = 0
     idempotency_eviction_policy: IdempotencyEvictionPolicy = IdempotencyEvictionPolicy.TTL
     idempotency_ttl: timedelta = timedelta(hours=24)
     deduplicate_if_exists: bool = False
@@ -100,6 +103,9 @@ class StartRunUseCase:
             concurrency_key=command.concurrency_key,
             priority=command.priority,
             parent_run_id=command.parent_run_id,
+            parent_trace_id=command.parent_trace_id,
+            original_trace_id=command.original_trace_id,
+            replay_count=command.replay_count,
             now=command.now,
         )
 

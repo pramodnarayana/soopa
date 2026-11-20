@@ -1,4 +1,4 @@
-import { type ApiProblem, Button, DataTable, StatusTone } from '@soopa/ui';
+import { type ApiProblem, Button, DataTable } from '@soopa/ui';
 import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { Pencil, Plus, Radio, Trash2 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';

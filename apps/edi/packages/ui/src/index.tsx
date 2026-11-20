@@ -34,8 +34,8 @@ export function EdiUIProvider({
 }) {
   return (
     <TenantProvider tenantId={tenantId}>
-      <UcpNetworkProvider baseUrl={ucpBaseUrl} token={token}>
-        <EdiNetworkProvider baseUrl={baseUrl} token={token}>
+      <UcpNetworkProvider baseUrl={ucpBaseUrl} token={token} tenantId={tenantId}>
+        <EdiNetworkProvider baseUrl={baseUrl} token={token} tenantId={tenantId}>
           {children}
         </EdiNetworkProvider>
       </UcpNetworkProvider>

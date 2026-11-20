@@ -518,7 +518,7 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     expect(calls).toHaveLength(7);
   });
 
-  it('maps HttpStitchRepository wire responses across all 7 methods', async () => {
+  it('maps HttpStitchRepository wire responses across all 11 methods', async () => {
     const logger = new RecordingLoggerFake();
     const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/stitches/definitions': [WIRE_STITCH_DEFINITION],
@@ -527,6 +527,8 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
       'GET /api/v1/tenants/ten_01/ip/stitches': [
         {
           id: 'stc_01',
+          name: 'Alpha Pipeline',
+          description: 'Alpha description',
           tenant_id: 'ten_01',
           workflow_id: 'workflow.sync_alpha_to_sink',
           workflow_version: 1,
@@ -536,8 +538,10 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
           is_active: true,
         },
       ],
-      'POST /api/v1/tenants/ten_01/ip/stitches': {
-        id: 'stc_02',
+      'GET /api/v1/tenants/ten_01/ip/stitches/stc_01': {
+        id: 'stc_01',
+        name: 'Alpha Pipeline',
+        description: 'Alpha description',
         tenant_id: 'ten_01',
         workflow_id: 'workflow.sync_alpha_to_sink',
         workflow_version: 1,
@@ -546,6 +550,43 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
         idempotency_key_field: 'source_id',
         is_active: true,
       },
+      'POST /api/v1/tenants/ten_01/ip/stitches': {
+        id: 'stc_02',
+        name: 'Beta Pipeline',
+        description: 'Beta description',
+        tenant_id: 'ten_01',
+        workflow_id: 'workflow.sync_alpha_to_sink',
+        workflow_version: 1,
+        canonical_event_type: 'canonical.record_alpha.v1',
+        is_trigger: true,
+        idempotency_key_field: 'source_id',
+        is_active: true,
+      },
+      'PATCH /api/v1/tenants/ten_01/ip/stitches/stc_01': {
+        id: 'stc_01',
+        name: 'Alpha Updated',
+        description: 'Updated description',
+        tenant_id: 'ten_01',
+        workflow_id: 'workflow.sync_alpha_to_sink',
+        workflow_version: 1,
+        canonical_event_type: 'canonical.record_alpha.v1',
+        is_trigger: true,
+        idempotency_key_field: 'source_id',
+        is_active: true,
+      },
+      'PATCH /api/v1/tenants/ten_01/ip/stitches/stc_01/state': {
+        id: 'stc_01',
+        name: 'Alpha Updated',
+        description: 'Updated description',
+        tenant_id: 'ten_01',
+        workflow_id: 'workflow.sync_alpha_to_sink',
+        workflow_version: 1,
+        canonical_event_type: 'canonical.record_alpha.v1',
+        is_trigger: true,
+        idempotency_key_field: 'source_id',
+        is_active: false,
+      },
+      'DELETE /api/v1/tenants/ten_01/ip/stitches/stc_01': {},
       'POST /api/v1/tenants/ten_01/ip/stitches/dispatch': {
         started_run_ids: ['run_01'],
         deduplicated_run_ids: [],
@@ -567,6 +608,11 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
       true,
     );
     expect((await stitchRepo.listStitches('ten_01')).ok).toBe(true);
+    const getRes = await stitchRepo.getStitch('ten_01', 'stc_01');
+    expect(getRes.ok).toBe(true);
+    if (getRes.ok) {
+      expect(getRes.value.name).toBe('Alpha Pipeline');
+    }
     expect(
       (
         await stitchRepo.registerStitch('ten_01', {
@@ -579,6 +625,20 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
         })
       ).ok,
     ).toBe(true);
+    const updateRes = await stitchRepo.updateStitch('ten_01', 'stc_01', {
+      name: 'Alpha Updated',
+      description: 'Updated description',
+    });
+    expect(updateRes.ok).toBe(true);
+    if (updateRes.ok) {
+      expect(updateRes.value.name).toBe('Alpha Updated');
+    }
+    const toggleRes = await stitchRepo.toggleStitchState('ten_01', 'stc_01', false);
+    expect(toggleRes.ok).toBe(true);
+    if (toggleRes.ok) {
+      expect(toggleRes.value.isActive).toBe(false);
+    }
+    expect((await stitchRepo.deleteStitch('ten_01', 'stc_01')).ok).toBe(true);
     expect(
       (
         await stitchRepo.dispatchEvent('ten_01', {
@@ -589,7 +649,7 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     ).toBe(true);
     expect((await stitchRepo.listRuns('ten_01', { status: 'SUCCEEDED' })).ok).toBe(true);
     expect((await stitchRepo.getRun('ten_01', 'run_01')).ok).toBe(true);
-    expect(calls).toHaveLength(7);
+    expect(calls).toHaveLength(11);
   });
 
   it('maps HttpTraceRepository wire responses across all 7 methods', async () => {

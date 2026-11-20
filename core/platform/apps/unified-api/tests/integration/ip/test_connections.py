@@ -67,7 +67,7 @@ async def test_create_and_get_connection_lifecycle(
     assert connection_id.startswith("ip_conn_")
     assert created_conn["tenant_id"] == tenant_id
     assert created_conn["name"] == "Utility Main Grid Itron"
-    assert created_conn["status"] == "PENDING_AUTH"
+    assert created_conn["status"] == "ACTIVE"
 
     # Credentials must NEVER be returned in response DTO
     assert "raw_credentials" not in created_conn

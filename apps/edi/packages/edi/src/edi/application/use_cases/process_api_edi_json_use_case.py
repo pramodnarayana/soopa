@@ -32,7 +32,11 @@ class ProcessApiEdiJsonUseCase:
     Strictly follows Single Responsibility Principle and encapsulates business logic.
     """
 
-    def __init__(self, uow: DataPlaneUnitOfWorkPort, publisher: OutboxPublisherPort) -> None:
+    def __init__(
+        self,
+        uow: DataPlaneUnitOfWorkPort,
+        publisher: OutboxPublisherPort | None = None,
+    ) -> None:
         self.uow = uow
         self.extractor = MetadataExtractorService()
         self.publisher = publisher
@@ -119,13 +123,8 @@ class ProcessApiEdiJsonUseCase:
             # the DB unique constraint will raise a conflict which we catch and resolve
             # by looking up the already-persisted record.
             try:
-                envelopes = await self.uow.edi_jsons.save(edi_json_aggregate)
+                await self.uow.edi_jsons.save(edi_json_aggregate)
                 await self.uow.commit()
-                for env in envelopes:
-                    await self.publisher.publish(env)
-                    # Outbox marks as completed in the same transaction loop? No, Sweeper handles failure
-                    await self.uow.outbox.mark_completed(env.id)
-
             except IdempotencyConflictError:
                 if command.idempotency_key:
                     existing = await self.uow.edi_jsons.get_edi_json_by_idempotency_key(

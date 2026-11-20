@@ -67,12 +67,12 @@ class WorkerContainer:
     def _wire_events_consumer(self) -> None:
         allow_private_ips = self.settings.identity.allow_private_ips
         token_provider = ZitadelMachineTokenProvider(
-            api_url=self.settings.zitadel_api_url,
-            machine_key=self.settings.zitadel_machine_key,
+            api_url=self.settings.idp_api_url,
+            machine_key=self.settings.idp_machine_key,
             allow_private_ips=allow_private_ips,
         )
         zitadel_client = HttpClient(
-            base_url=self.settings.zitadel_api_url or None,
+            base_url=self.settings.idp_api_url or None,
             token_provider=token_provider,
             default_headers={"Accept": "application/json"},
             allow_private_ips=allow_private_ips,
@@ -97,6 +97,7 @@ class WorkerContainer:
             organization_provider=org_provider,
             user_identity_provider=idp_users,
             uow_factory=lambda: create_identity_sync_uow(self.db_provider.session),
+            control_plane_project_id=self.settings.control_plane_project_id,
         )
 
         self.events_dispatcher = IdentityEventDispatcher()

@@ -23,15 +23,20 @@ export const StitchDefinitionListWireSchema = z.array(StitchDefinitionWireSchema
 
 export const StitchWireSchema = z.object({
   id: z.string(),
+  name: z.string().optional().default(''),
+  description: z.string().optional().default(''),
+  mapping_spec_id: z.string().nullable().optional().default(null),
   tenant_id: z.string(),
-  workflow_id: z.string(),
-  workflow_version: z.number(),
+  target_workflow_id: z.string().optional(),
+  workflow_id: z.string().optional(),
+  workflow_version: z.number().optional().default(1),
   canonical_event_type: z.string(),
-  is_trigger: z.boolean(),
+  is_trigger: z.boolean().optional().default(true),
   condition_event_key: z.string().nullable().optional().default(null),
-  idempotency_key_field: z.string(),
+  idempotency_key_field: z.string().optional().default(''),
   concurrency_key_field: z.string().nullable().optional().default(null),
   resource_hint_field: z.string().nullable().optional().default(null),
+  filter_conditions: z.record(z.string(), z.unknown()).optional().default({}),
   is_active: z.boolean(),
 });
 

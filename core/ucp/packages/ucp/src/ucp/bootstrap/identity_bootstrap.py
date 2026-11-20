@@ -16,12 +16,9 @@ import structlog
 from database.models.identity import Role, Tenant, User, UserRole
 from identity.adapters.outbound.zitadel import ZitadelMachineAuthenticationError
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sharding.domain.constants import DatabaseShardStatus
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.sharding import DatabaseShard
-from ucp_models.subscriptions import App
 
 from ucp.domain.constants import LifecycleStatus, UcpIdPrefix
 
@@ -29,10 +26,6 @@ logger = structlog.get_logger(__name__)
 
 IDENTITY_SYSTEM_ORG_NAME = "ZITADEL"
 PLATFORM_ADMIN_ROLE_NAME = "PlatformAdmin"
-DEFAULT_ADMIN_EMAIL = "admin@flowwolf.io"
-LEGACY_ADMIN_EMAIL = "admin@soopa.ai"
-EDI_PRIMARY_SHARD_ID = "edi_shard_1"
-EDI_CORE_APP_ID = "app_edi_core"
 
 
 class ZitadelOrgDict(TypedDict, total=False):
@@ -86,23 +79,12 @@ class ZitadelAlignmentResult:
 
 
 @dataclass(frozen=True)
-class ShardSeedSpec:
-    """Generic database shard registration record seeded at platform bootstrap."""
-
-    shard_id: str
-    name: str
-    dsn: str
-
-
-@dataclass(frozen=True)
 class PlatformSeedConfig:
     """Canonical inputs required to bootstrap the platform control plane idempotently."""
 
     platform_org_id: str
     platform_admin_id: str
-    edi_shard_dsn: str = ""
-    edi_project_id: str = ""
-    extra_shards: tuple[ShardSeedSpec, ...] = ()
+    platform_admin_email: str
 
 
 @dataclass(frozen=True)
@@ -509,15 +491,17 @@ async def _seed_platform_admin(
     session: AsyncSession,
     platform_admin_id: str,
     platform_admin_role_id: str,
+    platform_admin_email: str,
 ) -> None:
     digest = hashlib.sha256(platform_admin_id.encode()).hexdigest()[:16]
     platform_user_id = f"{UcpIdPrefix.USER.value}_{digest}"
     user_role_id = f"{UcpIdPrefix.USER_ROLE.value}_{digest}"
+    clean_email = platform_admin_email.strip().lower()
 
     await session.execute(
         update(User)
         .where(
-            func.lower(User.email).in_([DEFAULT_ADMIN_EMAIL, LEGACY_ADMIN_EMAIL]),
+            func.lower(User.email) == clean_email,
             or_(User.idp_user_id != platform_admin_id, User.idp_user_id.is_(None)),
         )
         .values(idp_user_id=platform_admin_id, deleted_at=None, deleted_by=None)
@@ -528,7 +512,7 @@ async def _seed_platform_admin(
         .values(
             id=platform_user_id,
             idp_user_id=platform_admin_id,
-            email=DEFAULT_ADMIN_EMAIL,
+            email=clean_email,
             name="Platform Admin",
             status=LifecycleStatus.ACTIVE.value,
             deleted_at=None,
@@ -537,7 +521,7 @@ async def _seed_platform_admin(
         .on_conflict_do_update(
             index_elements=[User.idp_user_id],
             set_={
-                "email": DEFAULT_ADMIN_EMAIL,
+                "email": clean_email,
                 "name": "Platform Admin",
                 "status": LifecycleStatus.ACTIVE.value,
                 "deleted_at": None,
@@ -563,52 +547,8 @@ async def _seed_platform_admin(
         "platform_admin_user_seeded",
         user_id=actual_user_id,
         platform_admin_id=platform_admin_id,
+        email=clean_email,
     )
-
-
-async def _seed_shards(
-    session: AsyncSession,
-    edi_shard_dsn: str,
-    extra_shards: tuple[ShardSeedSpec, ...],
-) -> None:
-    shards_to_seed: list[ShardSeedSpec] = []
-    if edi_shard_dsn:
-        shards_to_seed.append(
-            ShardSeedSpec(
-                shard_id=EDI_PRIMARY_SHARD_ID,
-                name="EDI Primary Shard",
-                dsn=edi_shard_dsn,
-            )
-        )
-    shards_to_seed.extend(spec for spec in extra_shards if spec.dsn)
-
-    for spec in shards_to_seed:
-        await session.execute(
-            pg_insert(DatabaseShard)
-            .values(
-                id=spec.shard_id,
-                name=spec.name,
-                dsn=spec.dsn,
-                status=DatabaseShardStatus.ACTIVE.value,
-            )
-            .on_conflict_do_update(
-                index_elements=[DatabaseShard.id],
-                set_={
-                    "name": spec.name,
-                    "dsn": spec.dsn,
-                    "status": DatabaseShardStatus.ACTIVE.value,
-                },
-            )
-        )
-        logger.info("primary_shard_seeded", shard_id=spec.shard_id)
-
-
-async def _seed_edi_app(session: AsyncSession, edi_project_id: str) -> None:
-    if edi_project_id:
-        await session.execute(
-            update(App).where(App.id == EDI_CORE_APP_ID).values(idp_project_id=edi_project_id)
-        )
-        logger.info("edi_app_project_seeded", idp_project_id=edi_project_id)
 
 
 async def seed_platform_bootstrap(
@@ -616,7 +556,7 @@ async def seed_platform_bootstrap(
     session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
     config: PlatformSeedConfig,
 ) -> None:
-    """Idempotently seed sentinel tenant, canonical roles, platform admin, shards, and app links."""
+    """Idempotently seed sentinel tenant, canonical roles, and platform admin."""
     async with session_factory() as session:
         await _seed_platform_tenant(session, config.platform_org_id)
         platform_admin_role_id = await _seed_platform_roles(session)
@@ -624,7 +564,6 @@ async def seed_platform_bootstrap(
             session,
             config.platform_admin_id,
             platform_admin_role_id,
+            config.platform_admin_email,
         )
-        await _seed_shards(session, config.edi_shard_dsn, config.extra_shards)
-        await _seed_edi_app(session, config.edi_project_id)
         await session.commit()

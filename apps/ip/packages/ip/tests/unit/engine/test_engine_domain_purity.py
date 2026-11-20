@@ -136,9 +136,10 @@ def test_engine_container_defaults_remain_domain_agnostic() -> None:
     container = Container()
     container.config.allow_private_ips.from_value(False)
 
+    expected_protocol_connectors = {"http", "sftp", "kafka", "redpanda", "webhook"}
     catalog = container.catalog_registry()
     app_ids = {summary.app_id for summary in catalog.list_apps()}
-    assert app_ids == {"http", "sftp"}
+    assert app_ids == expected_protocol_connectors
 
     transformer_reg = container.transformer_registry()
     assert transformer_reg.list_transformers() == ()
@@ -147,7 +148,9 @@ def test_engine_container_defaults_remain_domain_agnostic() -> None:
     assert stitch_cat.list_stitches(tenant_id="ten_1") == ()
 
     provider = IpApiProvider()
-    assert {s.app_id for s in provider.get_catalog_registry().list_apps()} == {"http", "sftp"}
+    assert {
+        s.app_id for s in provider.get_catalog_registry().list_apps()
+    } == expected_protocol_connectors
     assert provider.create_transformer_registry().list_transformers() == ()
 
 

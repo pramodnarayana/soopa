@@ -2,6 +2,7 @@
 Domain Data Seeding Runner (Isolated Bootstrap Tasks)
 """
 
+import os
 import runpy
 from collections.abc import Callable
 from pathlib import Path
@@ -38,7 +39,12 @@ def execute_seed_script(script_relative_path: str) -> None:
     if not target_path.exists():
         raise FileNotFoundError(f"Seed script not found at path: {target_path}")
 
-    load_repo_env(repo_root=repo_root, override=False)
+    # Synchronize process environment with the active .env file on disk
+    # to eliminate stale environment variable inheritance in chained bootstrap commands.
+    fresh_env = load_repo_env(repo_root=repo_root)
+    for key, value in fresh_env.items():
+        os.environ.setdefault(key, value)
+
     logger.info("seed_script_started", script=script_relative_path)
     runpy.run_path(str(target_path), run_name="__main__")
     logger.info("seed_script_completed", script=script_relative_path)
@@ -63,6 +69,7 @@ def run_domain_seeds(
         script_executor("core/platform/apps/notification-jobs-worker/scripts/seed_jobs.py")
 
     if domain in ("edi", "all"):
+        script_executor("apps/edi/scripts/seed.py")
         script_executor("apps/edi/scripts/seed_jobs.py")
         script_executor("apps/edi/apps/edi-as2-server/scripts/seed.py")
 

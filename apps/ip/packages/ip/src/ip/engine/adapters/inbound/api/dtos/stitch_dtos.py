@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from seedwork.domain.types import JsonDict, JsonPrimitive
 
 
@@ -35,16 +36,28 @@ class RegisterStitchHttpRequest(BaseModel):
     """HTTP request DTO to register or update a Stitch for a tenant."""
 
     stitch_id: str | None = None
-    workflow_id: str = Field(..., min_length=1)
-    workflow_version: int = Field(default=1, ge=1)
+    name: str = Field(default="", max_length=255)
+    description: str = Field(default="")
+    mapping_spec_id: str | None = None
     canonical_event_type: str = Field(..., min_length=1)
+    target_workflow_id: str | None = None
+    workflow_id: str | None = None
+    workflow_version: int = 1
     is_trigger: bool = True
-    condition_event_key: str | None = None
-    idempotency_key_field: str = Field(default="id", min_length=1)
-    concurrency_key_field: str | None = None
-    resource_hint_field: str | None = None
+    idempotency_key_field: str = ""
+    concurrency_key_field: str = ""
     filter_conditions: dict[str, JsonPrimitive] = Field(default_factory=dict)
     is_active: bool = True
+
+    @model_validator(mode="after")
+    def resolve_workflow_ids(self) -> Self:
+        if not self.target_workflow_id and self.workflow_id:
+            self.target_workflow_id = self.workflow_id
+        elif not self.workflow_id and self.target_workflow_id:
+            self.workflow_id = self.target_workflow_id
+        if not self.target_workflow_id:
+            raise ValueError("target_workflow_id or workflow_id is required.")
+        return self
 
 
 class StitchHttpResponse(BaseModel):
@@ -52,16 +65,22 @@ class StitchHttpResponse(BaseModel):
 
     id: str
     tenant_id: str
-    workflow_id: str
-    workflow_version: int
     canonical_event_type: str
-    is_trigger: bool
-    condition_event_key: str | None = None
-    idempotency_key_field: str
-    concurrency_key_field: str | None = None
-    resource_hint_field: str | None = None
+    target_workflow_id: str = ""
+    workflow_id: str = ""
+    name: str = ""
+    description: str = ""
+    mapping_spec_id: str | None = None
     filter_conditions: dict[str, JsonPrimitive] = Field(default_factory=dict)
     is_active: bool
+
+    @model_validator(mode="after")
+    def sync_workflow_ids(self) -> Self:
+        if not self.target_workflow_id and self.workflow_id:
+            self.target_workflow_id = self.workflow_id
+        elif not self.workflow_id and self.target_workflow_id:
+            self.workflow_id = self.target_workflow_id
+        return self
 
 
 class TriggerStitchEventHttpRequest(BaseModel):
@@ -119,6 +138,22 @@ class StitchRunHttpResponse(BaseModel):
     steps: list[StitchStepRunHttpResponse] = Field(default_factory=list)
 
 
+class UpdateStitchHttpRequest(BaseModel):
+    """HTTP request DTO to update mutable properties of an existing Stitch."""
+
+    name: str | None = None
+    description: str | None = None
+    mapping_spec_id: str | None = None
+    filter_conditions: dict[str, JsonPrimitive] | None = None
+    is_active: bool | None = None
+
+
+class ToggleStitchStateHttpRequest(BaseModel):
+    """HTTP request DTO to explicitly set the activation state of a Stitch."""
+
+    is_active: bool
+
+
 __all__ = [
     "RegisterStitchHttpRequest",
     "StitchDefinitionHttpResponse",
@@ -126,6 +161,8 @@ __all__ = [
     "StitchNodeHttpResponse",
     "StitchRunHttpResponse",
     "StitchStepRunHttpResponse",
+    "ToggleStitchStateHttpRequest",
     "TriggerStitchEventHttpRequest",
     "TriggerStitchEventHttpResponse",
+    "UpdateStitchHttpRequest",
 ]

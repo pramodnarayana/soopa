@@ -55,11 +55,11 @@ async def test_client_authenticates_when_only_machine_key_is_configured(
 
     settings = get_settings()
     token_provider = ZitadelMachineTokenProvider(
-        api_url=settings.zitadel_api_url,
-        machine_key=settings.zitadel_machine_key,
+        api_url=settings.idp_api_url,
+        machine_key=settings.idp_machine_key,
     )
     client = HttpClient(
-        base_url=settings.zitadel_api_url,
+        base_url=settings.idp_api_url,
         token_provider=token_provider,
         default_headers={"Accept": "application/json"},
         allow_private_ips=True,

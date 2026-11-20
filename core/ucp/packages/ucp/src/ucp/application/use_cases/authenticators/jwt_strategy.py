@@ -9,7 +9,7 @@ from identity.application.authenticate_use_case import (
     authenticate_bearer_token,
 )
 from identity.domain.authentication_strategy import AuthenticationStrategyPort
-from identity.domain.identity_context import IdentityContext
+from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
@@ -88,37 +88,44 @@ class JwtStrategy(AuthenticationStrategyPort):
 
         return identity
 
+    async def _map_idp_tenant(
+        self, repo: TenantRepositoryPort, identity: IdentityContext, tid: str
+    ) -> str:
+        if tid in identity.tenant_mapping:
+            return identity.tenant_mapping[tid]
+        resolved = await repo.find_by_idp_tenant_id(tid)
+        if not resolved:
+            logger.error("tenant_idp_mapping_failed_unprovisioned", idp_tenant_id=tid)
+            raise TenantNotProvisionedError(tid)
+        identity.tenant_mapping[tid] = resolved.id
+        return resolved.id
+
     async def _resolve_tenant_mappings(
         self, repo: TenantRepositoryPort, identity: IdentityContext
     ) -> tuple[str | None, set[str]]:
         tenant_id = identity.tenant_id
 
         # 1. Map the primary tenant_id if present
-        if tenant_id and not tenant_id.startswith("ten_"):
-            resolved = await repo.find_by_idp_tenant_id(tenant_id)
-            if not resolved:
-                raise TenantNotProvisionedError(tenant_id)
-            tenant_id = resolved.id
-            identity.authorized_tenants.add(resolved.id)
+        if tenant_id and not tenant_id.startswith("ten_") and not tenant_id.startswith("iam_ten_"):
+            canonical_primary = await self._map_idp_tenant(repo, identity, tenant_id)
+            tenant_id = canonical_primary
+            identity.authorized_tenants.add(canonical_primary)
 
         # 2. Map all authorized tenants that are IdP IDs
-        mapped_tenants = set()
+        mapped_tenants: set[str] = set()
         for tid in identity.authorized_tenants:
             if not tid.startswith("iam_ten_") and not tid.startswith("ten_"):
-                resolved_t = await repo.find_by_idp_tenant_id(tid)
-                if resolved_t:
-                    mapped_tenants.add(resolved_t.id)
-                    mapped_tenants.add(tid)
-                    identity.tenant_mapping[tid] = resolved_t.id
-                    if not tenant_id:
-                        tenant_id = resolved_t.id
-                else:
-                    logger.error(
-                        "CRITICAL: IdP Tenant ID '%s' found in token but NOT found in local database!",
-                        tid,
-                    )
-                    raise TenantNotProvisionedError(tid)
+                canonical_id = await self._map_idp_tenant(repo, identity, tid)
+                mapped_tenants.add(canonical_id)
+                mapped_tenants.add(tid)
+                if not tenant_id:
+                    tenant_id = canonical_id
             else:
                 mapped_tenants.add(tid)
+                if not tenant_id:
+                    tenant_id = tid
+
+        if not tenant_id and PLATFORM_TENANT_ID in mapped_tenants:
+            tenant_id = PLATFORM_TENANT_ID
 
         return tenant_id, mapped_tenants

@@ -169,9 +169,9 @@ class Connection(AggregateRoot):
         fingerprint = compute_connection_fingerprint(tenant_id, app_id, endpoint_for_fingerprint)
         conn_id = cls.new_id()
         initial_status = (
-            ConnectionStatus.ACTIVE
-            if auth_type == AuthType.NO_AUTH
-            else ConnectionStatus.PENDING_AUTH
+            ConnectionStatus.PENDING_AUTH
+            if auth_type.requires_interactive_authorization
+            else ConnectionStatus.ACTIVE
         )
 
         instance = cls(

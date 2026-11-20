@@ -52,6 +52,13 @@ export function ActiveConnectionCard({
     };
   }, []);
 
+  const endpointSlug =
+    typeof connection.publicConfig?.endpoint_slug === 'string'
+      ? (connection.publicConfig.endpoint_slug as string).trim()
+      : connection.appId === 'webhook'
+        ? connection.id
+        : undefined;
+
   const handleCopyWebhook = async (): Promise<void> => {
     try {
       const webhookUrl = buildIngressWebhookUrl(
@@ -59,6 +66,7 @@ export function ActiveConnectionCard({
         tenantSlug,
         connection.appId,
         connection.id,
+        endpointSlug,
       );
       await navigator.clipboard.writeText(webhookUrl);
       setCopiedWebhook(true);
@@ -107,6 +115,19 @@ export function ActiveConnectionCard({
         </div>
         <StatusBadge label={connection.status} tone={mapConnectionStatusTone(connection.status)} />
       </header>
+
+      {endpointSlug ? (
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-indigo-500/20 bg-indigo-50/50 dark:bg-indigo-950/20 px-3 py-2 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="shrink-0 rounded bg-indigo-600/10 dark:bg-indigo-400/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+              POST
+            </span>
+            <span className="truncate font-mono text-[11px] text-foreground">
+              /api/v1/ingress/{tenantSlug}/{endpointSlug}
+            </span>
+          </div>
+        </div>
+      ) : null}
 
       <footer className="mt-5 flex items-center justify-between border-t border-border/60 pt-3">
         <StatusBadge label={connection.authType} tone={StatusTone.NEUTRAL} />

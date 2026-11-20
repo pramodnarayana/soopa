@@ -8,6 +8,10 @@ from collections.abc import AsyncIterator, Sequence
 from types import TracebackType
 
 import pytest
+from ip.engine.application.use_cases.connections.create_connection_use_case import (
+    CreateConnectionCommand,
+    CreateConnectionUseCase,
+)
 from ip.engine.application.use_cases.ingress.add_webhook_event_route_use_case import (
     AddWebhookEventRouteCommand,
     AddWebhookEventRouteUseCase,
@@ -24,7 +28,13 @@ from ip.engine.application.use_cases.ingress.rotate_webhook_secret_use_case impo
     RotateWebhookSecretCommand,
     RotateWebhookSecretUseCase,
 )
-from ip.engine.domain.exceptions import IpErrorCode, TenantShardNotFoundError
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import ConnectionStatus
+from ip.engine.domain.exceptions import (
+    DuplicateConnectionFingerprintError,
+    IpErrorCode,
+    TenantShardNotFoundError,
+)
 from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.domain.webhook.endpoint import WebhookEndpoint
 from ip.engine.domain.webhook.enums import PayloadSemantic, VerificationStrategy
@@ -41,6 +51,7 @@ from ip.engine.ports.outbound.uow import (
 from ip.engine.ports.outbound.webhook_endpoint_repository_port import (
     WebhookEndpointRepositoryPort,
 )
+from security.ports.cipher_port import CipherPort
 from seedwork.domain.exceptions import Result
 
 
@@ -70,6 +81,54 @@ class _InMemoryWebhookEndpointRepo(WebhookEndpointRepositoryPort):
         self.endpoints.pop(endpoint_id, None)
 
 
+class _InMemoryConnectionRepo(ConnectionRepositoryPort):
+    def __init__(self) -> None:
+        self.connections: dict[str, Connection] = {}
+
+    async def save(
+        self, connection: Connection
+    ) -> Result[Connection, DuplicateConnectionFingerprintError]:
+        self.connections[connection.id] = connection
+        return Result.ok(connection)
+
+    async def get_by_id(self, connection_id: str) -> Connection | None:
+        return self.connections.get(connection_id)
+
+    async def get_by_id_for_update(self, connection_id: str) -> Connection | None:
+        return self.connections.get(connection_id)
+
+    async def get_by_fingerprint(
+        self,
+        tenant_id: str,
+        fingerprint: str,
+    ) -> Connection | None:
+        return None
+
+    async def list_by_tenant(
+        self,
+        tenant_id: str,
+        status: ConnectionStatus | None = None,
+    ) -> Sequence[Connection]:
+        return list(self.connections.values())
+
+    async def delete(self, connection: Connection) -> None:
+        self.connections.pop(connection.id, None)
+
+
+class _FakeCipher(CipherPort):
+    def encrypt_str(self, text: str) -> str:
+        return f"enc_{text}"
+
+    def decrypt_str(self, ciphertext: str) -> str:
+        return ciphertext.removeprefix("enc_")
+
+    def encrypt_dict(self, data: dict[str, object]) -> bytes:
+        return b"encrypted_fake_bytes"
+
+    def decrypt_dict(self, encrypted_bytes: bytes) -> dict[str, object]:
+        return {}
+
+
 class _InMemoryInboundRecordRepo:
     def __init__(self) -> None:
         self.records: dict[str, InboundRecord] = {}
@@ -82,7 +141,7 @@ class _InMemoryInboundRecordRepo:
 
 
 class _FakeControlPlaneUoW(IpControlPlaneUnitOfWorkPort):
-    connections: ConnectionRepositoryPort
+    connections: _InMemoryConnectionRepo
     entities: ConnectionEntityRepositoryPort
     sync_runs: SyncRunRepositoryPort
     transformations: TransformationRepositoryPort
@@ -90,6 +149,7 @@ class _FakeControlPlaneUoW(IpControlPlaneUnitOfWorkPort):
     webhook_endpoints: _InMemoryWebhookEndpointRepo
 
     def __init__(self) -> None:
+        self.connections = _InMemoryConnectionRepo()
         self.webhook_endpoints = _InMemoryWebhookEndpointRepo()
 
     async def __aenter__(self) -> _FakeControlPlaneUoW:
@@ -336,3 +396,80 @@ async def test_receive_webhook_push_data_vs_command() -> None:
     res_bad = await receive_uc.execute(bad_auth_push)
     assert res_bad.is_err
     assert res_bad.unwrap_err().code == IpErrorCode.WEBHOOK_VERIFICATION_FAILED
+
+
+@pytest.mark.asyncio
+async def test_create_webhook_connection_with_modalities() -> None:
+    uow = _FakeControlPlaneUoW()
+    cipher = _FakeCipher()
+    use_case = CreateConnectionUseCase(uow=uow, cipher=cipher)
+
+    # 1. Test Option B: Explicit COMMAND Modality
+    cmd_command = CreateConnectionCommand(
+        tenant_id="tenant_grid",
+        app_id="webhook",
+        name="MDM Command Gateway",
+        auth_type="CUSTOM",
+        public_config={
+            "endpoint_slug": "oracle-mdm-commands",
+            "webhook_modality": "COMMAND",
+            "verification_strategy": "PUBLIC_UNAUTHENTICATED",
+        },
+        raw_credentials={},
+    )
+    res_cmd = await use_case.execute(cmd_command)
+    assert res_cmd.success is True
+    assert res_cmd.connection is not None
+
+    ep_cmd = await uow.webhook_endpoints.get_by_slug("tenant_grid", "oracle-mdm-commands")
+    assert ep_cmd is not None
+    assert len(ep_cmd.event_routes) == 1
+    assert ep_cmd.event_routes[0].payload_semantic == PayloadSemantic.COMMAND
+    assert ep_cmd.event_routes[0].target_pipeline_or_workflow_id == "oracle-mdm-commands_command"
+
+    # 2. Test Option B: Explicit DATA Modality
+    cmd_data = CreateConnectionCommand(
+        tenant_id="tenant_grid",
+        app_id="webhook",
+        name="MDM Telemetry Stream",
+        auth_type="CUSTOM",
+        public_config={
+            "endpoint_slug": "oracle-mdm-readings",
+            "webhook_modality": "DATA",
+            "verification_strategy": "PUBLIC_UNAUTHENTICATED",
+        },
+        raw_credentials={},
+    )
+    res_data = await use_case.execute(cmd_data)
+    assert res_data.success is True
+    assert res_data.connection is not None
+
+    ep_data = await uow.webhook_endpoints.get_by_slug("tenant_grid", "oracle-mdm-readings")
+    assert ep_data is not None
+    assert len(ep_data.event_routes) == 1
+    assert ep_data.event_routes[0].payload_semantic == PayloadSemantic.DATA
+    assert ep_data.event_routes[0].target_pipeline_or_workflow_id == "oracle-mdm-readings_pipeline"
+
+    # 3. Test Option A: DYNAMIC Modality with slug heuristics fallback
+    cmd_dyn = CreateConnectionCommand(
+        tenant_id="tenant_grid",
+        app_id="webhook",
+        name="MDM Universal Gateway",
+        auth_type="CUSTOM",
+        public_config={
+            "endpoint_slug": "oracle-mdm-extract-gateway",
+            "webhook_modality": "DYNAMIC",
+            "verification_strategy": "PUBLIC_UNAUTHENTICATED",
+        },
+        raw_credentials={},
+    )
+    res_dyn = await use_case.execute(cmd_dyn)
+    assert res_dyn.success is True
+    ep_dyn = await uow.webhook_endpoints.get_by_slug("tenant_grid", "oracle-mdm-extract-gateway")
+    assert ep_dyn is not None
+    # Since slug contains "extract", default route inferred is COMMAND
+    assert ep_dyn.event_routes[0].payload_semantic == PayloadSemantic.COMMAND
+    assert (
+        ep_dyn.event_routes[0].target_pipeline_or_workflow_id
+        == "oracle-mdm-extract-gateway_command"
+    )

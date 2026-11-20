@@ -25,7 +25,7 @@ from database.utils import (
 from dotenv import dotenv_values
 from drop_schemas import DOMAIN_SHARD_ENV_VARS
 from reconcile_schema_drift import RECONCILABLE_APP_DOMAINS
-from seedwork.infra.config import DEFAULT_ENV_FILE_NAME, ENV_FILE_SELECTOR_VAR, load_repo_env
+from seedwork.infra.config import DEFAULT_ENV_FILE_NAME, ENV_FILE_SELECTOR_VAR
 
 logger = structlog.get_logger(__name__)
 
@@ -575,7 +575,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parsed = parser.parse_args(argv)
 
     root_dir = Path(__file__).resolve().parents[3]
-    load_repo_env(repo_root=root_dir, override=False)
     try:
         asyncio.run(
             ensure_test_databases_ready(

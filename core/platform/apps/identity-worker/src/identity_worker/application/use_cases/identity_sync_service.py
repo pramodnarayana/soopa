@@ -5,7 +5,6 @@ from typing import Literal
 
 import structlog
 
-from identity_worker.domain.exceptions import IdentityProviderPortError
 from identity_worker.ports.outbound.identity_sync_repository_port import IdentitySyncUnitOfWorkPort
 from identity_worker.ports.outbound.organization_provider_port import OrganizationProviderPort
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
@@ -32,7 +31,7 @@ class StateConflictError(Exception):
 
 class IdentitySyncService:
     """
-    Pure business logic for synchronizing UCP domains (Tenants, Users)
+    Pure business logic for synchronizing platform control plane domains (Tenants, Users)
     to an external Identity Provider (e.g. Zitadel).
     """
 
@@ -43,10 +42,12 @@ class IdentitySyncService:
         uow_factory: typing.Callable[
             [], contextlib.AbstractAsyncContextManager[IdentitySyncUnitOfWorkPort]
         ],
+        control_plane_project_id: str | None = None,
     ) -> None:
         self.organization_provider = organization_provider
         self.user_identity_provider = user_identity_provider
         self.uow_factory = uow_factory
+        self.control_plane_project_id = control_plane_project_id
 
     async def _resolve_idp_tenant_id(self, tenant_id: str) -> str:
         """
@@ -88,12 +89,12 @@ class IdentitySyncService:
                     bound_logger.info("tenant_already_synced", org_id=tenant.idp_tenant_id)
                     return
 
-                org_id, grant_succeeded = await self.organization_provider.create_organization(
+                org_id = await self.organization_provider.create_organization(
                     tenant_id, tenant.name
                 )
-                if not grant_succeeded:
-                    raise IdentityProviderPortError(
-                        "Organization was created but its project grant could not be assigned"
+                if self.control_plane_project_id:
+                    await self.organization_provider.grant_project_to_organization(
+                        org_id, self.control_plane_project_id
                     )
 
                 await uow.repo.update_tenant_idp_mapping(tenant_id, org_id)
@@ -165,7 +166,7 @@ class IdentitySyncService:
         self, user_id: str, tenant_id: str, email: str, first_name: str, last_name: str, role: str
     ) -> None:
         """
-        Synchronizes a newly created UCP user to the Identity Provider.
+        Synchronizes a newly created tenant user to the Identity Provider.
         Creates the user and assigns the given role.
         """
         bound_logger = logger.bind(user_id=user_id, tenant_id=tenant_id, role=role)
@@ -209,6 +210,7 @@ class IdentitySyncService:
             user_id=idp_user_id,
             org_id=idp_tenant_id,
             role=role,
+            project_id=self.control_plane_project_id,
         )
         bound_logger.info(
             "identity_sync_existing_user_reconciled",
@@ -252,6 +254,7 @@ class IdentitySyncService:
                 user_id=created_idp_user_id,
                 org_id=idp_tenant_id,
                 role=role,
+                project_id=self.control_plane_project_id,
             )
             bound_logger.info(
                 "identity_sync_assign_role_successful",
@@ -320,7 +323,10 @@ class IdentitySyncService:
             resolved_idp_user_id = idp_user_id or await self._resolve_idp_user_id(user_id)
 
             await self.user_identity_provider.assign_tenant_role(
-                user_id=resolved_idp_user_id, org_id=idp_tenant_id, role=role
+                user_id=resolved_idp_user_id,
+                org_id=idp_tenant_id,
+                role=role,
+                project_id=self.control_plane_project_id,
             )
             bound_logger.info(
                 "identity_sync_assign_role_successful", idp_user_id=resolved_idp_user_id
@@ -349,7 +355,10 @@ class IdentitySyncService:
             bound_logger.debug("identity_sync_update_profile_successful")
 
             await self.user_identity_provider.update_tenant_role(
-                user_id=idp_user_id, org_id=idp_tenant_id, role=role
+                user_id=idp_user_id,
+                org_id=idp_tenant_id,
+                role=role,
+                project_id=self.control_plane_project_id,
             )
             bound_logger.debug("identity_sync_update_role_successful", role=role)
         except Exception:

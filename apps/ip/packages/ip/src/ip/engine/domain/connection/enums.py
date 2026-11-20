@@ -23,6 +23,17 @@ class AuthType(StrEnum):
     OAUTH2_CLIENT_CREDENTIALS = "OAUTH2_CLIENT_CREDENTIALS"
     MTLS = "MTLS"
     CUSTOM = "CUSTOM"
+    SASL_PLAINTEXT = "SASL_PLAINTEXT"
+    SASL_SSL = "SASL_SSL"
+
+    @property
+    def requires_interactive_authorization(self) -> bool:
+        """Indicates whether this auth type requires a 3-legged browser redirect dance (OAuth2).
+
+        Direct credential protocols (Kafka SASL, SFTP, RabbitMQ, API Keys, Basic Auth,
+        or unauthenticated PLAINTEXT) do not require out-of-band user consent.
+        """
+        return self == AuthType.OAUTH2
 
 
 class ApiKeyPlacement(StrEnum):
@@ -48,6 +59,23 @@ class ConnectorPropertyKey(StrEnum):
     CLIENT_SECRET = "client_secret"  # noqa: S105 - Enum key for property schema definition, not a secret
     SCOPES = "scopes"
     TIMEOUT_SECONDS = "timeout_seconds"
+    BOOTSTRAP_SERVERS = "bootstrap_servers"
+    SECURITY_PROTOCOL = "security_protocol"
+    SASL_MECHANISM = "sasl_mechanism"
+    DEFAULT_TOPIC = "default_topic"
+    PARTITION_KEY_FIELD = "partition_key_field"
+    ENDPOINT_SLUG = "endpoint_slug"
+    VERIFICATION_STRATEGY = "verification_strategy"
+    SECRET_TOKEN = "secret_token"  # noqa: S105 - Enum key for configuration property name, not a secret
+    WEBHOOK_MODALITY = "webhook_modality"
+
+
+class WebhookModality(StrEnum):
+    """Execution modality of a webhook connection endpoint."""
+
+    DYNAMIC = "DYNAMIC"
+    COMMAND = "COMMAND"
+    DATA = "DATA"
 
 
 class PropertyType(StrEnum):
@@ -76,6 +104,9 @@ class EngineConnectorId(StrEnum):
 
     HTTP = "http"
     SFTP = "sftp"
+    KAFKA = "kafka"
+    REDPANDA = "redpanda"
+    WEBHOOK = "webhook"
 
 
 class CatalogCategory(StrEnum):
@@ -87,6 +118,15 @@ class CatalogCategory(StrEnum):
     STORAGE = "STORAGE"
     SANDBOX = "SANDBOX"
     ITSM = "ITSM"
+    MESSAGING = "MESSAGING"
+
+
+class ConnectorRole(StrEnum):
+    """Architectural role of the connector in the integration topology."""
+
+    OUTBOUND_CLIENT = "OUTBOUND_CLIENT"
+    INBOUND_GATEWAY = "INBOUND_GATEWAY"
+    BIDIRECTIONAL = "BIDIRECTIONAL"
 
 
 class ConnectorArchitectureType(StrEnum):

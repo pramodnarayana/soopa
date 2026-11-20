@@ -9,6 +9,7 @@ Strictly adheres to the First-Class Error Handling standard:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -40,6 +41,7 @@ class IpErrorCode(StrEnum):
     REMOTE_ERROR = "REMOTE_ERROR"
     NETWORK_ERROR = "NETWORK_ERROR"
     SFTP_CONNECTION_FAILED = "SFTP_CONNECTION_FAILED"
+    KAFKA_CONNECTION_FAILED = "KAFKA_CONNECTION_FAILED"
     CATALOG_DISCOVERY_FAILED = "CATALOG_DISCOVERY_FAILED"
     MANIFEST_PARSE_ERROR = "MANIFEST_PARSE_ERROR"
     UNSUPPORTED_WRITE_OPERATION = "UNSUPPORTED_WRITE_OPERATION"
@@ -63,14 +65,21 @@ class IpErrorCode(StrEnum):
     REPLICA_RECORD_NOT_FOUND = "REPLICA_RECORD_NOT_FOUND"
     NORMALIZATION_FAILED = "NORMALIZATION_FAILED"
     STITCH_DEFINITION_NOT_FOUND = "STITCH_DEFINITION_NOT_FOUND"
+    STITCH_NOT_FOUND = "STITCH_NOT_FOUND"
+    MAPPING_SPEC_NOT_FOUND = "MAPPING_SPEC_NOT_FOUND"
+    MAPPING_SPEC_IN_USE = "MAPPING_SPEC_IN_USE"
+    CONNECTION_POLICY_NOT_FOUND = "CONNECTION_POLICY_NOT_FOUND"
+    STITCH_TASK_CONFIG_NOT_FOUND = "STITCH_TASK_CONFIG_NOT_FOUND"
     STITCH_RUN_NOT_FOUND = "STITCH_RUN_NOT_FOUND"
     TRACE_NOT_FOUND = "TRACE_NOT_FOUND"
     REPLAY_STAGE_NOT_AVAILABLE = "REPLAY_STAGE_NOT_AVAILABLE"
+    PIPELINE_COMPILATION_FAILED = "PIPELINE_COMPILATION_FAILED"
     INVALID_REPLAY_PAYLOAD = "INVALID_REPLAY_PAYLOAD"
     INTERVAL_BATCH_NOT_FOUND = "INTERVAL_BATCH_NOT_FOUND"
     INTERVAL_RECONCILIATION_IMBALANCE = "INTERVAL_RECONCILIATION_IMBALANCE"
     INTERVAL_MALFORMED_BATCH = "INTERVAL_MALFORMED_BATCH"
     INTERVAL_ROLLUP_QUERY_FAILED = "INTERVAL_ROLLUP_QUERY_FAILED"
+    CODEC_ERROR = "CODEC_ERROR"
     VALIDATION_FAILED = "VALIDATION_FAILED"
     EXTERNAL_API_ERROR = "EXTERNAL_API_ERROR"
     INTERNAL_ERROR = "INTERNAL_ERROR"
@@ -135,6 +144,46 @@ class ConnectionEntityNotFoundError(IpError):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ConnectionPolicyNotFoundError(IpError):
+    """Returned when an operational policy does not exist for a connection."""
+
+    connection_id: str = ""
+    code: IpErrorCode = IpErrorCode.CONNECTION_POLICY_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Configure an operational policy for the connection."
+
+    @classmethod
+    def for_connection(cls, connection_id: str) -> ConnectionPolicyNotFoundError:
+        return cls(
+            connection_id=connection_id,
+            message=f"Operational policy for connection '{connection_id}' was not found.",
+            details={"connection_id": connection_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class StitchTaskConfigNotFoundError(IpError):
+    """Returned when runtime task execution policy is not found for a stitch DAG node."""
+
+    stitch_id: str = ""
+    node_key: str = ""
+    code: IpErrorCode = IpErrorCode.STITCH_TASK_CONFIG_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Configure a runtime execution policy for the DAG node."
+
+    @classmethod
+    def for_node(cls, stitch_id: str, node_key: str) -> StitchTaskConfigNotFoundError:
+        return cls(
+            stitch_id=stitch_id,
+            node_key=node_key,
+            message=f"Task runtime config for node '{node_key}' on stitch '{stitch_id}' was not found.",
+            details={"stitch_id": stitch_id, "node_key": node_key},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
 class ConnectionEntityDisabledError(IpError):
     """Returned when a sync run is requested or executed for a disabled connection entity."""
 
@@ -194,6 +243,25 @@ class ConnectionPendingAuthError(IpError):
             connection_id=connection_id,
             message=f"Connection '{connection_id}' is pending authentication.",
             details={"connection_id": connection_id, "status": "PENDING_AUTH"},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class PipelineCompilationError(IpError):
+    """Returned when universal pipeline synthesis fails."""
+
+    pipeline_id: str = ""
+    code: IpErrorCode = IpErrorCode.PIPELINE_COMPILATION_FAILED
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 400
+    remediation: str | None = "Verify solution function registrations and pipeline parameters."
+
+    @classmethod
+    def with_reason(cls, pipeline_id: str, reason: str) -> PipelineCompilationError:
+        return cls(
+            pipeline_id=pipeline_id,
+            message=f"Pipeline compilation failed for '{pipeline_id}': {reason}",
+            details={"pipeline_id": pipeline_id, "reason": reason},
         )
 
 
@@ -387,6 +455,19 @@ class SftpConnectionError(IpError):
     http_status: int = 502
     remediation: str | None = (
         "Verify the SFTP host, port, SSH credentials, and expected host key fingerprint."
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class KafkaConnectionError(IpError):
+    """Returned when a Kafka connection, metadata, or produce/consume operation fails."""
+
+    bootstrap_servers: str = ""
+    code: IpErrorCode = IpErrorCode.KAFKA_CONNECTION_FAILED
+    disposition: FailureDisposition = FailureDisposition.RETRY
+    http_status: int = 502
+    remediation: str | None = (
+        "Verify Kafka bootstrap servers, SASL/SSL credentials, client certificates, and cluster reachability."
     )
 
 
@@ -736,6 +817,70 @@ class StitchDefinitionNotFoundError(IpError):
 
 
 @dataclass(frozen=True, kw_only=True)
+class StitchNotFoundError(IpError):
+    """Returned when a requested Stitch cannot be found."""
+
+    stitch_id: str = ""
+    code: IpErrorCode = IpErrorCode.STITCH_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Verify the stitch_id exists and belongs to the active tenant."
+
+    @classmethod
+    def for_id(cls, stitch_id: str) -> StitchNotFoundError:
+        return cls(
+            stitch_id=stitch_id,
+            message=f"Stitch '{stitch_id}' was not found.",
+            details={"stitch_id": stitch_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class MappingSpecNotFoundError(IpError):
+    """Returned when a requested declarative MappingSpec cannot be found."""
+
+    mapping_spec_id: str = ""
+    code: IpErrorCode = IpErrorCode.MAPPING_SPEC_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Verify the mapping_spec_id exists and belongs to the active tenant."
+
+    @classmethod
+    def for_id(cls, mapping_spec_id: str) -> MappingSpecNotFoundError:
+        return cls(
+            mapping_spec_id=mapping_spec_id,
+            message=f"MappingSpec '{mapping_spec_id}' was not found.",
+            details={"mapping_spec_id": mapping_spec_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class MappingSpecInUseError(IpError):
+    """Returned when attempting to delete a MappingSpec that is still referenced by active stitches."""
+
+    mapping_spec_id: str = ""
+    referencing_stitch_ids: tuple[str, ...] = ()
+    code: IpErrorCode = IpErrorCode.MAPPING_SPEC_IN_USE
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 409
+    remediation: str | None = (
+        "Reassign or delete the referencing stitches before deleting this mapping spec."
+    )
+
+    @classmethod
+    def for_stitches(cls, mapping_spec_id: str, stitch_ids: Sequence[str]) -> MappingSpecInUseError:
+        return cls(
+            mapping_spec_id=mapping_spec_id,
+            referencing_stitch_ids=tuple(stitch_ids),
+            message=(
+                f"MappingSpec '{mapping_spec_id}' cannot be deleted because it is in use by "
+                f"stitches: {', '.join(stitch_ids)}."
+            ),
+            details={"mapping_spec_id": mapping_spec_id, "stitch_ids": list(stitch_ids)},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
 class StitchRunNotFoundError(IpError):
     """Returned when a requested stitch WorkflowRun cannot be found on the tenant shard."""
 
@@ -872,16 +1017,35 @@ class IntervalRollupQueryError(IpError):
     remediation: str | None = "Check interval rollup store health and query parameters."
 
 
+@dataclass(frozen=True, kw_only=True)
+class CodecError(IpError):
+    """Payload decoding or serialization failure."""
+
+    code: IpErrorCode = IpErrorCode.CODEC_ERROR
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 400
+
+    @classmethod
+    def for_field(cls, field_name: str, reason: str = "Missing or invalid field") -> CodecError:
+        return cls(message=f"Codec error on '{field_name}': {reason}")
+
+    @classmethod
+    def with_message(cls, message: str) -> CodecError:
+        return cls(message=message)
+
+
 __all__ = [
     "ActiveSyncRunAlreadyExistsError",
     "AuthenticationFailedError",
     "CatalogDiscoveryError",
+    "CodecError",
     "ConnectionCheckError",
     "ConnectionDeactivatedError",
     "ConnectionEntityDisabledError",
     "ConnectionEntityNotFoundError",
     "ConnectionNotFoundError",
     "ConnectionPendingAuthError",
+    "ConnectionPolicyNotFoundError",
     "ConnectorNotFoundError",
     "DuplicateConnectionFingerprintError",
     "DuplicateExternalEventError",
@@ -901,7 +1065,10 @@ __all__ = [
     "InvalidSyncRunStateError",
     "IpError",
     "IpErrorCode",
+    "KafkaConnectionError",
     "ManifestParseFailureError",
+    "MappingSpecInUseError",
+    "MappingSpecNotFoundError",
     "NormalizationFailedError",
     "PayloadNotFoundError",
     "RateLimitExceededError",
@@ -910,7 +1077,9 @@ __all__ = [
     "Result",
     "SftpConnectionError",
     "StitchDefinitionNotFoundError",
+    "StitchNotFoundError",
     "StitchRunNotFoundError",
+    "StitchTaskConfigNotFoundError",
     "StreamNotFoundError",
     "SyncRunNotFoundError",
     "TenantShardNotFoundError",

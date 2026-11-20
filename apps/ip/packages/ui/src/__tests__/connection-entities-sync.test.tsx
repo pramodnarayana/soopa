@@ -5,10 +5,11 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ipQueryKeys } from '../application/query-keys';
-import { buildIngressWebhookUrl } from '../domain/connection';
+import { buildCleanIngressEndpointUrl, buildIngressWebhookUrl } from '../domain/connection';
 import {
   AuthType,
   ConnectionHandshakeStatus,
+  ConnectorRole,
   EntitySyncFrom,
   EntitySyncSchedule,
   SyncRunKind,
@@ -32,6 +33,7 @@ import {
 import { resolveConnectionOverviewExtension } from '../presentation/connections/connection-overview-extensions';
 import { IpConnectionDetailPage } from '../presentation/connections/IpConnectionDetailPage';
 import { SimulatorEntitiesSection } from '../presentation/connections/SimulatorEntitiesSection';
+import { SpecFormRenderer } from '../presentation/connections/SpecFormRenderer';
 import { SubscribedEntitySchemaPanel } from '../presentation/connections/SubscribedEntitySchemaPanel';
 import { IpUIProvider } from '../provider/IpUIProvider';
 import {
@@ -302,6 +304,111 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(() =>
       buildIngressWebhookUrl('https://api.soopa.local', '', 'universal_simulator', 'ip_conn_99'),
     ).toThrow('buildIngressWebhookUrl requires non-empty tenantSlug, appId, and connectionId.');
+  });
+
+  it('renders ActiveConnectionCard for inbound webhook with clean /api/v1/ingress URL badge', () => {
+    const qc = createEntitiesQueryClient();
+    const webhookConnection = {
+      ...SEED_CONNECTION,
+      id: 'conn_webhook_01',
+      appId: 'webhook',
+      name: 'Oracle MDM Webhook Ingress',
+      publicConfig: {
+        endpoint_slug: 'oracle-mdm',
+        verification_strategy: 'HMAC_SHA256',
+      },
+    };
+
+    const html = renderEntitiesTab(
+      <ActiveConnectionCard
+        connection={webhookConnection}
+        catalogApp={{
+          appId: 'webhook',
+          displayName: 'Webhook',
+          category: 'API',
+          authType: 'CUSTOM',
+          runtimeArchitecture: 'DECLARATIVE_HTTP',
+          description: 'Passive HTTP ingress gateway',
+          iconUrl: null,
+          role: ConnectorRole.INBOUND_GATEWAY,
+        }}
+        appIcon={<span>W</span>}
+        baseUrl="https://api.soopa.local"
+        tenantSlug="acme-tenant"
+        onOpenDetail={() => undefined}
+        onRequestDelete={() => undefined}
+      />,
+      qc,
+    );
+
+    expect(html).toContain('Oracle MDM Webhook Ingress');
+    expect(html).toContain('/api/v1/ingress/acme-tenant/oracle-mdm');
+    expect(html).toContain('POST');
+    expect(html).toContain('Copy Webhook');
+
+    expect(
+      buildCleanIngressEndpointUrl('https://api.soopa.local', 'acme-tenant', 'oracle-mdm'),
+    ).toBe('https://api.soopa.local/api/v1/ingress/acme-tenant/oracle-mdm');
+
+    expect(
+      buildIngressWebhookUrl(
+        'https://api.soopa.local',
+        'acme-tenant',
+        'webhook',
+        'conn_webhook_01',
+        'oracle-mdm',
+      ),
+    ).toBe('https://api.soopa.local/api/v1/ingress/acme-tenant/oracle-mdm');
+  });
+
+  it('renders SpecFormRenderer for endpoint_slug with live reactive URL preview with POST badge', () => {
+    const html = renderToStaticMarkup(
+      <SpecFormRenderer
+        properties={[
+          {
+            name: 'endpoint_slug',
+            label: 'Endpoint Slug',
+            type: 'shortText',
+            required: true,
+            description: 'Unique URL slug for this ingress endpoint.',
+            defaultValue: 'oracle-mdm',
+            options: [],
+            oauthConfig: null,
+          },
+          {
+            name: 'verification_strategy',
+            label: 'Verification Strategy',
+            type: 'dropdown',
+            required: true,
+            description: 'Cryptographic signature strategy.',
+            defaultValue: 'HMAC_SHA256',
+            options: [
+              { label: 'HMAC SHA-256', value: 'HMAC_SHA256' },
+              { label: 'None', value: 'PUBLIC_UNAUTHENTICATED' },
+            ],
+            oauthConfig: null,
+          },
+        ]}
+        values={{
+          endpoint_slug: 'oracle-mdm',
+          verification_strategy: 'HMAC_SHA256',
+        }}
+        onChangeValue={() => undefined}
+        tenantSlug="ercot"
+        baseUrl="https://api.soopa.io"
+      />,
+    );
+
+    expect(html).toContain('Webhook URL');
+    expect(html).toContain('https://api.soopa.io/api/v1/ingress/ercot/');
+    expect(html).toContain('oracle-mdm');
+    expect(html).toContain('Copy URL');
+    expect(html).toContain('POST');
+  });
+
+  it('verifies webhook connections do not mount redundant overview extensions', () => {
+    const ext = resolveConnectionOverviewExtension('webhook');
+    expect(ext).toBeNull();
   });
 
   it('activates ActiveConnectionCard keyboard shortcut only when card root is the direct event target', () => {

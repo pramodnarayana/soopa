@@ -52,10 +52,10 @@ from ip.solutions.domains.energy.canonical import (
     CanonicalMeterReadingDTO,
     EnergyEntityType,
 )
-from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
-from ip.solutions.domains.energy.transformers.ami.meter_reading import (
-    AmiMeterReadingTransformerV1,
+from ip.solutions.domains.energy.landis.meter_reading_transformer import (
+    AmiMeterReadingTransformer,
 )
+from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
 from seedwork.domain.types import JsonDict
 from sqlalchemy import select
 
@@ -148,7 +148,7 @@ async def test_full_l1_to_l5_energy_pipeline_vertical_slice_on_postgres(
     assert replica is not None
 
     # 3. Layer 3 & 4: Transform to NormalizedRecord + CanonicalMeterReadingDTO + GlobalEntityMap
-    transformer = AmiMeterReadingTransformerV1()
+    transformer = AmiMeterReadingTransformer()
     replica_snapshot = ReplicaSnapshot(
         id=replica.id,
         connection_id=conn.id,

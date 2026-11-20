@@ -25,6 +25,7 @@ QUERY_CANDIDATES: Final[tuple[str, ...]] = (
     "action",
     "event_type",
     "type",
+    "stream",
 )
 
 

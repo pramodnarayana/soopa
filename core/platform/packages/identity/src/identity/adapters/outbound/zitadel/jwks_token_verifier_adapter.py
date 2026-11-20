@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import httpx
@@ -21,7 +21,7 @@ logger = structlog.get_logger(__name__)
 @dataclass(frozen=True)
 class ZitadelTokenVerifierOptions:
     issuer: str
-    audience: str | list[str]
+    audience: str | Sequence[str]
     jwks_url: str | None = None
     platform_org_id: str | None = None
     # Optional Host header override for JWKS fetching.
@@ -76,19 +76,53 @@ class ZitadelTokenVerifierAdapter(TokenVerifierPort):
             raise TokenValidationError(f"Invalid token claims: {e}") from e
 
     async def _decode_jwt_payload(self, token: str) -> tuple[dict[str, object], JsonDict]:
+        clean_audience: str | list[str]
+        if isinstance(self._options.audience, str):
+            clean_audience = self._options.audience.strip()
+        else:
+            clean_audience = [aud.strip() for aud in self._options.audience if aud and aud.strip()]
+
         try:
             signing_key = await self._get_signing_key(token)
             raw_claims: JsonDict = jwt.decode(
                 token,
                 signing_key.key,
                 algorithms=["RS256"],
-                audience=self._options.audience,
+                audience=clean_audience,
                 issuer=self._options.issuer,
             )
             decoded: dict[str, object] = dict(raw_claims)
             return decoded, raw_claims
         except jwt.PyJWTError as e:
-            logger.exception("jwt_decode_failed", exc_info=e)
+            unverified_claims: dict[str, object] = {}
+            unverified_headers: dict[str, object] = {}
+            try:
+                unverified_claims = dict(
+                    jwt.decode(
+                        token,
+                        options={
+                            "verify_signature": False,
+                            "verify_aud": False,
+                            "verify_iss": False,
+                            "verify_exp": False,
+                        },
+                    )
+                )
+                unverified_headers = dict(jwt.get_unverified_header(token))
+            except (jwt.PyJWTError, ValueError) as parse_err:
+                logger.debug("unverified_jwt_inspection_failed", parse_error=str(parse_err))
+
+            logger.exception(
+                "jwt_decode_failed",
+                exc_info=e,
+                error=str(e),
+                configured_audience=clean_audience,
+                configured_issuer=self._options.issuer,
+                token_aud=unverified_claims.get("aud"),
+                token_iss=unverified_claims.get("iss"),
+                token_sub=unverified_claims.get("sub"),
+                token_kid=unverified_headers.get("kid"),
+            )
             raise TokenValidationError(str(e)) from e
         except Exception as e:
             logger.exception("signing_key_or_jwt_decode_failed", exc_info=e)
@@ -109,15 +143,36 @@ class ZitadelTokenVerifierAdapter(TokenVerifierPort):
         except (HttpError, ValueError, TypeError) as e:
             logger.error("failed_to_fetch_userinfo", exc_info=e)
 
+    @staticmethod
+    def _remap_org_in_role_dict(
+        raw_roles: object, target_org_id: str, replacement_org_id: str
+    ) -> None:
+        if not isinstance(raw_roles, dict):
+            return
+        for orgs in raw_roles.values():
+            if isinstance(orgs, dict) and target_org_id in orgs:
+                orgs[replacement_org_id] = orgs.pop(target_org_id)
+
     def _map_platform_org_sentinel(self, payload: dict[str, object]) -> None:
-        if not self._options.platform_org_id:
+        platform_org_id = self._options.platform_org_id
+        if not platform_org_id:
             return
-        roles_dict = payload.get(ZitadelClaims.PROJECT_ROLES)
-        if not isinstance(roles_dict, dict):
-            return
-        for orgs in roles_dict.values():
-            if isinstance(orgs, dict) and self._options.platform_org_id in orgs:
-                orgs[PLATFORM_TENANT_ID] = orgs[self._options.platform_org_id]
+
+        # 1. Record IdP platform org ID -> canonical PLATFORM_TENANT_ID mapping
+        mapping = payload.setdefault("tenant_mapping", {})
+        if isinstance(mapping, dict):
+            mapping[platform_org_id] = PLATFORM_TENANT_ID
+
+        # 2. Normalize top-level tenant claims if they match platform_org_id
+        for claim_key in ("tenant_id", ZitadelClaims.ORG_ID, "organization_id"):
+            if payload.get(claim_key) == platform_org_id:
+                payload[claim_key] = PLATFORM_TENANT_ID
+
+        # 3. Normalize roles mappings
+        self._remap_org_in_role_dict(
+            payload.get(ZitadelClaims.PROJECT_ROLES), platform_org_id, PLATFORM_TENANT_ID
+        )
+        self._remap_org_in_role_dict(payload.get("roles"), platform_org_id, PLATFORM_TENANT_ID)
 
     @staticmethod
     def _collect_org_role_map(
@@ -209,6 +264,11 @@ class ZitadelTokenVerifierAdapter(TokenVerifierPort):
                 if isinstance(r_vals, list):
                     tenant_roles[str(t_key)] = [str(r) for r in r_vals]
 
+        tenant_mapping_raw = payload.get("tenant_mapping")
+        tenant_mapping: dict[str, str] = {}
+        if isinstance(tenant_mapping_raw, Mapping):
+            tenant_mapping = {str(k): str(v) for k, v in tenant_mapping_raw.items()}
+
         return TokenClaims(
             sub=sub,
             iss=iss,
@@ -221,6 +281,7 @@ class ZitadelTokenVerifierAdapter(TokenVerifierPort):
             roles=roles,
             permissions=permissions,
             tenant_roles=tenant_roles,
+            tenant_mapping=tenant_mapping,
             raw_claims=raw_claims,
         )
 

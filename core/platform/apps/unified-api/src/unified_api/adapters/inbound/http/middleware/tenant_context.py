@@ -23,6 +23,14 @@ _TENANT_EXEMPT_PATHS: frozenset[str] = frozenset(
     }
 )
 
+# Route prefixes that are platform-level administrative endpoints without tenant scoping.
+_TENANT_EXEMPT_PREFIXES: tuple[str, ...] = (
+    "/api/v1/as2/",
+    "/api/v1/edi-tools/",
+    "/api/v1/edi_json",
+    "/api/v1/endpoints",
+)
+
 
 @dataclass(frozen=True)
 class _RouteTenantParams:
@@ -121,12 +129,25 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             or identity.tenant_id
         )
 
+        is_platform_admin = (
+            "PlatformAdmin" in identity.roles
+            or PLATFORM_TENANT_ID in identity.authorized_tenants
+            or identity.is_platform_admin
+        )
+
+        # For platform administrators performing global platform management where no specific
+        # tenant is targeted in the path, query, or headers, default to the Sentinel Platform Tenant.
+        if not active_tenant_id and is_platform_admin:
+            active_tenant_id = PLATFORM_TENANT_ID
+
         # Always set it on state so we never throw AttributeError later
         request.state.tenant_id = active_tenant_id
 
-        # ONLY exempt exact-match routes that inherently lack a tenant context
+        # ONLY exempt exact-match or prefix-matched routes that inherently lack a tenant context
         normalized_path = request.url.path.rstrip("/")
-        is_exempt = normalized_path in self.tenant_exempt_paths
+        is_exempt = normalized_path in self.tenant_exempt_paths or any(
+            normalized_path.startswith(prefix) for prefix in _TENANT_EXEMPT_PREFIXES
+        )
 
         if not active_tenant_id:
             if is_exempt or route_params.tenant_slug is not None:
@@ -142,10 +163,6 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             )
 
         # 2. Validate Authorization
-        is_platform_admin = (
-            "PlatformAdmin" in identity.roles or PLATFORM_TENANT_ID in identity.authorized_tenants
-        )
-
         if (
             not is_platform_admin
             and active_tenant_id not in identity.authorized_tenants

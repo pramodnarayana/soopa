@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
+import os
 from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlparse
@@ -17,6 +18,8 @@ from urllib.request import url2pathname
 
 import structlog
 import uvicorn
+from seedwork.infra.config import load_repo_env
+from seedwork.infra.repo_root import find_repo_root
 
 logger = structlog.get_logger(__name__)
 
@@ -95,6 +98,18 @@ def main() -> None:
     args = parser.parse_args()
 
     reload_dirs = collect_installed_editable_reload_dirs()
+
+    try:
+        repo_root = find_repo_root(Path.cwd())
+        active_env = load_repo_env(repo_root=repo_root)
+        for env_key, env_val in active_env.items():
+            os.environ[env_key] = env_val
+        if str(repo_root) not in reload_dirs:
+            reload_dirs.append(str(repo_root))
+            reload_dirs.sort()
+    except (RuntimeError, OSError, ValueError) as exc:
+        logger.warning("dev_server_env_sync_skipped", error=str(exc))
+
     logger.info(
         "local_dev_server_starting",
         app=args.app,
@@ -108,6 +123,8 @@ def main() -> None:
         port=args.port,
         reload=True,
         reload_dirs=reload_dirs,
+        reload_includes=[".env", "versions.env", "*.py"],
+        reload_excludes=[".git", "node_modules", ".venv", ".turbo", "dist", "__pycache__"],
     )
 
 

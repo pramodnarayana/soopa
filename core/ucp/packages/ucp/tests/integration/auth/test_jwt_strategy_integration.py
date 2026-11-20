@@ -6,7 +6,7 @@ from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRe
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
 from identity.application.authenticate_use_case import TenantNotProvisionedError
 from identity.domain.constants import UserStatus
-from identity.domain.identity_context import TokenClaims
+from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
 from identity.domain.user import User
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
 from seedwork.utils import generate_id
@@ -176,3 +176,69 @@ async def test_jwt_strategy_passes_unmapped_claims(jwt_strategy, db_session):
     identity = await strategy.authenticate("fake_token")
 
     assert identity.tenant_id is None
+
+
+@pytest.mark.asyncio
+async def test_jwt_strategy_platform_admin_with_sentinel_tenant_mapping(jwt_strategy, db_session):
+    idp_org_id = "400262792403222531"
+    idp_user_id = "admin_user_123"
+
+    user_repo = SqlAlchemyUserRepository(db_session)
+    user = User(
+        id=generate_id(DomainIdPrefix.USER),
+        email=f"admin_{idp_user_id}@flowwolf.io",
+        name="Platform Admin",
+        idp_user_id=idp_user_id,
+        status=UserStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await user_repo.save(user)
+    await db_session.flush()
+
+    strategy = jwt_strategy(
+        TokenClaims(
+            sub=idp_user_id,
+            iss="https://zitadel",
+            aud="test",
+            exp=9999999999,
+            tenant_id=PLATFORM_TENANT_ID,
+            authorized_tenants={PLATFORM_TENANT_ID},
+            tenant_roles={PLATFORM_TENANT_ID: ["PlatformAdmin"]},
+            tenant_mapping={idp_org_id: PLATFORM_TENANT_ID},
+            roles=["PlatformAdmin"],
+        )
+    )
+
+    identity = await strategy.authenticate("fake_token")
+
+    assert identity.tenant_id == PLATFORM_TENANT_ID
+    assert PLATFORM_TENANT_ID in identity.authorized_tenants
+    assert identity.is_platform_admin is True
+    assert identity.tenant_mapping[idp_org_id] == PLATFORM_TENANT_ID
+
+
+@pytest.mark.asyncio
+async def test_jwt_strategy_premapped_tenant_skips_database_lookup(jwt_strategy, db_session):
+    # If the token verifier adapter pre-mapped an IdP org to a canonical ID,
+    # JwtStrategy resolves it from identity.tenant_mapping without querying the database.
+    idp_org_id = "idp_custom_org_456"
+    canonical_id = "ten_custom_resolved"
+
+    strategy = jwt_strategy(
+        TokenClaims(
+            sub="user_abc",
+            iss="https://zitadel",
+            aud="test",
+            exp=9999999999,
+            tenant_id=idp_org_id,
+            authorized_tenants={idp_org_id},
+            tenant_mapping={idp_org_id: canonical_id},
+            roles=[],
+        )
+    )
+
+    identity = await strategy.authenticate("fake_token")
+
+    assert identity.tenant_id == canonical_id
+    assert canonical_id in identity.authorized_tenants

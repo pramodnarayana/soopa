@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
@@ -5,10 +6,18 @@ from scheduler.domain.scheduled_job import ScheduledJob
 
 
 class JobRepositoryPort(Protocol):
-    async def sweep_stuck_jobs(self, lock_lease_ms: int) -> int: ...
+    async def sweep_stuck_jobs(
+        self,
+        lock_lease_ms: int,
+        active_namespaces: Sequence[str] | None = None,
+    ) -> int: ...
 
     async def claim_next_jobs(
-        self, worker_id: str, limit: int, lock_lease_ms: int
+        self,
+        worker_id: str,
+        limit: int,
+        lock_lease_ms: int,
+        active_namespaces: Sequence[str] | None = None,
     ) -> list[ScheduledJob]: ...
 
     async def reschedule(self, job_id: str, worker_id: str, next_run_at: datetime) -> None: ...

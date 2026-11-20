@@ -17,6 +17,7 @@ class TokenClaims:
     roles: list[str] = field(default_factory=list)
     permissions: list[str] = field(default_factory=list)
     tenant_roles: Mapping[str, list[str]] = field(default_factory=dict)
+    tenant_mapping: Mapping[str, str] = field(default_factory=dict)
     raw_claims: JsonDict = field(default_factory=dict)
 
 
@@ -70,12 +71,16 @@ def identity_context_from_claims(
         tenant_mapping: Optional mapping from IdP org IDs to canonical tenant IDs.
                        Used for platform-admin role validation.
     """
+    combined_mapping = dict(claims.tenant_mapping)
+    if tenant_mapping:
+        combined_mapping.update(tenant_mapping)
+
     return IdentityContext(
         subject=claims.sub,
         tenant_id=claims.tenant_id,
         organization_id=claims.organization_id,
         authorized_tenants=claims.authorized_tenants,
-        tenant_mapping=dict(tenant_mapping) if tenant_mapping else {},
+        tenant_mapping=combined_mapping,
         roles=tuple(claims.roles),
         permissions=tuple(claims.permissions),
         tenant_roles=claims.tenant_roles,

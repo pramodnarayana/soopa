@@ -18,7 +18,7 @@ class IdentityAwsSettings(PlatformAwsSettings):
 
 class PlatformIdentityProvisioningSettings(PlatformIdentitySettings):
     """
-    Settings required for mutating Zitadel (used ONLY by Identity Worker).
+    Settings required for provisioning identity resources (used ONLY by Identity Worker).
     """
 
     model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
@@ -26,11 +26,11 @@ class PlatformIdentityProvisioningSettings(PlatformIdentitySettings):
     platform_org_id: str = Field(
         validation_alias="IDENTITY_PLATFORM_ORG_ID",
         min_length=1,
-        description="The Zitadel organization ID for the platform (Flowwolf).",
+        description="The primary platform organization ID.",
     )
     api_url: str = Field(
         validation_alias="IDENTITY_API_URL",
-        description="The base URL of the Zitadel API.",
+        description="The base URL of the IdP API.",
         default="",
     )
     machine_key: str = Field(
@@ -41,6 +41,11 @@ class PlatformIdentityProvisioningSettings(PlatformIdentitySettings):
     default_user_password: str = Field(
         validation_alias="IDENTITY_DEFAULT_USER_PASSWORD",
         description="Default password for seeded/synced users.",
+    )
+    control_plane_project_id: str = Field(
+        validation_alias="IDENTITY_UCP_PROJECT_ID",
+        default="",
+        description="The identity project defining platform tenant roles (e.g. TenantAdmin, TenantUser).",
     )
 
 
@@ -54,11 +59,11 @@ class AppSettings(BaseSettings):
 
     app_env: str = Field(validation_alias="ENV", default="production")
 
-    database: PlatformDatabaseSettings = Field(default_factory=lambda: PlatformDatabaseSettings())
-    aws: IdentityAwsSettings = Field(default_factory=lambda: IdentityAwsSettings())
-    sqs: SqsSettings = Field(default_factory=lambda: SqsSettings())
+    database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
+    aws: IdentityAwsSettings = Field(default_factory=IdentityAwsSettings)
+    sqs: SqsSettings = Field(default_factory=SqsSettings)
     identity: PlatformIdentityProvisioningSettings = Field(
-        default_factory=lambda: PlatformIdentityProvisioningSettings()
+        default_factory=PlatformIdentityProvisioningSettings
     )
 
     @computed_field
@@ -88,33 +93,33 @@ class AppSettings(BaseSettings):
 
     @computed_field
     @property
-    def zitadel_api_url(self) -> str:
+    def idp_api_url(self) -> str:
         return self.identity.api_url
 
     @computed_field
     @property
-    def zitadel_machine_key(self) -> str:
+    def idp_machine_key(self) -> str:
         return self.identity.machine_key
 
     @computed_field
     @property
-    def zitadel_ucp_project_id(self) -> str:
-        return self.identity.ucp_project_id
-
-    @computed_field
-    @property
-    def zitadel_default_user_password(self) -> str:
+    def idp_default_user_password(self) -> str:
         return self.identity.default_user_password
 
     @computed_field
     @property
-    def zitadel_tenant_role_group(self) -> str:
+    def tenant_role_group(self) -> str:
         return self.identity.tenant_role_group
 
     @computed_field
     @property
-    def zitadel_platform_org_id(self) -> str:
+    def platform_org_id(self) -> str:
         return self.identity.platform_org_id
+
+    @computed_field
+    @property
+    def control_plane_project_id(self) -> str:
+        return self.identity.control_plane_project_id
 
 
 @lru_cache

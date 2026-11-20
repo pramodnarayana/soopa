@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable, Mapping
 from decimal import Decimal
 
@@ -69,8 +70,13 @@ from ip.engine.domain.constants import DEFAULT_MAX_CAUSATION_DEPTH
 from ip.engine.domain.dispatch.enums import FailureDisposition
 from ip.engine.domain.enums import IpEventType
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.stream_definition import StreamDefinition
 from ip.engine.ports.outbound.record_extractor_port import RecordExtractorRegistry
-from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
+from ip.engine.ports.outbound.tiered_storage_port import (
+    TieredStoragePort,
+    TieredStorageResultDTO,
+)
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
 from orchestration.domain.exceptions import WorkflowError
 from pubsub.enums import ConsumerAction
@@ -272,6 +278,123 @@ class IpOrchestratorRouteRegistry:
             ),
         )
 
+    @staticmethod
+    def _is_command_stream(
+        stream_name: str,
+        stream_def: StreamDefinition | None = None,
+    ) -> bool:
+        norm = stream_name.strip().lower()
+        if norm in ("historical_extract_requests", "extract_requests", "commands"):
+            return True
+        if norm.endswith(("_requests", "_commands", "_command")):
+            return True
+        if any(k in norm for k in ("command", "extract_request", "extract_req")):
+            return True
+        return bool(stream_def is not None and stream_def.stream_type == "COMMAND")
+
+    async def _resolve_inbound_record_payload(
+        self,
+        record: InboundRecord,
+        tenant_id: str,
+    ) -> JsonDict:
+        payload: JsonDict = dict(record.request_body or {})
+        if not record.request_s3_key or self._tiered_storage is None:
+            return payload
+
+        storage_dto = TieredStorageResultDTO(
+            is_inlined=False,
+            raw_payload=None,
+            s3_key=record.request_s3_key,
+            payload_size_bytes=record.request_size_bytes,
+            payload_sha256=record.request_sha256,
+        )
+        retrieved = await self._tiered_storage.retrieve(storage_dto)
+        if retrieved.is_ok and retrieved.value is not None:
+            try:
+                parsed_payload = json.loads(retrieved.value.decode("utf-8"))
+                if isinstance(parsed_payload, dict):
+                    return dict(parsed_payload)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                logger.error(
+                    "ip_orchestrator_command_payload_decode_failed",
+                    tenant_id=tenant_id,
+                    record_id=record.id,
+                    s3_key=record.request_s3_key,
+                )
+        return payload
+
+    async def _execute_command_inbound_stream(
+        self,
+        envelope: EventEnvelope,
+        dto: IpInboundRecordChunkPayloadDTO,
+        shard_id: str,
+        shard_dsn: str,
+    ) -> ConsumerAction:
+        if self._stitch_dispatcher is None:
+            logger.info(
+                "ip_orchestrator_command_stream_skipped_no_stitch_dispatcher",
+                event_id=envelope.id,
+                tenant_id=dto.tenant_id,
+                stream_name=dto.stream_name,
+            )
+            return ConsumerAction.ACK
+
+        async with self._dp_uow_provider.get_data_plane_uow(
+            dto.tenant_id, shard_id, shard_dsn
+        ) as uow:
+            inbound_records = await uow.inbound_records.list_by_range(
+                dto.tenant_id,
+                batch_id=dto.batch_id,
+                range_start=dto.range_start,
+                range_end=dto.range_end,
+                record_ids=dto.record_ids,
+            )
+
+        if not inbound_records:
+            logger.error(
+                "ip_orchestrator_command_records_not_found",
+                event_id=envelope.id,
+                tenant_id=dto.tenant_id,
+                stream_name=dto.stream_name,
+            )
+            return ConsumerAction.ACK
+
+        started_any = False
+        for record in inbound_records:
+            payload = await self._resolve_inbound_record_payload(record, dto.tenant_id)
+            command_payload: JsonDict = dict(payload)
+            command_payload.setdefault("source_inbound_record_id", record.id)
+            command_payload.setdefault("connection_id", record.connection_id)
+            command_payload.setdefault("stream_name", record.stream_name)
+
+            dispatch_cmd = DispatchCanonicalEventToStitchesCommand(
+                tenant_id=dto.tenant_id,
+                canonical_event_type=f"command.{dto.stream_name}",
+                event_id=f"cmd:{record.id}",
+                payload=command_payload,
+                trace_id=dto.trace_id or record.trace_id,
+                correlation_id=dto.correlation_id or record.correlation_id,
+            )
+            res = await self._stitch_dispatcher.execute(dispatch_cmd)
+            if res.is_err:
+                logger.error(
+                    "ip_orchestrator_command_stitch_dispatch_failed",
+                    tenant_id=dto.tenant_id,
+                    record_id=record.id,
+                    stream_name=dto.stream_name,
+                    error=res.unwrap_err().message,
+                )
+                return ConsumerAction.NACK
+            if res.value is not None and (
+                res.value.started_run_ids or res.value.signalled_step_ids
+            ):
+                started_any = True
+
+        if started_any and self._stitch_worker_tick is not None:
+            await self._drain_inline_stitch_ticks()
+
+        return ConsumerAction.ACK
+
     async def _execute_inbound_record_created_chunk(
         self,
         envelope: EventEnvelope,
@@ -285,6 +408,9 @@ class IpOrchestratorRouteRegistry:
             if self._stream_definition_resolver is not None
             else None
         )
+
+        if self._is_command_stream(dto.stream_name, stream_def):
+            return await self._execute_command_inbound_stream(envelope, dto, shard_id, shard_dsn)
 
         if self._auto_bind_transformation_use_case is not None:
             auto_bind_res = await self._auto_bind_transformation_use_case.execute(

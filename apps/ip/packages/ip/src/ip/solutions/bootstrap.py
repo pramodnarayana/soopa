@@ -64,7 +64,7 @@ from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainReposit
 from ip.solutions.domains.energy.writers import create_default_canonical_writer_registry
 from ip.solutions.domains.tms.ports import TMS_DOMAIN_REPOSITORY_KEY
 from ip.solutions.domains.tms.repository import SqlAlchemyTmsDomainRepository
-from ip.solutions.stitches.registry_loader import (
+from ip.solutions.registry_loader import (
     create_default_workflow_definition_registry,
     register_default_stitches,
 )

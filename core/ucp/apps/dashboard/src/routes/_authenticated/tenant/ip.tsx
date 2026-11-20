@@ -69,6 +69,39 @@ function IpLayout() {
           search: connectionId ? { connectionId } : {},
         });
       },
+      toStitchMapper: (params) => {
+        void navigate({
+          to: '/tenant/ip/stitches/mapper',
+          search: {
+            sourceConnectionId: params?.sourceConnectionId,
+            stream: params?.streamName,
+            targetConnectionId: params?.targetConnectionId,
+            targetTopic: params?.targetTopic,
+          },
+        });
+      },
+      toRouteStitchMapper: (params) => {
+        void navigate({
+          to: '/tenant/ip/stitches/mapper',
+          search: {
+            sourceConnectionId: params?.sourceConnectionId,
+            stream: params?.streamName,
+            targetConnectionId: params?.targetConnectionId,
+            targetTopic: params?.targetTopic,
+          },
+        });
+      },
+      toRouteStitchWorkbench: (params) => {
+        void navigate({
+          to: '/tenant/ip/stitches/mapper',
+          search: {
+            sourceConnectionId: params?.sourceConnectionId,
+            stream: params?.streamName,
+            targetConnectionId: params?.targetConnectionId,
+            targetTopic: params?.targetTopic,
+          },
+        });
+      },
     }),
     [navigate],
   );

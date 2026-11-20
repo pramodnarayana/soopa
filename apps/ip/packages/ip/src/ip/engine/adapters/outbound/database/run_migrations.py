@@ -8,7 +8,7 @@ from pathlib import Path
 import structlog
 from alembic import command
 from alembic.config import Config
-from seedwork.infra.config import load_repo_env, load_settings_safely
+from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 
@@ -317,7 +317,6 @@ def find_ip_script_location(domain: str) -> Path:
 
 def run_migrations() -> None:
     """Execute Integration Platform Control Plane (global) and Data Plane (tenant shard) migrations."""
-    load_repo_env(override=False)
     settings = load_settings_safely(PlatformDatabaseSettings)
     effective_overrides = collect_ip_shard_overrides(os.environ, settings.shard_overrides)
 

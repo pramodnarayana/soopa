@@ -114,6 +114,7 @@ class WorkflowDefinition:
     nodes: tuple[NodeDefinition, ...]
     default_priority: Priority = Priority.REALTIME
     workflow_concurrency: ConcurrencyPolicy | None = None
+    workflow_sla: timedelta | None = None
     description: str = ""
 
     def get_node(self, node_key: str) -> NodeDefinition | None:
@@ -167,6 +168,10 @@ class WorkflowDefinition:
         if not self.nodes:
             return DagValidationError.with_reason(
                 self.workflow_id, "Workflow must contain at least one node."
+            )
+        if self.workflow_sla is not None and self.workflow_sla.total_seconds() <= 0:
+            return DagValidationError.with_reason(
+                self.workflow_id, "workflow_sla must be a positive duration."
             )
         return None
 

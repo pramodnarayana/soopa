@@ -40,11 +40,11 @@ pytestmark = [
 def zitadel_http_client() -> HttpClient:
     settings = get_settings()
     token_provider = ZitadelMachineTokenProvider(
-        api_url=settings.zitadel_api_url,
-        machine_key=settings.zitadel_machine_key,
+        api_url=settings.idp_api_url,
+        machine_key=settings.idp_machine_key,
     )
     return HttpClient(
-        base_url=settings.zitadel_api_url,
+        base_url=settings.idp_api_url,
         token_provider=token_provider,
         default_headers={"Accept": "application/json"},
         allow_private_ips=True,
@@ -130,9 +130,7 @@ async def test_identity_sync_service_user_created(
 ):
     # 1. Setup DbTenant and fully provision it
     tenant_id = generate_id("id")
-    org_id, _ = await zitadel_orgs_adapter.create_organization(
-        tenant_id, "Test Sync Service User Org"
-    )
+    org_id = await zitadel_orgs_adapter.create_organization(tenant_id, "Test Sync Service User Org")
 
     try:
         user_id = generate_id("id")
@@ -191,7 +189,7 @@ async def test_identity_sync_service_app_subscribed_and_unsubscribed(
     zitadel_projects_adapter: ZitadelProjectsAdapter,
 ):
     tenant_id = generate_id("id")
-    org_id, _ = await zitadel_orgs_adapter.create_organization(tenant_id, "Test Sync App Sub Org")
+    org_id = await zitadel_orgs_adapter.create_organization(tenant_id, "Test Sync App Sub Org")
 
     try:
         async with db_session_factory() as session:
@@ -204,8 +202,12 @@ async def test_identity_sync_service_app_subscribed_and_unsubscribed(
             session.add(tenant)
             await session.commit()
 
-        # We use the UCP project ID for the test since we know it exists in the test environment
-        idp_project_id = zitadel_projects_adapter.ucp_project_id
+        # We resolve the project ID from environment
+        idp_project_id = (
+            os.environ.get("IDENTITY_UCP_PROJECT_ID")
+            or os.environ.get("IDENTITY_IDP_PROJECT_ID")
+            or ""
+        )
 
         # Subscribe
         await identity_sync_service.handle_app_subscribed(tenant_id, idp_project_id)

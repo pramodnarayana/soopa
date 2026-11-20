@@ -3,15 +3,15 @@ from typing import Literal, cast
 
 from identity import PlatformIdentitySettings
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infra.config import load_settings_safely
+from pydantic_settings import SettingsConfigDict
+from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
     PlatformDatabaseSettings,
     PlatformOtelSettings,
 )
 
 
-class PlatformSecretsSettings(BaseSettings):
+class PlatformSecretsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     mount_path: str = Field(validation_alias="SECRETS_MOUNT_PATH", default="/mnt/secrets")
@@ -20,7 +20,7 @@ class PlatformSecretsSettings(BaseSettings):
     )
 
 
-class ApiSettings(BaseSettings):
+class ApiSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     env: Literal["development", "staging", "production"] = Field(

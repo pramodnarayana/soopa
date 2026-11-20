@@ -14,7 +14,7 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
     ResolvedConnectionCredentialsDTO,
     TokenManagerService,
 )
-from ip.engine.domain.connection.enums import AuthType, ConnectionStatus
+from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.domain.connection.stream_schema import (
     StreamField,
     StreamSchema,
@@ -163,8 +163,6 @@ class DiscoverCatalogUseCase(DiscoverCatalogExecutorPort):
         if (
             resolved.connection is not None
             and resolved.connection.status == ConnectionStatus.PENDING_AUTH
-            and resolved.auth_type == AuthType.API_KEY
-            and not resolved.connection.encrypted_credentials
         ):
             pending_err = ConnectionPendingAuthError.for_connection(connection_id)
             logger.error(

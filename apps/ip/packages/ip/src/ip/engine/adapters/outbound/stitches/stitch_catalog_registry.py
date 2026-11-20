@@ -78,5 +78,17 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
                 return stitch
         return None
 
+    def unregister_stitch(
+        self,
+        *,
+        tenant_id: str,
+        stitch_id: str,
+    ) -> bool:
+        before = len(self._stitches)
+        self._stitches = [
+            s for s in self._stitches if not (s.id == stitch_id and s.tenant_id in (tenant_id, "*"))
+        ]
+        return len(self._stitches) < before
+
 
 __all__ = ["InMemoryStitchCatalogRegistry"]

@@ -24,3 +24,14 @@ class ForeignKeyViolationError(DatabaseError):
     def __init__(self, message: str, constraint_name: str | None = None):
         super().__init__(message)
         self.constraint_name = constraint_name
+
+
+class DatabaseConfigurationError(DatabaseError):
+    """
+    Raised when the database connection configuration is invalid, empty, or unparseable.
+    Prevents leaking raw third-party driver syntax errors into domain / application layers.
+    """
+
+    def __init__(self, message: str, url: str = "") -> None:
+        super().__init__(message)
+        self.url = url

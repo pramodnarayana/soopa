@@ -157,3 +157,51 @@ def test_claim_and_execute_job_max_retries():
 
     updated_job = repo.jobs["job-fail-max"]
     assert updated_job.status == JobStatus.FAILED
+
+
+def test_claim_and_execute_job_filters_by_active_namespaces():
+    repo = FakeJobRepository()
+    job_edi = ScheduledJob(
+        id="job-edi-1",
+        name="edi_job",
+        target_queue="test_queue",
+        app_namespace="edi",
+        payload={},
+        status=JobStatus.PENDING,
+        cron_expression=None,
+        interval_seconds=None,
+        retry_count=0,
+        max_retries=3,
+        next_run_at=datetime.now(UTC),
+    )
+    job_ip = ScheduledJob(
+        id="job-ip-1",
+        name="ip_job",
+        target_queue="test_queue",
+        app_namespace="ip",
+        payload={},
+        status=JobStatus.PENDING,
+        cron_expression=None,
+        interval_seconds=None,
+        retry_count=0,
+        max_retries=3,
+        next_run_at=datetime.now(UTC),
+    )
+    repo.jobs[job_edi.id] = job_edi
+    repo.jobs[job_ip.id] = job_ip
+
+    dispatcher = FakeJobDispatcher()
+    use_case = JobExecutorUseCase(
+        uow_factory=lambda: FakeSchedulerUow(repo),
+        dispatcher=dispatcher,
+        active_namespaces=["platform", "edi"],
+    )
+
+    asyncio.run(use_case.execute(worker_id="worker-1", limit=10, lock_lease_ms=5000))
+
+    # Only EDI job was claimed and completed
+    assert len(dispatcher.dispatched_jobs) == 1
+    assert dispatcher.dispatched_jobs[0].id == "job-edi-1"
+    assert repo.jobs["job-edi-1"].status == JobStatus.COMPLETED
+    # IP job remains untouched in PENDING state
+    assert repo.jobs["job-ip-1"].status == JobStatus.PENDING

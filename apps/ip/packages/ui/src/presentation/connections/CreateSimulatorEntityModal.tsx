@@ -28,7 +28,6 @@ import type { JsonRecord } from '../../domain/enums';
 import {
   PushCadenceMode,
   type PushCadenceModeValue,
-  SIMULATOR_STREAM_LIMITS,
   type SimulatorBlueprintJson,
   type SimulatorEntity,
   SimulatorVelocityMode,

@@ -24,6 +24,7 @@ import {
   Plus,
   Search,
   Server,
+  Webhook,
   Zap,
 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
@@ -35,7 +36,11 @@ import {
 } from '../../application/use-connection-queries';
 import type { CatalogAppSummary } from '../../domain/catalog';
 import { type Connection, groupActiveConnectionsByApp } from '../../domain/connection';
-import { CatalogAppCategory, ConnectorRuntimeArchitecture } from '../../domain/enums';
+import {
+  CatalogAppCategory,
+  ConnectorRuntimeArchitecture,
+  EngineConnectorId,
+} from '../../domain/enums';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
@@ -85,7 +90,15 @@ function deriveCategoryPills(
   return [{ label: 'All', value: '' }, ...dynamicPills];
 }
 
-function getAppIcon(category?: string | null, runtimeArchitecture?: string | null) {
+function getAppIcon(
+  category?: string | null,
+  runtimeArchitecture?: string | null,
+  appId?: string | null,
+) {
+  const normalizedAppId = appId?.toLowerCase();
+  if (normalizedAppId === EngineConnectorId.WEBHOOK || normalizedAppId?.includes('webhook')) {
+    return <Webhook className="h-5 w-5 text-indigo-500" />;
+  }
   const cat = category?.toUpperCase();
   const arch = runtimeArchitecture?.toUpperCase();
   if (cat === CatalogAppCategory.API || arch === ConnectorRuntimeArchitecture.GENERIC_HTTP)
@@ -270,7 +283,7 @@ export function IpConnectionsPage({
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60">
-                          {getAppIcon(app.category, app.runtimeArchitecture)}
+                          {getAppIcon(app.category, app.runtimeArchitecture, app.appId)}
                         </div>
                         <div>
                           <h3 className="font-semibold text-foreground text-sm leading-tight">
@@ -364,7 +377,11 @@ export function IpConnectionsPage({
                     key={conn.id}
                     connection={conn}
                     catalogApp={catalogApp}
-                    appIcon={getAppIcon(catalogApp?.category, catalogApp?.runtimeArchitecture)}
+                    appIcon={getAppIcon(
+                      catalogApp?.category,
+                      catalogApp?.runtimeArchitecture,
+                      conn.appId,
+                    )}
                     baseUrl={baseUrl}
                     tenantSlug={tenantSlug}
                     onOpenDetail={(id) => navigation.toConnectionDetail(id)}

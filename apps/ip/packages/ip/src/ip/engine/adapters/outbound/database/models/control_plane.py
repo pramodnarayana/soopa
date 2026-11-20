@@ -13,7 +13,9 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -206,7 +208,7 @@ class StitchRecord(IpGlobalBase):
             "tenant_id",
             "canonical_event_type",
         ),
-        Index("ix_ip_stitches_workflow", "workflow_id", "workflow_version"),
+        Index("ix_ip_stitches_target_workflow", "target_workflow_id"),
         Index(
             "uq_ip_stitches_concrete_id",
             "id",
@@ -218,19 +220,61 @@ class StitchRecord(IpGlobalBase):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    workflow_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    workflow_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     canonical_event_type: Mapped[str] = mapped_column(String(128), nullable=False)
-    is_trigger: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    condition_event_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    idempotency_key_field: Mapped[str] = mapped_column(String(128), nullable=False, default="id")
-    concurrency_key_field: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    resource_hint_field: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    target_workflow_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="", server_default=text("''")
+    )
+    description: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=text("''")
+    )
+    mapping_spec_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     filter_conditions: Mapped[JsonDict] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
         server_default=text("'{}'::jsonb"),
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MappingSpecRecord(IpGlobalBase):
+    """Database record representation of the ip.mapping_specs table."""
+
+    __tablename__ = "mapping_specs"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "target_connection_id",
+            "target_entity_name",
+            "version",
+            name="uq_ip_mapping_specs_tenant_target_version",
+        ),
+        Index("idx_ip_mapping_specs_lookup", "tenant_id", "source_type", "target_connection_id"),
+        {"schema": "ip"},
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=text("''")
+    )
+    source_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_connection_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("ip.connections.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    target_entity_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    rules: Mapped[list[JsonDict]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -347,11 +391,95 @@ class WebhookEventRouteRecord(IpGlobalBase):
     endpoint: Mapped[WebhookEndpointRecord] = relationship(back_populates="routes")
 
 
+class ConnectionPolicyRecord(IpGlobalBase):
+    """Database record representation of the ip.connection_policies table."""
+
+    __tablename__ = "connection_policies"
+    __table_args__ = (
+        Index("idx_ip_conn_policies_lookup", "tenant_id", "connection_id"),
+        {"schema": "ip"},
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    connection_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("ip.connections.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    max_query_window_days: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    max_query_window_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    min_query_window_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    max_entities_per_call: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    max_records_per_batch: Mapped[int] = mapped_column(Integer, nullable=False, default=10000)
+    supports_wildcard_queries: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_concurrency: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    rate_limit_rpm: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    cooldown_seconds_between_calls: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
+    blackout_cron_schedule: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    blackout_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    vendor_quirks: Mapped[JsonDict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class StitchTaskConfigRecord(IpGlobalBase):
+    """Database record representation of the ip.stitch_task_configs table."""
+
+    __tablename__ = "stitch_task_configs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["stitch_id", "tenant_id"],
+            ["ip.stitches.id", "ip.stitches.tenant_id"],
+            ondelete="CASCADE",
+            name="fk_ip_stitch_task_configs_stitch",
+        ),
+        UniqueConstraint(
+            "tenant_id", "stitch_id", "node_key", name="uq_ip_stitch_task_config_node"
+        ),
+        Index("idx_ip_stitch_task_configs_lookup", "tenant_id", "stitch_id", "node_key"),
+        {"schema": "ip"},
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    stitch_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    node_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    heartbeat_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    initial_delay_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
+    backoff_multiplier: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
+    max_delay_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=60.0)
+    queue_name: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    max_in_flight_tasks: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    failure_disposition: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="RETRY_THEN_QUARANTINE"
+    )
+    quarantine_stream_name: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, default="dead_letter_records"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 __all__ = [
     "ConnectionEntityRecord",
+    "ConnectionPolicyRecord",
     "ConnectionRecord",
     "IpOutboxRecord",
+    "MappingSpecRecord",
     "StitchRecord",
+    "StitchTaskConfigRecord",
     "SyncRunRecord",
     "TransformationRecord",
     "WebhookEndpointRecord",

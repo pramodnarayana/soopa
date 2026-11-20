@@ -1,7 +1,9 @@
-import type {
-  AuthTypeValue,
-  ConnectorPropertyTypeValue,
-  ConnectorRuntimeArchitectureValue,
+import {
+  type AuthTypeValue,
+  type ConnectorPropertyTypeValue,
+  ConnectorRole,
+  type ConnectorRoleValue,
+  type ConnectorRuntimeArchitectureValue,
 } from './enums';
 
 export interface DropdownOption {
@@ -35,6 +37,7 @@ export interface CatalogAppSummary {
   readonly description: string | null;
   readonly runtimeArchitecture: ConnectorRuntimeArchitectureValue;
   readonly iconUrl: string | null;
+  readonly role?: ConnectorRoleValue;
 }
 
 export interface AppSpec {
@@ -44,6 +47,14 @@ export interface AppSpec {
   readonly category: string;
   readonly properties: readonly ConnectorPropertySpec[];
   readonly description: string | null;
+  readonly role?: ConnectorRoleValue;
+}
+
+export function isIngressGateway(app: {
+  readonly role?: string;
+  readonly appId?: string;
+}): boolean {
+  return app.role === ConnectorRole.INBOUND_GATEWAY || app.appId === 'webhook';
 }
 
 export interface CatalogAppsFilter {

@@ -5,6 +5,7 @@ export * from './use-catalog-queries';
 export * from './use-connection-entity-queries';
 export * from './use-connection-queries';
 export * from './use-interval-queries';
+export * from './use-mapping-spec-queries';
 export * from './use-record-queries';
 export * from './use-simulator-queries';
 export * from './use-stitch-queries';

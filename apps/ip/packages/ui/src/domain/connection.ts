@@ -83,11 +83,31 @@ export interface UpdateConnectionInput {
   readonly updatedPublicConfig?: JsonRecord | null;
 }
 
+export function buildCleanIngressEndpointUrl(
+  baseUrl: string | undefined,
+  tenantSlug: string,
+  endpointSlug: string,
+): string {
+  const trimmedTenantSlug = tenantSlug.trim();
+  const trimmedSlug = endpointSlug.trim();
+  if (!trimmedTenantSlug || !trimmedSlug) {
+    throw new Error('buildCleanIngressEndpointUrl requires non-empty tenantSlug and endpointSlug.');
+  }
+  const rawBase = (baseUrl ?? '').trim().replace(/\/+$/, '');
+  const origin =
+    rawBase ||
+    (typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'http://localhost:8000');
+  return `${origin}/api/v1/ingress/${encodeURIComponent(trimmedTenantSlug)}/${encodeURIComponent(trimmedSlug)}`;
+}
+
 export function buildIngressWebhookUrl(
   baseUrl: string | undefined,
   tenantSlug: string,
   appId: string,
   connectionId: string,
+  endpointSlug?: string | null,
 ): string {
   const trimmedTenantSlug = tenantSlug.trim();
   const trimmedAppId = appId.trim();
@@ -103,6 +123,12 @@ export function buildIngressWebhookUrl(
     (typeof window !== 'undefined' && window.location?.origin
       ? window.location.origin
       : 'http://localhost:8000');
+
+  const trimmedSlug = endpointSlug?.trim();
+  if (trimmedSlug) {
+    return `${origin}/api/v1/ingress/${encodeURIComponent(trimmedTenantSlug)}/${encodeURIComponent(trimmedSlug)}`;
+  }
+
   return `${origin}/api/v1/webhooks/${encodeURIComponent(trimmedTenantSlug)}/${encodeURIComponent(trimmedAppId)}/${encodeURIComponent(trimmedConnectionId)}`;
 }
 

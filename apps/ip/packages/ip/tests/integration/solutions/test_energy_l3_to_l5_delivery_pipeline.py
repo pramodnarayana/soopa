@@ -482,12 +482,8 @@ def _register_energy_erp_delivery_workflow_and_stitch(
     stitch = Stitch(
         id=_STITCH_ID,
         tenant_id=tenant_id,
-        workflow_id=_WORKFLOW_ID,
-        workflow_version=1,
         canonical_event_type=EnergyEntityType.MDM_METER_READING.value,
-        is_trigger=True,
-        idempotency_key_field="source_id",
-        concurrency_key_field="meter_serial_number",
+        target_workflow_id=_WORKFLOW_ID,
         is_active=True,
     )
     stitch_catalog = container.stitch_catalog()

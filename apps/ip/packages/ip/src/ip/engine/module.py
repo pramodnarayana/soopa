@@ -13,13 +13,22 @@ from ip.engine.adapters.inbound.api.routers.catalog_router import router as cata
 from ip.engine.adapters.inbound.api.routers.connection_entities_router import (
     router as connection_entities_router,
 )
+from ip.engine.adapters.inbound.api.routers.connection_policies_router import (
+    router as connection_policies_router,
+)
 from ip.engine.adapters.inbound.api.routers.connections_router import router as connections_router
 from ip.engine.adapters.inbound.api.routers.ingress_router import router as ingress_router
 from ip.engine.adapters.inbound.api.routers.interval_streams_router import (
     router as interval_streams_router,
 )
+from ip.engine.adapters.inbound.api.routers.mapping_specs_router import (
+    router as mapping_specs_router,
+)
 from ip.engine.adapters.inbound.api.routers.records_router import router as records_router
 from ip.engine.adapters.inbound.api.routers.replay_router import router as replay_router
+from ip.engine.adapters.inbound.api.routers.stitch_task_configs_router import (
+    router as stitch_task_configs_router,
+)
 from ip.engine.adapters.inbound.api.routers.stitches_router import router as stitches_router
 from ip.engine.adapters.inbound.api.routers.sync_runs_router import router as sync_runs_router
 from ip.engine.adapters.inbound.api.routers.trace_router import router as trace_router
@@ -60,6 +69,7 @@ class IpApiModule:
         """Registers all Integration Platform HTTP routers and attaches IpApiProvider onto `app.state`."""
         app.state.ip_api_provider = self._api_provider_factory()
         app.include_router(connections_router)
+        app.include_router(connection_policies_router)
         app.include_router(connection_entities_router)
         app.include_router(catalog_router)
         app.include_router(ingress_router)
@@ -67,6 +77,8 @@ class IpApiModule:
         app.include_router(transformations_router)
         app.include_router(sync_runs_router)
         app.include_router(stitches_router)
+        app.include_router(stitch_task_configs_router)
+        app.include_router(mapping_specs_router)
         app.include_router(trace_router)
         app.include_router(replay_router)
         app.include_router(records_router)

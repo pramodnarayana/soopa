@@ -12,6 +12,9 @@ from types import TracebackType
 import pytest
 from database.router import DatabaseRouterPort
 from database.types import GlobalSession, TenantSession
+from ip.engine.adapters.outbound.stitches import (
+    DurableWorkflowOrchestratorAdapter,
+)
 from ip.engine.adapters.outbound.stitches.stitch_adapters import (
     IpStitchCanonicalDispatcherAdapter,
 )
@@ -57,8 +60,6 @@ from ip.engine.application.use_cases.normalization.preview_stream_transformation
 from ip.engine.application.use_cases.stitch import (
     DispatchCanonicalEventToStitchesCommand,
     DispatchCanonicalEventToStitchesUseCase,
-)
-from ip.engine.application.use_cases.stitch.stitch_control_plane_use_cases import (
     GetStitchDefinitionQuery,
     GetStitchDefinitionUseCase,
     GetStitchRunQuery,
@@ -260,7 +261,7 @@ class _SyntheticAlphaTransformerV2(TransformerPort):
         )
 
 
-class _SyntheticBetaTransformerV1(TransformerPort):
+class _SyntheticBetaTransformer(TransformerPort):
     @property
     def transformation_id(self) -> str:
         return "synthetic.record_beta"
@@ -293,7 +294,7 @@ def _create_synthetic_transformer_registry() -> TransformerRegistry:
     registry = TransformerRegistry()
     registry.register(_SyntheticAlphaTransformerV1())
     registry.register(_SyntheticAlphaTransformerV2())
-    registry.register(_SyntheticBetaTransformerV1())
+    registry.register(_SyntheticBetaTransformer())
     return registry
 
 
@@ -363,12 +364,8 @@ def _create_synthetic_stitch_catalog() -> InMemoryStitchCatalogRegistry:
         Stitch(
             id="stch_default_alpha_sync",
             tenant_id="*",
-            workflow_id="workflow.sync_alpha_to_sink_stitch",
-            workflow_version=1,
             canonical_event_type="canonical.record_alpha.v1",
-            is_trigger=True,
-            idempotency_key_field="event_id",
-            concurrency_key_field="external_id",
+            target_workflow_id="workflow.sync_alpha_to_sink_stitch",
             is_active=True,
         )
     )
@@ -376,12 +373,8 @@ def _create_synthetic_stitch_catalog() -> InMemoryStitchCatalogRegistry:
         Stitch(
             id="stch_default_beta_reconcile",
             tenant_id="*",
-            workflow_id="workflow.reconcile_alpha_stitch",
-            workflow_version=1,
             canonical_event_type="canonical.record_beta.v1",
-            is_trigger=True,
-            idempotency_key_field="event_id",
-            concurrency_key_field="external_id",
+            target_workflow_id="workflow.reconcile_alpha_stitch",
             is_active=True,
         )
     )
@@ -1246,25 +1239,24 @@ async def test_stitch_control_plane_use_cases() -> None:
     reg_res = await reg_stitch_uc.execute(
         RegisterStitchCommand(
             tenant_id=tenant_id,
+            name="Alpha to Sink Wire Stitch",
+            description="Syncs alpha canonical entities to sink",
             stitch_id=custom_stitch_id,
-            workflow_id="workflow.sync_alpha_to_sink_stitch",
-            workflow_version=1,
+            target_workflow_id="workflow.sync_alpha_to_sink_stitch",
             canonical_event_type="canonical.custom_alpha.normalized",
-            is_trigger=True,
-            idempotency_key_field="external_id",
         )
     )
     assert reg_res.is_ok
     assert reg_res.unwrap().id == custom_stitch_id
+    assert reg_res.unwrap().name == "Alpha to Sink Wire Stitch"
+    assert reg_res.unwrap().description == "Syncs alpha canonical entities to sink"
 
     reg_wildcard = await reg_stitch_uc.execute(
         RegisterStitchCommand(
             tenant_id="*",
             stitch_id=shared_stitch_id,
-            workflow_id="workflow.sync_alpha_to_sink_stitch",
-            workflow_version=1,
+            target_workflow_id="workflow.sync_alpha_to_sink_stitch",
             canonical_event_type="canonical.custom_alpha.normalized",
-            is_trigger=True,
         )
     )
     assert reg_wildcard.is_ok
@@ -1273,10 +1265,8 @@ async def test_stitch_control_plane_use_cases() -> None:
         RegisterStitchCommand(
             tenant_id=tenant_id,
             stitch_id=shared_stitch_id,
-            workflow_id="workflow.sync_alpha_to_sink_stitch",
-            workflow_version=1,
+            target_workflow_id="workflow.sync_alpha_to_sink_stitch",
             canonical_event_type="canonical.custom_alpha.normalized",
-            is_trigger=True,
         )
     )
     assert reg_override.is_ok
@@ -1285,10 +1275,8 @@ async def test_stitch_control_plane_use_cases() -> None:
         RegisterStitchCommand(
             tenant_id=other_tenant_id,
             stitch_id=shared_stitch_id,
-            workflow_id="workflow.sync_alpha_to_sink_stitch",
-            workflow_version=1,
+            target_workflow_id="workflow.sync_alpha_to_sink_stitch",
             canonical_event_type="canonical.custom_alpha.normalized",
-            is_trigger=True,
         )
     )
     assert reg_conflict.is_err
@@ -1307,10 +1295,8 @@ async def test_stitch_control_plane_use_cases() -> None:
         Stitch(
             id=shared_stitch_id,
             tenant_id=tenant_id,
-            workflow_id="workflow.sync_alpha_to_sink_stitch",
-            workflow_version=1,
             canonical_event_type="canonical.custom_alpha.normalized",
-            is_trigger=True,
+            target_workflow_id="workflow.sync_alpha_to_sink_stitch",
             is_active=False,
         )
     )
@@ -1324,10 +1310,8 @@ async def test_stitch_control_plane_use_cases() -> None:
         RegisterStitchCommand(
             tenant_id=tenant_id,
             stitch_id=bad_stitch_id,
-            workflow_id="nonexistent.workflow",
-            workflow_version=1,
+            target_workflow_id="nonexistent.workflow",
             canonical_event_type="canonical.event",
-            is_trigger=True,
         )
     )
     assert bad_reg_res.is_err
@@ -1347,8 +1331,10 @@ async def test_stitch_control_plane_use_cases() -> None:
     )
     dispatcher = DispatchCanonicalEventToStitchesUseCase(
         stitch_catalog=stitch_cat,
-        start_run_use_case=start_run,
-        resolve_matches_use_case=match_resolver,
+        orchestrator=DurableWorkflowOrchestratorAdapter(
+            start_run_use_case=start_run,
+            resolve_matches_use_case=match_resolver,
+        ),
     )
     shard_gw = _InMemoryStitchShardGateway(wf_uow, dispatcher)
 

@@ -13,12 +13,14 @@ import argparse
 import asyncio
 import os
 import sys
+from collections.abc import Mapping
 from typing import Final
 
 import asyncpg
 import structlog
 from database.utils import normalize_to_standard_postgres
-from seedwork.infra.config import load_repo_env
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import PlatformDatabaseSettings
 
 logger = structlog.get_logger(__name__)
 
@@ -87,8 +89,25 @@ async def drop_schemas_for_db(
             await conn.close()
 
 
-def _resolve_shard_dsn(domain: str) -> str | None:
-    """Resolves shard DSN from environment variables following enterprise precedence."""
+def _resolve_shard_dsn(
+    domain: str,
+    *,
+    cli_override: str | None = None,
+    shard_overrides: Mapping[str, str] | None = None,
+) -> str | None:
+    """Resolves shard DSN following strict enterprise precedence:
+    1. Explicit CLI argument
+    2. Strongly-typed settings shard overrides
+    3. Process environment variables
+    """
+    if cli_override:
+        return cli_override
+
+    if shard_overrides:
+        for k, v in shard_overrides.items():
+            if domain in k.lower():
+                return v
+
     env_vars = DOMAIN_SHARD_ENV_VARS.get(domain, ())
     for var in env_vars:
         val = os.getenv(var)
@@ -97,7 +116,13 @@ def _resolve_shard_dsn(domain: str) -> str | None:
     return None
 
 
-async def run_reset(selected_domains: set[str], global_url: str) -> None:
+async def run_reset(
+    selected_domains: set[str],
+    global_url: str,
+    *,
+    cli_shard_overrides: Mapping[str, str | None] | None = None,
+    shard_overrides: Mapping[str, str] | None = None,
+) -> None:
     """Executes isolated schema drops across Global DB and domain shards."""
     # 1. Drop Global DB Schemas
     if "all" in selected_domains:
@@ -110,9 +135,14 @@ async def run_reset(selected_domains: set[str], global_url: str) -> None:
             await drop_schemas_for_db(global_url, "Global DB", target_schemas=schemas_to_drop)
 
     # 2. Drop Domain Shards
+    cli_overrides = cli_shard_overrides or {}
     for domain in ("edi", "ip"):
         if "all" in selected_domains or domain in selected_domains:
-            shard_dsn = _resolve_shard_dsn(domain)
+            shard_dsn = _resolve_shard_dsn(
+                domain,
+                cli_override=cli_overrides.get(domain),
+                shard_overrides=shard_overrides,
+            )
             if not shard_dsn:
                 logger.error(
                     "missing_shard_database_url",
@@ -124,7 +154,6 @@ async def run_reset(selected_domains: set[str], global_url: str) -> None:
 
 
 def main() -> None:
-    load_repo_env(override=False)
     parser = argparse.ArgumentParser(
         description="Enterprise Database Schema Reset Utility (Isolated Domain Scopes)"
     )
@@ -133,17 +162,45 @@ def main() -> None:
         default="all",
         help="Comma-separated list of domains to drop: all, platform, edi, ip (default: all)",
     )
+    parser.add_argument(
+        "--global-url",
+        default=None,
+        help="Explicit Global Database URL (overrides environment settings)",
+    )
+    parser.add_argument(
+        "--edi-shard-url",
+        default=None,
+        help="Explicit EDI Shard Database URL (overrides environment settings)",
+    )
+    parser.add_argument(
+        "--ip-shard-url",
+        default=None,
+        help="Explicit IP Shard Database URL (overrides environment settings)",
+    )
     args = parser.parse_args()
     selected_domains = {d.strip().lower() for d in args.domains.split(",") if d.strip()}
 
-    global_url = os.getenv("DATABASE_URL")
+    db_settings = load_settings_safely(PlatformDatabaseSettings)
+    global_url = args.global_url or db_settings.global_url or os.getenv("DATABASE_URL")
     if not global_url:
         logger.error("missing_global_database_url", var_name="DATABASE_URL")
         sys.exit(1)
 
+    cli_shard_overrides = {
+        "edi": args.edi_shard_url,
+        "ip": args.ip_shard_url,
+    }
+
     logger.info("database_reset_initiated", selected_domains=sorted(selected_domains))
     try:
-        asyncio.run(run_reset(selected_domains, global_url))
+        asyncio.run(
+            run_reset(
+                selected_domains,
+                global_url,
+                cli_shard_overrides=cli_shard_overrides,
+                shard_overrides=db_settings.shard_overrides,
+            )
+        )
         logger.info("database_reset_successful")
     except (asyncpg.Error, OSError) as exc:
         logger.error("database_reset_aborted", error=str(exc))

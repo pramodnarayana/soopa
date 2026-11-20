@@ -495,6 +495,7 @@ describe('IP Presentation Helpers: Command Palette Actions', () => {
       CommandPaletteWorkspaceId.CONNECTIONS,
       CommandPaletteWorkspaceId.TRANSFORMATIONS,
       CommandPaletteWorkspaceId.STITCHES,
+      CommandPaletteWorkspaceId.STITCH_MAPPER,
     ]);
     for (const ws of workspaces) {
       ws.execute();
@@ -509,6 +510,7 @@ describe('IP Presentation Helpers: Command Palette Actions', () => {
       '/tenant/ip/connections',
       '/tenant/ip/transformations',
       '/tenant/ip/stitches',
+      '/tenant/ip/stitches/mapper',
     ]);
   });
 });

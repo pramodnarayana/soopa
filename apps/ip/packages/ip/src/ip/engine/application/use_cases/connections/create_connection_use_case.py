@@ -2,22 +2,31 @@
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass
 
 import structlog
 from security.ports.cipher_port import CipherPort
 from seedwork.domain.types import JsonDict
+from seedwork.utils import generate_id
 
 from ip.engine.application.responses import ConnectionDTO, ConnectionOperationResultDTO
 from ip.engine.domain.connection.connection import Connection, compute_connection_fingerprint
 from ip.engine.domain.connection.enums import (
     AuthType,
     ConnectionStatus,
+    EngineConnectorId,
+    WebhookModality,
 )
+from ip.engine.domain.enums import IpIdPrefix
 from ip.engine.domain.exceptions import (
     DuplicateConnectionFingerprintError,
     InvalidConnectionConfigError,
 )
+from ip.engine.domain.webhook.endpoint import WebhookEndpoint
+from ip.engine.domain.webhook.enums import PayloadSemantic, VerificationStrategy
+from ip.engine.domain.webhook.route import WebhookEventRoute
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -36,6 +45,43 @@ class CreateConnectionCommand:
     endpoint_for_fingerprint: str | None = None
 
 
+def _resolve_endpoint(command: CreateConnectionCommand) -> str:
+    if command.endpoint_for_fingerprint:
+        return command.endpoint_for_fingerprint
+    for key in ("endpoint_slug", "endpoint_url", "base_url", "host"):
+        val = command.public_config.get(key)
+        if val:
+            return str(val)
+    return command.name
+
+
+def _resolve_webhook_route_target(
+    command: CreateConnectionCommand, clean_slug: str
+) -> tuple[PayloadSemantic, str]:
+    raw_modality = (
+        str(
+            command.public_config.get("webhook_modality")
+            or command.public_config.get("payload_semantic")
+            or ""
+        )
+        .strip()
+        .upper()
+    )
+
+    if (
+        raw_modality == WebhookModality.COMMAND.value
+        or raw_modality == PayloadSemantic.COMMAND.value
+    ):
+        return PayloadSemantic.COMMAND, f"{clean_slug}_command"
+    if raw_modality == WebhookModality.DATA.value or raw_modality == PayloadSemantic.DATA.value:
+        return PayloadSemantic.DATA, f"{clean_slug}_pipeline"
+
+    is_command = any(k in clean_slug for k in ("extract", "command", "mdm", "request"))
+    semantic = PayloadSemantic.COMMAND if is_command else PayloadSemantic.DATA
+    target_id = f"{clean_slug}_command" if is_command else f"{clean_slug}_pipeline"
+    return semantic, target_id
+
+
 class CreateConnectionUseCase:
     """Creates a new external application connection with encrypted credentials inside a Control Plane UoW."""
 
@@ -46,6 +92,57 @@ class CreateConnectionUseCase:
     ) -> None:
         self._uow = uow
         self._cipher = cipher
+
+    async def _create_bound_webhook_endpoint(
+        self, command: CreateConnectionCommand, connection_id: str
+    ) -> None:
+        raw_slug = str(command.public_config.get("endpoint_slug") or command.name).strip().lower()
+        clean_slug = re.sub(r"[^a-z0-9_-]", "-", raw_slug).strip("-") or "default-webhook"
+        existing_ep = await self._uow.webhook_endpoints.get_by_slug(command.tenant_id, clean_slug)
+        if existing_ep is not None:
+            return
+
+        raw_strategy = str(
+            command.public_config.get("verification_strategy")
+            or VerificationStrategy.PUBLIC_UNAUTHENTICATED.value
+        ).upper()
+        try:
+            strat = VerificationStrategy(raw_strategy)
+        except ValueError:
+            strat = VerificationStrategy.PUBLIC_UNAUTHENTICATED
+
+        secret_val = str(
+            command.raw_credentials.get("secret_token")
+            or command.public_config.get("secret_token")
+            or ""
+        ).strip()
+        if not secret_val and strat != VerificationStrategy.PUBLIC_UNAUTHENTICATED:
+            secret_val = f"whsec_{os.urandom(16).hex()}"
+
+        ep = WebhookEndpoint.create(
+            tenant_id=command.tenant_id,
+            endpoint_slug=clean_slug,
+            name=command.name,
+            description=str(command.public_config.get("description", "")),
+            verification_strategy=strat,
+            primary_secret_hash=secret_val,
+            bound_connection_id=connection_id,
+        )
+
+        semantic, target_id = _resolve_webhook_route_target(command, clean_slug)
+
+        wildcard_route = WebhookEventRoute(
+            id=generate_id(IpIdPrefix.WEBHOOK_EVENT_ROUTE.value),
+            endpoint_id=ep.id,
+            event_pattern="*",
+            payload_semantic=semantic,
+            target_pipeline_or_workflow_id=target_id,
+            description=f"Default ingress route for {command.name}",
+            priority=10000,
+            is_active=True,
+        )
+        ep.add_event_route(wildcard_route)
+        await self._uow.webhook_endpoints.save(ep)
 
     async def execute(self, command: CreateConnectionCommand) -> ConnectionOperationResultDTO:
         async with self._uow:
@@ -66,12 +163,7 @@ class CreateConnectionUseCase:
                 await self._uow.rollback()
                 return ConnectionOperationResultDTO.from_error(error)
 
-            endpoint = command.endpoint_for_fingerprint or str(
-                command.public_config.get("endpoint_url")
-                or command.public_config.get("base_url")
-                or command.public_config.get("host")
-                or command.name
-            )
+            endpoint = _resolve_endpoint(command)
             fingerprint = compute_connection_fingerprint(
                 command.tenant_id, command.app_id, endpoint
             )
@@ -134,6 +226,9 @@ class CreateConnectionUseCase:
                 )
                 await self._uow.rollback()
                 return ConnectionOperationResultDTO.from_error(save_result.error)
+
+            if connection.app_id == EngineConnectorId.WEBHOOK.value:
+                await self._create_bound_webhook_endpoint(command, connection.id)
 
             await self._uow.commit()
 

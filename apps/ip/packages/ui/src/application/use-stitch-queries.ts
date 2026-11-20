@@ -7,6 +7,7 @@ import type {
   StitchDefinition,
   StitchRun,
   TriggerStitchEventInput,
+  UpdateStitchInput,
 } from '../domain/stitch';
 import { useIpWorkspace } from '../provider/IpRepositoriesContext';
 import { logResultOutcome } from './mutation-telemetry';
@@ -54,6 +55,16 @@ export function useStitchesQuery(): IpQueryView<readonly Stitch[]> {
     queryKey: ipQueryKeys.stitches.list(tenantId),
     queryFn: ({ signal }) => repositories.stitches.listStitches(tenantId, signal),
     enabled: Boolean(tenantId),
+  });
+  return projectResultQuery(query);
+}
+
+export function useStitchQuery(stitchId: string): IpQueryView<Stitch> {
+  const { tenantId, repositories } = useIpWorkspace();
+  const query = useQuery({
+    queryKey: ipQueryKeys.stitches.detail(tenantId, stitchId),
+    queryFn: ({ signal }) => repositories.stitches.getStitch(tenantId, stitchId, signal),
+    enabled: Boolean(tenantId && stitchId),
   });
   return projectResultQuery(query);
 }
@@ -125,6 +136,63 @@ export function useDispatchStitchEventMutation() {
         void queryClient.invalidateQueries({
           queryKey: ['ip', 'tenant', tenantId, 'stitches', 'runs'],
         });
+      }
+    },
+  });
+}
+
+export function useUpdateStitchMutation() {
+  const { tenantId, repositories, logger } = useIpWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ stitchId, input }: { stitchId: string; input: UpdateStitchInput }) =>
+      repositories.stitches.updateStitch(tenantId, stitchId, input),
+    onSuccess: (res, variables) => {
+      logResultOutcome(logger, 'ip_stitch.update', res, {
+        stitch_id: variables.stitchId,
+      });
+      if (res.ok) {
+        void queryClient.invalidateQueries({ queryKey: ipQueryKeys.stitches.list(tenantId) });
+        void queryClient.invalidateQueries({
+          queryKey: ipQueryKeys.stitches.detail(tenantId, variables.stitchId),
+        });
+      }
+    },
+  });
+}
+
+export function useToggleStitchStateMutation() {
+  const { tenantId, repositories, logger } = useIpWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ stitchId, isActive }: { stitchId: string; isActive: boolean }) =>
+      repositories.stitches.toggleStitchState(tenantId, stitchId, isActive),
+    onSuccess: (res, variables) => {
+      logResultOutcome(logger, 'ip_stitch.toggle_state', res, {
+        stitch_id: variables.stitchId,
+        is_active: variables.isActive,
+      });
+      if (res.ok) {
+        void queryClient.invalidateQueries({ queryKey: ipQueryKeys.stitches.list(tenantId) });
+        void queryClient.invalidateQueries({
+          queryKey: ipQueryKeys.stitches.detail(tenantId, variables.stitchId),
+        });
+      }
+    },
+  });
+}
+
+export function useDeleteStitchMutation() {
+  const { tenantId, repositories, logger } = useIpWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (stitchId: string) => repositories.stitches.deleteStitch(tenantId, stitchId),
+    onSuccess: (res, stitchId) => {
+      logResultOutcome(logger, 'ip_stitch.delete', res, {
+        stitch_id: stitchId,
+      });
+      if (res.ok) {
+        void queryClient.invalidateQueries({ queryKey: ipQueryKeys.stitches.list(tenantId) });
       }
     },
   });

@@ -1,6 +1,7 @@
 import {
   type ApiProblem,
   Button,
+  cn,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -23,6 +24,7 @@ import {
 } from '../../application/use-connection-queries';
 import type { Connection } from '../../domain/connection';
 import { ConnectionStatus, ConnectorPropertyKey } from '../../domain/enums';
+import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { formatRelativeTimestamp } from '../shared/status-mapping';
 import {
   isPropertyVisible,
@@ -45,6 +47,7 @@ export function ConnectionOverviewTab({
   onDeactivated,
   onDeleted,
 }: ConnectionOverviewTabProps) {
+  const { tenantSlug, baseUrl } = useIpWorkspace();
   const [name, setName] = useState(connection.name);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const specView = useCatalogAppSpecQuery(connection.appId);
@@ -62,10 +65,26 @@ export function ConnectionOverviewTab({
     [ConnectorPropertyKey.AUTH_TYPE]: connection.authType,
   }));
 
-  const visibleProperties = useMemo(
-    () => allProperties.filter((prop) => isPropertyVisible(prop, formValues, allProperties)),
-    [allProperties, formValues],
-  );
+  const visibleProperties = useMemo(() => {
+    const filtered = allProperties.filter((prop) =>
+      isPropertyVisible(prop, formValues, allProperties),
+    );
+    return [...filtered].sort((a, b) => {
+      const isEndA = a.name === ConnectorPropertyKey.ENDPOINT_SLUG || a.name === 'endpoint_slug';
+      const isEndB = b.name === ConnectorPropertyKey.ENDPOINT_SLUG || b.name === 'endpoint_slug';
+      if (isEndA && !isEndB) return 1;
+      if (!isEndA && isEndB) return -1;
+
+      const isModA =
+        a.name === ConnectorPropertyKey.WEBHOOK_MODALITY || a.name === 'webhook_modality';
+      const isModB =
+        b.name === ConnectorPropertyKey.WEBHOOK_MODALITY || b.name === 'webhook_modality';
+      if (isModA && !isModB) return -1;
+      if (!isModA && isModB) return 1;
+
+      return 0;
+    });
+  }, [allProperties, formValues]);
 
   const isDirty = useMemo(() => {
     if (name.trim() !== connection.name) return true;
@@ -205,8 +224,11 @@ export function ConnectionOverviewTab({
 
           {visibleProperties.map((prop) => {
             const displayLabel = resolvePropertyLabel(prop, connection.authType);
+            const isFullWidth =
+              prop.name === ConnectorPropertyKey.ENDPOINT_SLUG || prop.name === 'endpoint_slug';
+
             return (
-              <div key={prop.name} className="space-y-2">
+              <div key={prop.name} className={cn('space-y-2', isFullWidth && 'col-span-full')}>
                 <Label htmlFor={`spec-${prop.name}`} className="flex items-center gap-1">
                   <span>{displayLabel}</span>
                   {prop.required && !isSecretConnectorProperty(prop) ? (
@@ -224,6 +246,8 @@ export function ConnectionOverviewTab({
                   }
                   currentAuthType={connection.authType}
                   isEditing={true}
+                  tenantSlug={tenantSlug}
+                  baseUrl={baseUrl}
                 />
               </div>
             );

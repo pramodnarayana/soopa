@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 from database.models.scheduling import ScheduledJob as OrmScheduledJob
@@ -34,23 +35,32 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
             retry_count=record.retry_count,
             max_retries=record.max_retries,
             next_run_at=record.next_run_at,
+            app_namespace=record.app_namespace,
         )
 
-    async def sweep_stuck_jobs(self, lock_lease_ms: int) -> int:
+    async def sweep_stuck_jobs(
+        self,
+        lock_lease_ms: int,
+        active_namespaces: Sequence[str] | None = None,
+    ) -> int:
         now_naive_utc = datetime.now(UTC).replace(tzinfo=None)
         stale_cutoff_naive_utc = now_naive_utc - timedelta(milliseconds=lock_lease_ms)
+        conditions = [
+            OrmScheduledJob.status == JobStatus.RUNNING.value,
+            or_(
+                OrmScheduledJob.lease_expires_at <= func.now(),
+                and_(
+                    OrmScheduledJob.lease_expires_at.is_(None),
+                    OrmScheduledJob.updated_at <= stale_cutoff_naive_utc,
+                ),
+            ),
+        ]
+        if active_namespaces is not None:
+            conditions.append(OrmScheduledJob.app_namespace.in_(active_namespaces))
+
         stuck_ids_subq = (
             select(OrmScheduledJob.id)
-            .where(
-                OrmScheduledJob.status == JobStatus.RUNNING.value,
-                or_(
-                    OrmScheduledJob.lease_expires_at <= func.now(),
-                    and_(
-                        OrmScheduledJob.lease_expires_at.is_(None),
-                        OrmScheduledJob.updated_at <= stale_cutoff_naive_utc,
-                    ),
-                ),
-            )
+            .where(*conditions)
             .limit(100)
             .with_for_update(skip_locked=True)
             .scalar_subquery()
@@ -70,22 +80,29 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
         return len(result.scalars().all())
 
     @staticmethod
-    def _build_claimable_ids_subquery(limit: int) -> ScalarSelect[str]:
+    def _build_claimable_ids_subquery(
+        limit: int,
+        active_namespaces: Sequence[str] | None = None,
+    ) -> ScalarSelect[str]:
+        conditions = [
+            or_(
+                OrmScheduledJob.status == JobStatus.PENDING.value,
+                and_(
+                    OrmScheduledJob.status == JobStatus.RUNNING.value,
+                    OrmScheduledJob.lease_expires_at < func.now(),
+                ),
+            ),
+            or_(
+                OrmScheduledJob.next_run_at.is_(None),
+                OrmScheduledJob.next_run_at <= func.now(),
+            ),
+        ]
+        if active_namespaces is not None:
+            conditions.append(OrmScheduledJob.app_namespace.in_(active_namespaces))
+
         return (
             select(OrmScheduledJob.id)
-            .where(
-                or_(
-                    OrmScheduledJob.status == JobStatus.PENDING.value,
-                    and_(
-                        OrmScheduledJob.status == JobStatus.RUNNING.value,
-                        OrmScheduledJob.lease_expires_at < func.now(),
-                    ),
-                ),
-                or_(
-                    OrmScheduledJob.next_run_at.is_(None),
-                    OrmScheduledJob.next_run_at <= func.now(),
-                ),
-            )
+            .where(*conditions)
             .order_by(OrmScheduledJob.next_run_at.asc().nulls_last(), OrmScheduledJob.id.asc())
             .limit(limit)
             .with_for_update(skip_locked=True)
@@ -104,10 +121,17 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
         )
 
     async def claim_next_jobs(
-        self, worker_id: str, limit: int, lock_lease_ms: int
+        self,
+        worker_id: str,
+        limit: int,
+        lock_lease_ms: int,
+        active_namespaces: Sequence[str] | None = None,
     ) -> list[ScheduledJob]:
         now_naive_utc = datetime.now(UTC).replace(tzinfo=None)
-        claimable_ids_subq = self._build_claimable_ids_subquery(limit)
+        claimable_ids_subq = self._build_claimable_ids_subquery(
+            limit=limit,
+            active_namespaces=active_namespaces,
+        )
         stmt = (
             update(OrmScheduledJob)
             .where(OrmScheduledJob.id.in_(claimable_ids_subq))

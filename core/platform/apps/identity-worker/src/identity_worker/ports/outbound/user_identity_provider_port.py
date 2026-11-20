@@ -17,16 +17,22 @@ class UserIdentityProviderPort(Protocol):
         """Retrieves a user's IDP user ID by email."""
         ...
 
-    async def assign_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
-        """Assigns a role to a user within a specific tenant (org)."""
+    async def assign_tenant_role(
+        self, user_id: str, org_id: str, role: str, project_id: str | None = None
+    ) -> None:
+        """Assigns a role to a user within a specific tenant (org) and project."""
         ...
 
-    async def update_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
-        """Updates a user's role within a specific tenant (org)."""
+    async def update_tenant_role(
+        self, user_id: str, org_id: str, role: str, project_id: str | None = None
+    ) -> None:
+        """Updates a user's role within a specific tenant (org) and project."""
         ...
 
-    async def remove_tenant_role(self, user_id: str, org_id: str) -> None:
-        """Removes all roles for a user within a specific tenant (org)."""
+    async def remove_tenant_role(
+        self, user_id: str, org_id: str, project_id: str | None = None
+    ) -> None:
+        """Removes all roles for a user within a specific tenant (org) and project."""
         ...
 
     async def update_user_profile(

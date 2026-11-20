@@ -32,7 +32,7 @@ def test_connection_creation_initializes_pending_aggregate_with_created_event() 
         tenant_id=tenant_id,
         app_id=app_id,
         name="Production Source API",
-        auth_type=AuthType.API_KEY,
+        auth_type=AuthType.OAUTH2,
         public_config={"endpoint_url": endpoint},
         encrypted_credentials=b"encrypted_secret",
         endpoint_for_fingerprint=endpoint,
@@ -42,7 +42,7 @@ def test_connection_creation_initializes_pending_aggregate_with_created_event() 
     assert connection.tenant_id == tenant_id
     assert connection.app_id == app_id
     assert connection.name == "Production Source API"
-    assert connection.auth_type == AuthType.API_KEY
+    assert connection.auth_type == AuthType.OAUTH2
     assert connection.status == ConnectionStatus.PENDING_AUTH
     assert connection.connection_fingerprint == compute_connection_fingerprint(
         tenant_id, app_id, endpoint
@@ -122,11 +122,12 @@ def test_connection_activation_flow() -> None:
         tenant_id="ten_1",
         app_id="acme_source",
         name="Test",
-        auth_type=AuthType.API_KEY,
+        auth_type=AuthType.OAUTH2,
         public_config={},
         encrypted_credentials=None,
         endpoint_for_fingerprint="https://endpoint.com",
     )
+    assert connection.status == ConnectionStatus.PENDING_AUTH
     connection.clear_domain_events()
 
     res = connection.activate()
@@ -136,6 +137,27 @@ def test_connection_activation_flow() -> None:
     events = connection.domain_events
     assert len(events) == 1
     assert isinstance(events[0], ConnectionActivatedEvent)
+
+
+def test_direct_credential_protocols_initialize_in_active_status() -> None:
+    for auth_type in (
+        AuthType.NO_AUTH,
+        AuthType.SASL_PLAINTEXT,
+        AuthType.SASL_SSL,
+        AuthType.API_KEY,
+        AuthType.BASIC_AUTH,
+        AuthType.BEARER_TOKEN,
+    ):
+        conn = Connection.create(
+            tenant_id="ten_1",
+            app_id="kafka",
+            name="Kafka Streaming Engine",
+            auth_type=auth_type,
+            public_config={"bootstrap_servers": "localhost:9092"},
+            encrypted_credentials=None,
+            endpoint_for_fingerprint="localhost:9092",
+        )
+        assert conn.status == ConnectionStatus.ACTIVE
 
 
 def test_connection_mark_error_records_failure_state() -> None:

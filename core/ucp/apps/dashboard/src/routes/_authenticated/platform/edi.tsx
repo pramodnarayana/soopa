@@ -10,8 +10,9 @@ export const Route = createFileRoute('/_authenticated/platform/edi')({
 function EdiLayout() {
   const auth = useAuth();
   const token = auth.user?.access_token;
-  const tenantId =
-    ((auth.user?.profile?.idpTenantId || auth.user?.profile?.tenant_id) as string) || 'default';
+  const tenantId = (auth.user?.profile?.idpTenantId || auth.user?.profile?.tenant_id) as
+    | string
+    | undefined;
 
   const baseUrl = getApiUrl('/api/v1/');
   const ucpBaseUrl = getApiUrl('/api/v1');

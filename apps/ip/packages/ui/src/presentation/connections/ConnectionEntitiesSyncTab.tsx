@@ -24,13 +24,14 @@ import {
   ChevronDown,
   ChevronRight,
   Database,
+  GitFork,
   Play,
   RotateCcw,
   Search,
   ShieldAlert,
   Trash2,
 } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   useAddConnectionEntityMutation,
@@ -65,6 +66,7 @@ import {
   TransformationMode,
 } from '../../domain/enums';
 import type { SyncRun } from '../../domain/sync-run';
+import { IpWorkspaceContext } from '../../provider/IpRepositoriesContext';
 import { NormalizedEntityDataTable } from '../records/NormalizedEntityDataTable';
 import { ConnectionSyncRunsSection } from './ConnectionSyncRunsSection';
 
@@ -161,6 +163,7 @@ export function ConnectionEntitiesSyncTab({
   onProblem,
   initialExpandedEntity,
 }: ConnectionEntitiesSyncTabProps) {
+  const workspace = useContext(IpWorkspaceContext);
   const [search, setSearch] = useState('');
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [expandedStreams, setExpandedStreams] = useState<Set<string>>(() =>
@@ -692,6 +695,24 @@ export function ConnectionEntitiesSyncTab({
         },
       },
       {
+        id: 'normalization',
+        header: 'Normalization (L3)',
+        cell: ({ row }) => {
+          const binding = (transformationsView.data ?? []).find(
+            (t) => t.stream === row.original.streamName,
+          );
+          if (!binding) {
+            return <span className="text-xs text-muted-foreground font-mono">—</span>;
+          }
+          return (
+            <StatusBadge
+              label={`${binding.transformationId} v${binding.transformationVersion}`}
+              tone={StatusTone.HEALTHY}
+            />
+          );
+        },
+      },
+      {
         accessorKey: 'status',
         header: 'Status',
         cell: ({ row }) => {
@@ -753,6 +774,31 @@ export function ConnectionEntitiesSyncTab({
               >
                 <Database aria-hidden="true" className="h-3 w-3" />
                 <span>Data</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Stitch and map fields for ${row.original.streamName}`}
+                onClick={() => {
+                  if (workspace?.navigation?.toStitchMapper) {
+                    workspace.navigation.toStitchMapper({
+                      sourceConnectionId: connectionId,
+                      streamName: row.original.streamName,
+                    });
+                  } else if (workspace?.navigation?.toRouteStitchMapper) {
+                    workspace.navigation.toRouteStitchMapper({
+                      sourceConnectionId: connectionId,
+                      streamName: row.original.streamName,
+                    });
+                  } else if (workspace?.navigation?.toTransformations) {
+                    workspace.navigation.toTransformations(connectionId);
+                  }
+                }}
+                className="h-7 gap-1 text-xs text-primary font-medium"
+              >
+                <GitFork aria-hidden="true" className="h-3 w-3" />
+                <span>Stitch</span>
               </Button>
               {canResetCheckpoint ? (
                 <Button

@@ -31,7 +31,7 @@
     "logs:dp": "pnpm logs edi-dp-workers ip-dp-workers",
     "logs:infra": "pnpm logs postgres_global edi_postgres_shard ip_postgres_shard localstack",
     "logs:infra:edi": "pnpm logs postgres_global edi_postgres_shard localstack sftp",
-    "logs:infra:ip": "pnpm logs postgres_global ip_postgres_shard localstack",
+    "logs:infra:ip": "pnpm logs postgres_global ip_postgres_shard localstack ip_kafka",
     "start:prd": "turbo run build && turbo run start",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",

@@ -1,9 +1,11 @@
 from database.utils import normalize_to_asyncpg
 from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
+
+from seedwork.infra.config import CleanBaseSettings
 
 
-class PlatformDatabaseSettings(BaseSettings):
+class PlatformDatabaseSettings(CleanBaseSettings):
     """
     Centralized model for Database connection pooling and routing.
     Provides standard attributes consumed by DatabaseRouter.
@@ -31,7 +33,7 @@ class PlatformDatabaseSettings(BaseSettings):
         return self
 
 
-class PlatformAwsSettings(BaseSettings):
+class PlatformAwsSettings(CleanBaseSettings):
     """
     Centralized model for AWS Credentials, Endpoints, and Regions.
     Used by SQS Polling, SNS Publishing, and S3 clients.
@@ -50,7 +52,7 @@ class PlatformAwsSettings(BaseSettings):
         return self.region or self.default_region
 
 
-class PlatformOtelSettings(BaseSettings):
+class PlatformOtelSettings(CleanBaseSettings):
     """
     Centralized model for OpenTelemetry Configuration.
     """

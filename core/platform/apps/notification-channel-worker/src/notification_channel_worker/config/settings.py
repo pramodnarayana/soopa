@@ -1,21 +1,25 @@
 from functools import lru_cache
 
 from pydantic import Field, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infra.config import load_settings_safely
+from pydantic_settings import SettingsConfigDict
+from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
 )
 
 
-class SqsSettings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
-    email_channel_queue_url: str = Field(validation_alias="SQS_EMAIL_CHANNEL_QUEUE_URL", default="")
+class SqsSettings(CleanBaseSettings):
+    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
+    email_channel_queue_url: str = Field(
+        validation_alias="SQS_EMAIL_CHANNEL_QUEUE_URL",
+        default="",
+        min_length=1,
+    )
 
 
-class AppSettings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
+class AppSettings(CleanBaseSettings):
+    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
 
     database: PlatformDatabaseSettings = Field(default_factory=lambda: PlatformDatabaseSettings())
     aws: PlatformAwsSettings = Field(default_factory=lambda: PlatformAwsSettings())

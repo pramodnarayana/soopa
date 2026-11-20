@@ -7,6 +7,7 @@ import type {
   StitchRun,
   TriggerStitchEventInput,
   TriggerStitchEventResult,
+  UpdateStitchInput,
 } from '../domain/stitch';
 
 export interface StitchRepositoryPort {
@@ -27,7 +28,27 @@ export interface StitchRepositoryPort {
     signal?: AbortSignal,
   ): Promise<Result<readonly Stitch[], ApiProblem>>;
 
+  getStitch(
+    tenantId: string,
+    stitchId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<Stitch, ApiProblem>>;
+
   registerStitch(tenantId: string, input: RegisterStitchInput): Promise<Result<Stitch, ApiProblem>>;
+
+  updateStitch(
+    tenantId: string,
+    stitchId: string,
+    input: UpdateStitchInput,
+  ): Promise<Result<Stitch, ApiProblem>>;
+
+  toggleStitchState(
+    tenantId: string,
+    stitchId: string,
+    isActive: boolean,
+  ): Promise<Result<Stitch, ApiProblem>>;
+
+  deleteStitch(tenantId: string, stitchId: string): Promise<Result<void, ApiProblem>>;
 
   dispatchEvent(
     tenantId: string,

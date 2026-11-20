@@ -14,6 +14,7 @@ from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
     ZitadelTokenVerifierAdapter,
     ZitadelTokenVerifierOptions,
 )
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.ports.outbound.token_verifier_port import TokenValidationError
 
 # Generate global test keys once for the module
@@ -199,3 +200,89 @@ async def test_get_cached_userinfo_caches_and_returns_valid_object(httpserver) -
     cached = await verifier._get_cached_userinfo("token", "jti")
     assert cached == userinfo
     await verifier.close()
+
+
+@pytest.mark.asyncio
+async def test_verify_token_with_multiple_accepted_audiences(
+    jwks_server: str,
+) -> None:
+    options = ZitadelTokenVerifierOptions(
+        issuer=jwks_server,
+        audience=("primary-client", "secondary-client", "project-123"),
+        allow_private_ips=True,
+    )
+    verifier = ZitadelTokenVerifierAdapter(options)
+
+    payload = {
+        "sub": "user-456",
+        "iss": options.issuer,
+        "aud": "secondary-client",
+        "exp": int(time.time()) + 3600,
+        "tenant_id": "tenant-xyz",
+    }
+    token = jwt.encode(payload, private_pem, algorithm="RS256", headers={"kid": "test-kid"})
+
+    claims = await verifier.verify(token)
+    assert claims.sub == "user-456"
+    assert claims.aud == "secondary-client"
+    assert claims.tenant_id == "tenant-xyz"
+
+
+@pytest.mark.asyncio
+async def test_verify_token_invalid_audience_raises_with_diagnostic_logging(
+    jwks_server: str,
+) -> None:
+    options = ZitadelTokenVerifierOptions(
+        issuer=jwks_server,
+        audience=("expected-client",),
+        allow_private_ips=True,
+    )
+    verifier = ZitadelTokenVerifierAdapter(options)
+
+    payload = {
+        "sub": "user-789",
+        "iss": options.issuer,
+        "aud": "wrong-client",
+        "exp": int(time.time()) + 3600,
+        "tenant_id": "tenant-xyz",
+    }
+    token = jwt.encode(payload, private_pem, algorithm="RS256", headers={"kid": "test-kid"})
+
+    with pytest.raises(TokenValidationError, match="Audience doesn't match"):
+        await verifier.verify(token)
+
+
+@pytest.mark.asyncio
+async def test_verify_token_normalizes_platform_org_sentinel(
+    jwks_server: str,
+) -> None:
+    platform_org_id = "400262792403222531"
+    options = ZitadelTokenVerifierOptions(
+        issuer=jwks_server,
+        audience=("admin-client",),
+        platform_org_id=platform_org_id,
+        allow_private_ips=True,
+    )
+    verifier = ZitadelTokenVerifierAdapter(options)
+
+    payload = {
+        "sub": "admin-user",
+        "iss": options.issuer,
+        "aud": "admin-client",
+        "exp": int(time.time()) + 3600,
+        "urn:zitadel:iam:org:id": platform_org_id,
+        "urn:zitadel:iam:org:project:roles": {
+            "PlatformAdmin": {platform_org_id: "example.com"},
+        },
+    }
+    token = jwt.encode(payload, private_pem, algorithm="RS256", headers={"kid": "test-kid"})
+
+    claims = await verifier.verify(token)
+
+    assert claims.sub == "admin-user"
+    assert claims.tenant_id == PLATFORM_TENANT_ID
+    assert claims.authorized_tenants == {PLATFORM_TENANT_ID}
+    assert platform_org_id not in claims.authorized_tenants
+    assert claims.tenant_roles == {PLATFORM_TENANT_ID: ["PlatformAdmin"]}
+    assert claims.tenant_mapping == {platform_org_id: PLATFORM_TENANT_ID}
+    assert "PlatformAdmin" in claims.roles

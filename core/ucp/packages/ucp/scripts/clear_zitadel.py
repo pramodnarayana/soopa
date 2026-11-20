@@ -17,7 +17,6 @@ import structlog
 from database.interceptors import PostgresErrorCodes, extract_postgres_error_metadata
 from database.provider import DatabaseProvider
 from identity.adapters.outbound.zitadel import ZitadelMachineTokenProvider
-from seedwork.infra.config import load_repo_env
 from shttp import HttpClient
 from sqlalchemy.exc import DBAPIError
 
@@ -27,8 +26,7 @@ from ucp.bootstrap.identity_bootstrap import (
     purge_non_platform_tenants,
     verify_zitadel_platform_alignment,
 )
-
-load_repo_env(override=False)
+from ucp.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -45,12 +43,14 @@ class _ShttpMachineAccessTokenAdapter:
 
 
 async def run_clear_zitadel() -> int:
+    settings = get_settings()
     config = ZitadelIdentityConfig(
-        zitadel_url=os.environ.get("IDENTITY_API_URL", "http://ucp.localhost:8080"),
-        machine_key=os.environ.get("IDENTITY_MACHINE_KEY", ""),
-        platform_org_id=os.environ.get("IDENTITY_PLATFORM_ORG_ID", ""),
+        zitadel_url=settings.idp_api_url or "http://ucp.localhost:8080",
+        machine_key=settings.idp_machine_key,
+        platform_org_id=settings.identity.platform_org_id
+        or os.environ.get("IDENTITY_PLATFORM_ORG_ID", ""),
         platform_admin_id=os.environ.get("IDENTITY_PLATFORM_ADMIN_ID", ""),
-        ucp_project_id=os.environ.get("IDENTITY_UCP_PROJECT_ID", ""),
+        ucp_project_id=settings.control_plane_project_id,
     )
 
     async with (

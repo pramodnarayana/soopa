@@ -26,7 +26,11 @@ from ip.engine.application.use_cases.ingestion.fetch_record_use_case import (
 from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.domain.connection.events import ConnectionErrorRecordedEvent
 from ip.engine.domain.dispatch.enums import FailureDisposition
-from ip.engine.domain.exceptions import InvalidCredentialsError, UpstreamHttpError
+from ip.engine.domain.exceptions import (
+    ConnectionPendingAuthError,
+    InvalidCredentialsError,
+    UpstreamHttpError,
+)
 
 
 @pytest.mark.asyncio
@@ -183,3 +187,31 @@ async def test_token_manager_marks_connection_error_on_terminal_invalid_grant() 
     assert terminal_conn.status == ConnectionStatus.ERROR
     assert terminal_conn.last_error_code == "UNAUTHORIZED"
     assert any(isinstance(ev, ConnectionErrorRecordedEvent) for ev in terminal_conn.domain_events)
+
+
+@pytest.mark.asyncio
+async def test_token_manager_returns_pending_auth_error_when_connection_pending_auth() -> None:
+    cp_uow = FakeControlPlaneUnitOfWork()
+    cipher = FakeCipher()
+    pending_conn = seed_oauth2_connection(
+        cp_uow,
+        cipher,
+        expires_offset_seconds=3600.0,
+    )
+    pending_conn.status = ConnectionStatus.PENDING_AUTH
+
+    tm = TokenManagerService(
+        control_plane_uow=cp_uow,
+        cipher=cipher,
+        lock_port=InMemoryTokenRefreshLockAdapter(),
+    )
+
+    res = await tm.get_valid_credentials(
+        GetValidCredentialsCommand(
+            tenant_id="ten_alpha_1",
+            connection_id=pending_conn.id,
+        )
+    )
+    assert res.is_err
+    assert isinstance(res.error, ConnectionPendingAuthError)
+    assert res.error.connection_id == pending_conn.id

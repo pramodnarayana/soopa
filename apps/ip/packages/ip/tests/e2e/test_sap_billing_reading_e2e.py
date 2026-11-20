@@ -55,7 +55,7 @@ from ip.solutions.domains.energy.canonical import (
 )
 from ip.solutions.domains.energy.readers import SqlAlchemyBillingReadingCanonicalReader
 from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
-from ip.solutions.domains.energy.transformers.sap.billing_reading import (
+from ip.solutions.domains.energy.sap.billing_reading_transformer import (
     SapBillingReadingTransformer,
 )
 from ip.solutions.domains.energy.writers import SqlAlchemyBillingReadingCanonicalWriter

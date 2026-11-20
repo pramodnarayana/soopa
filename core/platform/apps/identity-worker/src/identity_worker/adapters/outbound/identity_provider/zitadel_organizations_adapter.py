@@ -26,17 +26,11 @@ class ZitadelOrganizationsAdapter(OrganizationProviderPort):
         self._http_client = http_client
         self.project_provider = project_provider
         self.settings = settings
-        self.ucp_project_id = settings.zitadel_ucp_project_id
 
-    async def create_organization(self, tenant_id: str, name: str) -> tuple[str, bool]:
+    async def create_organization(self, tenant_id: str, name: str) -> str:
         logger.info("provisioning_organization_in_zitadel", org_name=name, tenant_id=tenant_id)
         org_id = await self._create_or_recover_organization(tenant_id, name)
-
-        grant_succeeded = False
-        if self.ucp_project_id:
-            grant_succeeded = await self._grant_ucp_project(org_id)
-
-        return org_id, grant_succeeded
+        return org_id
 
     async def _create_or_recover_organization(self, tenant_id: str, name: str) -> str:
         response = await self._http_client.post(
@@ -96,21 +90,9 @@ class ZitadelOrganizationsAdapter(OrganizationProviderPort):
         )
         raise IdentityProviderPortError("Failed to recover existing organization")
 
-    async def _grant_ucp_project(self, org_id: str) -> bool:
-        if not self.ucp_project_id:
-            return False
-        tenant_group = self.settings.zitadel_tenant_role_group
-        all_roles = await self.project_provider.get_roles()
-        tenant_role_keys = [role.key for role in all_roles if role.group == tenant_group]
-
-        await self.project_provider.create_project_grant(
-            org_id, self.ucp_project_id, tenant_role_keys
-        )
-        return True
-
     async def grant_project_to_organization(self, org_id: str, project_id: str) -> None:
         logger.info("granting_project_to_organization", org_id=org_id, project_id=project_id)
-        tenant_group = self.settings.zitadel_tenant_role_group
+        tenant_group = self.settings.tenant_role_group
         all_roles = await self.project_provider.get_roles(project_id)
         tenant_role_keys = [role.key for role in all_roles if role.group == tenant_group]
 

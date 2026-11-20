@@ -16,9 +16,15 @@ from ip.engine.ports.outbound.batch_manifest_repository_port import BatchManifes
 from ip.engine.ports.outbound.connection_entity_repository_port import (
     ConnectionEntityRepositoryPort,
 )
+from ip.engine.ports.outbound.connection_policy_repository_port import (
+    ConnectionPolicyRepositoryPort,
+)
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
+from ip.engine.ports.outbound.mapping_spec_repository_port import (
+    MappingSpecRepositoryPort,
+)
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
     NormalizationLedgerRepositoryPort,
 )
@@ -41,6 +47,9 @@ from ip.engine.ports.outbound.replica_rejection_repository_port import (
 )
 from ip.engine.ports.outbound.stitch_repository_port import (
     StitchRepositoryPort,
+)
+from ip.engine.ports.outbound.stitch_task_config_repository_port import (
+    StitchTaskConfigRepositoryPort,
 )
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.transformation_repository_port import (
@@ -68,10 +77,13 @@ class IpControlPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     """
 
     connections: ConnectionRepositoryPort
+    connection_policies: ConnectionPolicyRepositoryPort
     entities: ConnectionEntityRepositoryPort
     sync_runs: SyncRunRepositoryPort
     transformations: TransformationRepositoryPort
+    mapping_specs: MappingSpecRepositoryPort
     stitches: StitchRepositoryPort
+    stitch_task_configs: StitchTaskConfigRepositoryPort
     webhook_endpoints: WebhookEndpointRepositoryPort
 
 

@@ -1,8 +1,8 @@
 from functools import lru_cache
 
 from pydantic import Field, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infra.config import load_settings_safely
+from pydantic_settings import SettingsConfigDict
+from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
@@ -10,24 +10,24 @@ from seedwork.infra.config_models import (
 
 
 class NotificationOutboxAwsSettings(PlatformAwsSettings):
-    sns_topic_arn: str = Field(validation_alias="SNS_PLATFORM_EVENTS_TOPIC_ARN")
+    sns_topic_arn: str = Field(
+        validation_alias="SNS_PLATFORM_EVENTS_TOPIC_ARN", default="", min_length=1
+    )
 
 
-class SqsSettings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
+class SqsSettings(CleanBaseSettings):
+    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
     notification_jobs_queue_url: str = Field(
-        validation_alias="SQS_NOTIFICATION_JOBS_QUEUE_URL", default=""
+        validation_alias="SQS_NOTIFICATION_JOBS_QUEUE_URL", default="", min_length=1
     )
 
 
-class AppSettings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
+class AppSettings(CleanBaseSettings):
+    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
 
-    database: PlatformDatabaseSettings = Field(
-        default_factory=lambda: PlatformDatabaseSettings(global_url="")
-    )
+    database: PlatformDatabaseSettings = Field(default_factory=lambda: PlatformDatabaseSettings())
     aws: NotificationOutboxAwsSettings = Field(
-        default_factory=lambda: NotificationOutboxAwsSettings(sns_topic_arn="")
+        default_factory=lambda: NotificationOutboxAwsSettings()
     )
     sqs: SqsSettings = Field(default_factory=lambda: SqsSettings())
 

@@ -73,7 +73,7 @@ async def tenant_db_engine():
     """Create an async SQLAlchemy engine pointing to the tenant shard test database."""
 
     global_url = get_test_settings().database.global_url
-    db_url = await get_test_shard_url_async(global_url)
+    db_url = await get_test_shard_url_async(global_url, app_slug="edi")
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()

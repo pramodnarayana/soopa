@@ -186,4 +186,10 @@ def test_engine_container_wires_catalog_connector_mapping_into_use_cases() -> No
         http_connector = connectors.get("http")
         assert http_connector is not None
         assert http_connector.app_id == "http"
+        kafka_connector = connectors.get("kafka")
+        assert kafka_connector is not None
+        assert kafka_connector.app_id == "kafka"
+        redpanda_connector = connectors.get("redpanda")
+        assert redpanda_connector is not None
+        assert redpanda_connector.app_id == "redpanda"
         assert connectors.get("nonexistent_app_id") is None

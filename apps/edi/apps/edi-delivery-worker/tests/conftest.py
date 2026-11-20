@@ -15,7 +15,7 @@ from database.testing import TransactionalTestRouter, get_test_shard_url_async
 async def db_router() -> "AsyncGenerator[DatabaseRouterPort, None]":
     global_url = os.environ["DATABASE_URL"]
 
-    shard_url = await get_test_shard_url_async(global_url)
+    shard_url = await get_test_shard_url_async(global_url, app_slug="edi")
 
     global_engine = get_async_engine(global_url)
     shard_engine = get_async_engine(shard_url)

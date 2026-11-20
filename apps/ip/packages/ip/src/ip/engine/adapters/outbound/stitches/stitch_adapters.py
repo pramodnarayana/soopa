@@ -7,6 +7,9 @@ from collections.abc import Callable
 
 import structlog
 from database.router import DatabaseRouterPort
+from ip.engine.adapters.outbound.stitches.durable_workflow_orchestrator_adapter import (
+    DurableWorkflowOrchestratorAdapter,
+)
 from ip.engine.application.use_cases.stitch.dispatch_canonical_event_to_stitches_use_case import (
     DispatchCanonicalEventResultDTO,
     DispatchCanonicalEventToStitchesCommand,
@@ -56,6 +59,19 @@ from seedwork.domain.types import JsonDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
+
+
+def _to_dispatch_workflow_result(
+    res: Result[DispatchCanonicalEventResultDTO, IpError],
+) -> Result[DispatchCanonicalEventResultDTO, WorkflowError]:
+    if res.is_err:
+        return Result.err(
+            WorkflowError(
+                code=WorkflowErrorCode.INVALID_STATE_TRANSITION,
+                message=res.unwrap_err().message,
+            )
+        )
+    return Result.ok(res.unwrap())
 
 
 class IpStitchCanonicalDispatcherAdapter(IpStitchCanonicalDispatcherPort, StitchShardGatewayPort):
@@ -227,6 +243,11 @@ class IpStitchCanonicalDispatcherAdapter(IpStitchCanonicalDispatcherPort, Stitch
                     definition_registry=self._definition_registry,
                     step_scheduler=self._scheduler,
                 )
+                orchestrator = DurableWorkflowOrchestratorAdapter(
+                    start_run_use_case=start_run,
+                    resolve_matches_use_case=match_resolver,
+                    definition_registry=self._definition_registry,
+                )
                 if self._control_plane_uow_factory is not None:
                     async with contextlib.aclosing(
                         self._db_router.get_global_session()
@@ -235,18 +256,16 @@ class IpStitchCanonicalDispatcherAdapter(IpStitchCanonicalDispatcherPort, Stitch
                             cp_uow = self._control_plane_uow_factory(global_session)
                             use_case = DispatchCanonicalEventToStitchesUseCase(
                                 stitch_catalog=self._stitch_catalog,
-                                start_run_use_case=start_run,
-                                resolve_matches_use_case=match_resolver,
+                                orchestrator=orchestrator,
                                 control_plane_uow=cp_uow,
                             )
-                            return await use_case.execute(command)
+                            return _to_dispatch_workflow_result(await use_case.execute(command))
 
                 use_case = DispatchCanonicalEventToStitchesUseCase(
                     stitch_catalog=self._stitch_catalog,
-                    start_run_use_case=start_run,
-                    resolve_matches_use_case=match_resolver,
+                    orchestrator=orchestrator,
                 )
-                return await use_case.execute(command)
+                return _to_dispatch_workflow_result(await use_case.execute(command))
 
         return Result.ok(
             DispatchCanonicalEventResultDTO(

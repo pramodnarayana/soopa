@@ -8,7 +8,7 @@ from ip.engine.domain.normalization.transformation import (
     TransformationContext,
 )
 from ip.solutions.domains.energy.canonical import EnergyEntityType
-from ip.solutions.domains.energy.transformers.sap.billing_reading import (
+from ip.solutions.domains.energy.sap.billing_reading_transformer import (
     SapBillingReadingTransformer,
 )
 

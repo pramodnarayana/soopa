@@ -75,6 +75,52 @@ def _make_request(app: FastAPI, identity: IdentityContext | None = None) -> Requ
     return req
 
 
+def _assert_route_dep(app: FastAPI, path: str, method: str, expected_dep: object) -> None:
+    for route in app.routes:
+        if isinstance(route, APIRoute) and route.path == path and method in route.methods:
+            dep_calls = {dep.call for dep in route.dependant.dependencies}
+            assert expected_dep in dep_calls
+
+
+def _assert_connection_route_rbac(app: FastAPI) -> None:
+    _assert_route_dep(
+        app,
+        "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities",
+        "GET",
+        require_flows_read,
+    )
+    _assert_route_dep(
+        app,
+        "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities",
+        "POST",
+        require_flows_write,
+    )
+    _assert_route_dep(
+        app,
+        "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/policy",
+        "GET",
+        require_flows_read,
+    )
+    _assert_route_dep(
+        app,
+        "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/policy",
+        "PUT",
+        require_flows_write,
+    )
+    _assert_route_dep(
+        app,
+        "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/sync-runs",
+        "GET",
+        require_flows_read,
+    )
+    _assert_route_dep(
+        app,
+        "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/sync-runs",
+        "POST",
+        require_sync_trigger,
+    )
+
+
 @pytest.mark.asyncio
 async def test_ip_api_module_registers_routes_with_rbac_guards() -> None:
     module = IpApiModule()
@@ -112,6 +158,7 @@ async def test_ip_api_module_registers_routes_with_rbac_guards() -> None:
         in route_paths
     )
     assert "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/sync-runs" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/policy" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities" in route_paths
     assert (
         "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities/{stream_name}"
@@ -123,6 +170,10 @@ async def test_ip_api_module_registers_routes_with_rbac_guards() -> None:
     )
     assert "/api/v1/tenants/{tenant_id}/ip/stitches/definitions" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/stitches" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/stitches/{stitch_id}/task-configs" in route_paths
+    assert (
+        "/api/v1/tenants/{tenant_id}/ip/stitches/{stitch_id}/task-configs/{node_key}" in route_paths
+    )
     assert "/api/v1/tenants/{tenant_id}/ip/stitches/dispatch" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/stitches/runs/{run_id}" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/records/normalized" in route_paths
@@ -131,20 +182,7 @@ async def test_ip_api_module_registers_routes_with_rbac_guards() -> None:
     assert "/api/v1/tenants/{tenant_id}/ip/records/inbound" in route_paths
 
     # Verify strict RBAC guards on connection entities and sync-runs routes
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        dep_calls = {dep.call for dep in route.dependant.dependencies}
-        if route.path == "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities":
-            if "GET" in route.methods:
-                assert require_flows_read in dep_calls
-            if "POST" in route.methods:
-                assert require_flows_write in dep_calls
-        if route.path == "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/sync-runs":
-            if "GET" in route.methods:
-                assert require_flows_read in dep_calls
-            if "POST" in route.methods:
-                assert require_sync_trigger in dep_calls
+    _assert_connection_route_rbac(app)
 
     router = DatabaseRouter(global_db_url=os.environ.get("DATABASE_URL", "sqlite+aiosqlite://"))
     await module.startup(app, router)
@@ -290,7 +328,7 @@ def test_pure_engine_api_dependencies_expose_protocol_only_defaults() -> None:
 
     registry = get_catalog_registry(req)
     connectors = get_connectors(registry)
-    assert set(connectors) == {"http", "sftp"}
+    assert set(connectors) == {"http", "sftp", "kafka", "redpanda", "webhook"}
     assert connectors["http"] is not None
     with pytest.raises(KeyError):
         _ = connectors["non_existent_connector"]

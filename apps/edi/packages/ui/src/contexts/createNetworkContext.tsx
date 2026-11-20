@@ -63,10 +63,12 @@ export function createNetworkContext(hookName: string) {
     children,
     baseUrl,
     token,
+    tenantId,
   }: {
     children: React.ReactNode;
     baseUrl: string;
     token?: string;
+    tenantId?: string;
   }) {
     const api = useMemo<EdiNetworkApi>(() => {
       const client = new FetchHttpClientAdapter({
@@ -77,36 +79,52 @@ export function createNetworkContext(hookName: string) {
         }),
       });
 
+      const resolveHttpOptions = (
+        config?: EdiNetworkRequestConfig,
+      ): HttpRequestOptions | undefined => {
+        const baseOptions = toHttpOptions(config);
+        if (!tenantId) {
+          return baseOptions;
+        }
+        return {
+          ...baseOptions,
+          headers: {
+            'x-tenant-id': tenantId,
+            ...config?.headers,
+          },
+        };
+      };
+
       return {
         get: async <T = unknown>(url: string, config?: EdiNetworkRequestConfig) => ({
-          data: unwrapOrThrow(await client.get<T>(url, toHttpOptions(config))),
+          data: unwrapOrThrow(await client.get<T>(url, resolveHttpOptions(config))),
         }),
         post: async <T = unknown>(
           url: string,
           data?: unknown,
           config?: EdiNetworkRequestConfig,
         ) => ({
-          data: unwrapOrThrow(await client.post<T>(url, data, toHttpOptions(config))),
+          data: unwrapOrThrow(await client.post<T>(url, data, resolveHttpOptions(config))),
         }),
         put: async <T = unknown>(
           url: string,
           data?: unknown,
           config?: EdiNetworkRequestConfig,
         ) => ({
-          data: unwrapOrThrow(await client.put<T>(url, data, toHttpOptions(config))),
+          data: unwrapOrThrow(await client.put<T>(url, data, resolveHttpOptions(config))),
         }),
         patch: async <T = unknown>(
           url: string,
           data?: unknown,
           config?: EdiNetworkRequestConfig,
         ) => ({
-          data: unwrapOrThrow(await client.patch<T>(url, data, toHttpOptions(config))),
+          data: unwrapOrThrow(await client.patch<T>(url, data, resolveHttpOptions(config))),
         }),
         delete: async <T = unknown>(url: string, config?: EdiNetworkRequestConfig) => ({
-          data: unwrapOrThrow(await client.delete<T>(url, toHttpOptions(config))),
+          data: unwrapOrThrow(await client.delete<T>(url, resolveHttpOptions(config))),
         }),
       };
-    }, [baseUrl, token]);
+    }, [baseUrl, token, tenantId]);
 
     return <NetworkContext.Provider value={api}>{children}</NetworkContext.Provider>;
   }

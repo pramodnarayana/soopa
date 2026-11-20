@@ -9,7 +9,6 @@ from database.router import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
 from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from edi.bootstrap.container import create_edi_control_plane_uow, create_edi_dp_uow_factory
-from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
 from fastapi import FastAPI
 from observability import (
     ObservabilityProvider,
@@ -41,15 +40,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     s3_storage = StorageProvider.create_payload_storage()
     app.state.s3_storage = s3_storage
-
-    publisher = create_edi_pipeline_publisher(
-        compute_queue_url=settings.sqs.compute_queue_url,
-        orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
-        deliver_queue_url=settings.sqs.deliver_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=settings.aws.endpoint_url,
-    )
-    app.state.publisher = publisher
     app.state.crypto_service = SmimeCryptoService()
 
     logger = ObservabilityProvider.logger(__name__)
@@ -77,7 +67,6 @@ def create_as2_app() -> FastAPI:
     application.state.s3_storage = None
     application.state.db_router = None
     application.state.tenant_resolver = None
-    application.state.publisher = None
     application.state.crypto_service = None
     application.state.cp_uow_factory = create_edi_control_plane_uow
     application.state.dp_uow_factory_cls = create_edi_dp_uow_factory
