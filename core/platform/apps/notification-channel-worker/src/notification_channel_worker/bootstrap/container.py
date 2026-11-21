@@ -1,8 +1,7 @@
 import structlog
 from dependency_injector import containers, providers
 from notification.bootstrap.container import Container as NotificationContainer
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.provider import PubSubProvider
 
 from notification_channel_worker.adapters.inbound.workers.email_channel_dispatcher import (
     EmailChannelDispatcher,
@@ -28,16 +27,10 @@ class WorkerContainer(containers.DeclarativeContainer):
         email_strategy=notification_package.email_strategy,
     )
 
-    email_delivery_consumer = providers.Singleton(
-        AwsSqsConsumer,
-        queue_url=config.sqs_email_channel_queue_url,
+    email_channel_consumer = providers.Callable(
+        PubSubProvider.create_consumer_manager,
+        source_uri=config.sqs_email_channel_queue_url,
+        handler=email_dispatcher.provided.dispatch_raw,
         region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
-    )
-
-    email_channel_consumer = providers.Singleton(
-        SqsConsumerManager,
-        consumer=email_delivery_consumer,
-        queue_name="email-channel.fifo",
-        handler=email_dispatcher.provided.dispatch_raw,
     )

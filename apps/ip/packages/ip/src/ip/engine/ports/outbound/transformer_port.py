@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ip.engine.domain.normalization.transformation import (
+from ip.engine.domain.normalization.dtos import (
     ReplicaSnapshot,
     TransformationContext,
     TransformationResult,

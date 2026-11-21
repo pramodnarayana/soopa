@@ -29,6 +29,8 @@ dependencies = [
     "strace",
     "sharding",
     "webhooks",
+    "storage",
+    "replay",
     "pyyaml>=6.0.2",
     "aioboto3>=13.1.0",
     "botocore",
@@ -38,6 +40,9 @@ dependencies = [
     "croniter>=6.2.4",
     "aiokafka>=0.12.0",
     "confluent-kafka>=2.4.0",
+    "polars>=1.0.0",
+    "pyarrow>=15.0.0",
+    "zstandard>=0.22.0",
 ]
 
 [tool.uv.sources]
@@ -55,6 +60,8 @@ orchestration = { workspace = true }
 strace = { workspace = true }
 sharding = { workspace = true }
 webhooks = { workspace = true }
+storage = { workspace = true }
+replay = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -71,7 +78,7 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src", "tests", "../../../../core/platform/packages/orchestration/src", "../../../../core/platform/packages/strace/src", "../../../../core/platform/packages/identity/src", "../../../../core/platform/packages/webhooks/src"]
+pythonpath = ["src", "tests", "../../../../core/platform/packages/orchestration/src", "../../../../core/platform/packages/strace/src", "../../../../core/platform/packages/identity/src", "../../../../core/platform/packages/webhooks/src", "../../../../core/platform/packages/storage/src", "../../../../core/platform/packages/replay/src"]
 addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "integration: narrow integration tests against live PostgreSQL, S3, SFTP, and HTTP",

@@ -3,16 +3,20 @@
 from datetime import UTC
 
 import pytest
-from ip.solutions.domains.energy.building_blocks.protocol_headers import build_landis_headers
 from ip.solutions.domains.energy.canonical import MeterReadingQualityFlag
-from ip.solutions.domains.energy.landis.commands import (
+from ip.solutions.domains.energy.commands import (
     MeterReadingExtractCommand,
     OutageQueryCommand,
 )
-from ip.solutions.domains.energy.landis.meter_readings import get_landis_meter_readings
-from ip.solutions.domains.energy.landis.normalizer import normalize_landis_meter
-from ip.solutions.domains.energy.landis.outage_events import get_landis_outage_events
-from ip.solutions.domains.energy.landis.payloads import build_landis_query_payload
+from ip.solutions.domains.energy.landis import (
+    build_landis_headers,
+    build_landis_query_payload,
+    fetch_landis_meter_readings,
+    get_landis_meter_readings,
+    get_landis_outage_events,
+    normalize_landis_meter,
+    normalize_landis_meter_reading,
+)
 from seedwork.domain.types import JsonDict
 
 
@@ -56,6 +60,10 @@ def test_get_landis_meter_readings_constructs_post_request_spec() -> None:
     assert isinstance(spec.body, dict)
     assert spec.body["meterList"] == ["MTR-001"]
 
+    # Verify fetch_landis_meter_readings alias produces identical RequestSpec
+    spec_fetch = fetch_landis_meter_readings(cmd)
+    assert spec_fetch == spec
+
 
 def test_get_landis_outage_events_constructs_get_request_spec() -> None:
     cmd = OutageQueryCommand(
@@ -96,6 +104,9 @@ def test_normalize_landis_meter_maps_valid_reading() -> None:
     assert dto.kwh_received == 0.120
     assert dto.voltage_avg == 230.5
     assert dto.quality_flag == MeterReadingQualityFlag.VALIDATED.value
+
+    # Verify normalize_landis_meter_reading alias is the exact same pure function
+    assert normalize_landis_meter_reading is normalize_landis_meter
 
 
 def test_normalize_landis_meter_rejects_missing_identifier() -> None:

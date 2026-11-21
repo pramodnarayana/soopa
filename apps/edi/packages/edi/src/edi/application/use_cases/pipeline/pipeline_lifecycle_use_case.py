@@ -26,7 +26,7 @@ class PipelineLifecycleUseCase:
     def __init__(
         self,
         uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
-        publisher: OutboxPublisherPort,
+        publisher: OutboxPublisherPort | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.publisher = publisher
@@ -96,7 +96,7 @@ class PipelineLifecycleUseCase:
             deliver_idempotency_key = generate_deterministic_id(
                 SystemIdPrefix.IDEMPOTENCY, deliver_key_seed, "DELIVER"
             )
-            envelope = await uow.outbox.append_event(
+            await uow.outbox.append_event(
                 tenant_id=tenant_id,
                 idempotency_key=deliver_idempotency_key,
                 event_type=PipelineEventType.DELIVERY_REQUESTED.value,
@@ -107,13 +107,6 @@ class PipelineLifecycleUseCase:
             )
             await uow.commit()
 
-        try:
-            await self.publisher.publish(envelope)
-            async with self.uow_factory() as uow, uow:
-                await uow.outbox.mark_completed(envelope.id)
-                await uow.commit()
-        except Exception as e:
-            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
         logger.info("pipeline_lifecycle.deliver_event_triggered", trace_id=trace_id)
 
     async def handle_transform_failed(

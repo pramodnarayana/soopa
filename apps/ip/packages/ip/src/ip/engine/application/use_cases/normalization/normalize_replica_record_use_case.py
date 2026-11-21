@@ -23,6 +23,12 @@ from ip.engine.domain.exceptions import (
     ReplicaRecordNotFoundError,
     Result,
 )
+from ip.engine.domain.normalization.dtos import (
+    CanonicalDraft,
+    ReplicaSnapshot,
+    TransformationContext,
+    TransformationResult,
+)
 from ip.engine.domain.normalization.enums import (
     NormalizationOutcome,
     NormalizationRejectionReason,
@@ -39,13 +45,7 @@ from ip.engine.domain.normalization.ledger import (
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
 )
-from ip.engine.domain.normalization.transformation import (
-    CanonicalDraft,
-    ReplicaSnapshot,
-    Transformation,
-    TransformationContext,
-    TransformationResult,
-)
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.domain.replication.replica_record import ReplicaRecord
 from ip.engine.ports.outbound.canonical_writer_port import (
     CanonicalEntityRegistryPort,

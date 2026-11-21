@@ -24,8 +24,8 @@ from edi.domain.transaction.enums import PipelineEventType
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.exceptions import ConsumerTerminalError
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 from sharding.domain.exceptions import TenantNotFoundError
@@ -159,7 +159,7 @@ def _setup_registry(
 class EdiOrchestratorWorkerModule(LaunchableWorker):
     def __init__(self) -> None:
         self.db_router: DatabaseRouter | None = None
-        self.orchestrator_manager: SqsConsumerManager | None = None
+        self.orchestrator_manager: ConsumerManagerPort | None = None
 
     async def start(self) -> None:
         logger.info("orchestrator_worker_starting")
@@ -185,7 +185,7 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
         consumer = _setup_registry(transformer, settings, uow_provider)
 
         self.orchestrator_manager = PubSubProvider.create_consumer_manager(
-            queue_url=settings.sqs.orchestrator_queue_url,
+            source_uri=settings.sqs.orchestrator_queue_url,
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,

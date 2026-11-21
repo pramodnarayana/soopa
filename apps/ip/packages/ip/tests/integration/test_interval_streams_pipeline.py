@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
@@ -74,6 +75,7 @@ from ip.engine.domain.normalization.enums import NormalizationOutcome
 from pubsub.enums import ConsumerAction
 from seedwork.events import EventEnvelope
 from sqlalchemy import select
+from storage.domain.enums import CompressionCodec
 from storage.ports.payload_storage_port import PayloadStoragePort
 
 pytestmark = pytest.mark.integration
@@ -85,6 +87,21 @@ class _InMemoryPayloadStorage(PayloadStoragePort):
     def __init__(self) -> None:
         self.blobs: dict[str, bytes] = {}
 
+    def build_partitioned_key(
+        self,
+        tenant_id: str,
+        stream_name: str,
+        batch_id: str,
+        extension: str = "raw",
+        compression: CompressionCodec = CompressionCodec.NONE,
+    ) -> str:
+        ext = (
+            f"{extension}.{compression.value}"
+            if compression != CompressionCodec.NONE
+            else extension
+        )
+        return f"tenants/{tenant_id}/{stream_name}/2026-11-20/{batch_id}.{ext}"
+
     async def upload(
         self,
         tenant_id: str,
@@ -95,8 +112,44 @@ class _InMemoryPayloadStorage(PayloadStoragePort):
         self.blobs[s3_key] = payload
         return s3_key
 
-    async def download(self, s3_key: str) -> bytes | None:
-        return self.blobs.get(s3_key)
+    async def upload_partitioned(
+        self,
+        tenant_id: str,
+        stream_name: str,
+        batch_id: str,
+        payload: bytes,
+        extension: str = "raw",
+        compression: CompressionCodec = CompressionCodec.NONE,
+    ) -> str:
+        key = self.build_partitioned_key(tenant_id, stream_name, batch_id, extension, compression)
+        uri = f"s3://ip-test-bucket/{key}"
+        self.blobs[uri] = payload
+        return uri
+
+    async def upload_stream(
+        self,
+        tenant_id: str,
+        stream_name: str,
+        batch_id: str,
+        stream: AsyncIterable[bytes],
+        extension: str = "raw",
+        compression: CompressionCodec = CompressionCodec.NONE,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        chunks: list[bytes] = []
+        async for chunk in stream:
+            chunks.append(chunk)
+        payload = b"".join(chunks)
+        return await self.upload_partitioned(
+            tenant_id, stream_name, batch_id, payload, extension, compression
+        )
+
+    async def download(self, storage_uri: str, decompress: bool = True) -> bytes | None:
+        return self.blobs.get(storage_uri)
+
+    async def download_stream(self, storage_uri: str) -> AsyncIterable[bytes]:
+        data = self.blobs.get(storage_uri, b"")
+        yield data
 
     async def delete(self, s3_key: str) -> bool:
         return self.blobs.pop(s3_key, None) is not None

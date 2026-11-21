@@ -42,8 +42,8 @@ from ip.engine.bootstrap.container import create_ip_data_plane_uow
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import AuthType
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.normalization.dtos import ReplicaSnapshot, TransformationContext
 from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
-from ip.engine.domain.normalization.transformation import ReplicaSnapshot, TransformationContext
 from ip.engine.domain.replication.enums import CursorKind
 from ip.engine.domain.replication.replica_record import compute_record_key
 from ip.engine.domain.replication.stream_definition import StreamDefinition

@@ -27,7 +27,7 @@ class DeliveryRouterUseCase:
     def __init__(
         self,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
-        publisher: OutboxPublisherPort,
+        publisher: OutboxPublisherPort | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.publisher = publisher
@@ -56,18 +56,8 @@ class DeliveryRouterUseCase:
 
             route = await self._resolve_route(edi_msg, uow)
 
-            envelope = await self._dispatch_to_outbox(
-                trace_id, route, edi_msg, uow, idempotency_key
-            )
+            await self._dispatch_to_outbox(trace_id, route, edi_msg, uow, idempotency_key)
             await uow.commit()
-
-        try:
-            await self.publisher.publish(envelope)
-            async with self.uow_factory() as uow, uow:
-                await uow.outbox.mark_completed(envelope.id)
-                await uow.commit()
-        except Exception as e:
-            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
 
     async def _resolve_route(
         self, edi_msg: EdiMessage, uow: DataPlaneUnitOfWorkPort

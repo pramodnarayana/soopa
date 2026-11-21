@@ -1,7 +1,6 @@
-from typing import Any
-
 import pytest
 from notification.adapters.outbound.channels import EmailChannelStrategy
+from seedwork.domain.types import JsonDict
 
 from notification_channel_worker.adapters.inbound.workers.email_channel_dispatcher import (
     EmailChannelDispatcher,
@@ -10,10 +9,10 @@ from notification_channel_worker.adapters.inbound.workers.email_channel_dispatch
 
 class FakeEmailChannelStrategy(EmailChannelStrategy):
     def __init__(self) -> None:
-        self.deliveries: list[dict[str, Any]] = []
+        self.deliveries: list[dict[str, JsonDict | str | None]] = []
 
     async def deliver(
-        self, tenant_id: str, content: str, subject: str | None, data: dict[str, Any]
+        self, tenant_id: str, content: str, subject: str | None, data: JsonDict
     ) -> None:
         self.deliveries.append(
             {

@@ -1,15 +1,16 @@
-"""L3 Transformation aggregate root, canonical drafts, and transformer protocol."""
+"""L3 Transformation Aggregate Root.
+
+Represents the control plane configuration binding a connection stream to an active transformer version.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from decimal import Decimal
-from typing import ClassVar, Protocol
+from typing import ClassVar
 
 from seedwork.domain.aggregate import AggregateRoot
 from seedwork.domain.exceptions import Result
-from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.utils import generate_id
 from strace.domain import TraceEvent
 
@@ -17,8 +18,6 @@ from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import NormalizationFailedError
 from ip.engine.domain.normalization.enums import (
     NormalizationOutcome,
-    NormalizationRejectionReason,
-    RuleSeverity,
     TransformationMode,
 )
 from ip.engine.domain.normalization.events import (
@@ -27,109 +26,6 @@ from ip.engine.domain.normalization.events import (
 )
 from ip.engine.domain.trace.enums import IpTraceEventType, PipelineStage, TraceEventStatus
 from ip.engine.domain.trace.trace_event import IpTraceEvent
-
-__all__ = [
-    "CanonicalDataDict",
-    "CanonicalDataValue",
-    "CanonicalDraft",
-    "CanonicalEntityDefinition",
-    "DomainTransformerProtocol",
-    "QualityRule",
-    "ReplicaSnapshot",
-    "SourceReference",
-    "Transformation",
-    "TransformationContext",
-    "TransformationRejection",
-    "TransformationResult",
-]
-
-
-CanonicalDataValue = JsonValue | Decimal
-
-
-CanonicalDataDict = dict[str, CanonicalDataValue]
-
-
-@dataclass(frozen=True)
-class SourceReference:
-    """Unresolved or resolved reference to an entity produced by the same or different stream."""
-
-    field_name: str
-    target_canonical_type: str
-    target_source_id: str
-
-
-@dataclass(frozen=True)
-class CanonicalDraft:
-    """Draft canonical record produced by a pure TransformerPort implementation."""
-
-    canonical_type: str
-    source_id: str
-    fields: JsonDict
-    references: tuple[SourceReference, ...] = ()
-    extensions: JsonDict = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class TransformationRejection:
-    """Typed rejection produced by a transformer when a record violates business expectations."""
-
-    reason: NormalizationRejectionReason | str
-    field_path: str | None
-    detail: str
-
-
-@dataclass(frozen=True)
-class TransformationResult:
-    """Deterministic output of a transformer execution."""
-
-    drafts: tuple[CanonicalDraft, ...] = ()
-    rejections: tuple[TransformationRejection, ...] = ()
-
-
-@dataclass(frozen=True)
-class TransformationContext:
-    """Pure contextual metadata passed into TransformerPort.transform()."""
-
-    connection_id: str
-    stream: str
-    tenant_id: str
-    trace_id: str
-    correlation_id: str | None = None
-
-
-@dataclass(frozen=True)
-class ReplicaSnapshot:
-    """Immutable view of an L2 replica snapshot provided as input to transformers."""
-
-    id: str
-    connection_id: str
-    stream: str
-    record_key: str
-    version: int
-    data: JsonDict
-    is_deleted: bool = False
-
-
-class QualityRule(Protocol):
-    """Protocol for pure business and data quality validation rules."""
-
-    @property
-    def code(self) -> str: ...
-
-    @property
-    def severity(self) -> RuleSeverity: ...
-
-    def evaluate(self, fields: JsonDict) -> str | None: ...
-
-
-@dataclass(frozen=True)
-class CanonicalEntityDefinition:
-    """Canonical entity specification owned by domain packages."""
-
-    canonical_type: str
-    schema_version: int = 1
-    quality_rules: tuple[QualityRule, ...] = ()
 
 
 @dataclass(kw_only=True)
@@ -321,18 +217,4 @@ class Transformation(AggregateRoot):
         )
 
 
-class DomainTransformerProtocol(Protocol):
-    """Pure domain protocol for deterministic Layer 3 normalization transformers."""
-
-    @property
-    def transformation_id(self) -> str: ...
-
-    @property
-    def transformation_version(self) -> int: ...
-
-    @property
-    def target_types(self) -> tuple[str, ...]: ...
-
-    def transform(
-        self, replica: ReplicaSnapshot, context: TransformationContext
-    ) -> TransformationResult: ...
+__all__ = ["Transformation"]

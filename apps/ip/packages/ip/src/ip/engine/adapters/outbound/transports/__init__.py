@@ -19,6 +19,7 @@ from ip.engine.adapters.outbound.transports.mqtt_subscribe_transport import (
     MqttMessageHandlePort,
     MqttSubscribeTransport,
 )
+from pubsub import KafkaPublisherAdapter
 
 __all__ = [
     "AmqpConsumerClientPort",
@@ -28,6 +29,7 @@ __all__ = [
     "CloudQueueMessageHandlePort",
     "CloudQueueSubscribeTransport",
     "KafkaConsumerClientPort",
+    "KafkaPublisherAdapter",
     "KafkaSubscribeTransport",
     "MqttConsumerClientPort",
     "MqttMessageHandlePort",

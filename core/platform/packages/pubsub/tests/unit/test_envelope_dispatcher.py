@@ -6,7 +6,7 @@ import asyncio
 import json
 
 import pytest
-from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
+from pubsub.adapters.aws.aws_sqs_outbox_publisher import AwsSqsOutboxPublisher
 from pubsub.enums import ConsumerAction
 from pubsub.envelope_dispatcher import (
     EventEnvelopeDispatcher,
@@ -149,7 +149,7 @@ class _FakeSqsClient:
 
 @pytest.mark.asyncio
 async def test_aws_batch_publisher_concurrent_10_message_chunks_and_attributes() -> None:
-    publisher = AwsSqsPublisher(
+    publisher = AwsSqsOutboxPublisher(
         queue_url="https://sqs.us-east-1.amazonaws.com/123456789012/ip-orchestrator-bulk-queue",
         max_concurrent_batches=5,
     )

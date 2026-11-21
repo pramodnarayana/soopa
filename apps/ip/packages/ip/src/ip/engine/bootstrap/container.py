@@ -119,6 +119,9 @@ from ip.engine.adapters.outbound.database.data_plane.pending_reference_repositor
 from ip.engine.adapters.outbound.database.data_plane.quarantine_record_repository import (
     SqlAlchemyQuarantineRecordRepository,
 )
+from ip.engine.adapters.outbound.database.data_plane.replay_ledger_repository import (
+    SqlAlchemyReplayLedgerRepository,
+)
 from ip.engine.adapters.outbound.database.data_plane.replica_record_repository import (
     SqlAlchemyReplicaRecordRepository,
 )
@@ -461,6 +464,7 @@ def create_ip_data_plane_uow(
             stage_specs=(*IP_TRACE_STAGE_SPECS, build_workflow_trace_stage_spec(WorkflowRunModel)),
         ),
         batch_manifests=SqlAlchemyBatchManifestRepository(tenant_session),
+        replay_ledger=SqlAlchemyReplayLedgerRepository(tenant_session),
         domain_repositories=resolved_domain_repos,
     )
 

@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from typing import Generic, Protocol, TypeVar
 
-from ip.engine.domain.normalization.transformation import (
-    CanonicalEntityDefinition,
-    DomainTransformerProtocol,
-)
+from ip.engine.domain.normalization.dtos import CanonicalEntityDefinition
+from ip.engine.domain.normalization.protocols import DomainTransformerProtocol
 
 
 class CanonicalEntityRegistry:

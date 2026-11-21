@@ -179,7 +179,9 @@ class DomainFunctionRegistry:
         if spec is not None:
             sid = spec.id
             trigger = spec.trigger
-            target_fn = spec.handler
+            target_fn = spec.handler or spec.transformer or spec.connector
+            if target_fn is None:
+                raise ValueError("StitchSpec requires either handler, transformer, or connector")
             ckey = spec.concurrency_key
             rpol = spec.retry
             stimeout = spec.step_timeout

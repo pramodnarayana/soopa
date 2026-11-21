@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from ip.engine.domain.normalization.dtos import ReplicaSnapshot, TransformationContext
 from ip.engine.domain.normalization.enums import NormalizationRejectionReason
-from ip.engine.domain.normalization.transformation import ReplicaSnapshot, TransformationContext
 from ip.solutions.domains.tms.canonical import CanonicalCarrierDTO, CanonicalLoadDTO
 from ip.solutions.domains.tms.models import TmsCarrierRecord, TmsLoadRecord
 from ip.solutions.domains.tms.repository import SqlAlchemyTmsDomainRepository

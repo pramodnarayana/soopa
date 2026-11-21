@@ -35,6 +35,7 @@ _ENGINE_TABLES: tuple[str, ...] = (
     "ip_outbox",
     "ip_processed_events",
     "ip_batch_manifests",
+    "ip_replay_ledger",
 )
 
 
@@ -604,6 +605,51 @@ def upgrade() -> None:
         "idx_ip_batch_manifests_trace",
         "ip_batch_manifests",
         ["tenant_id", "trace_id"],
+    )
+
+    # 16. Layer 4: ip_replay_ledger (Universal Replay Audit Ledger)
+    op.create_table(
+        "ip_replay_ledger",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("idempotency_key", sa.String(length=128), nullable=False),
+        sa.Column("target_type", sa.String(length=32), nullable=False),
+        sa.Column("target_id", sa.String(length=64), nullable=False),
+        sa.Column("target_stage", sa.String(length=32), nullable=False),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("parent_trace_id", sa.String(length=64), nullable=False),
+        sa.Column("original_trace_id", sa.String(length=64), nullable=True),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("actor", sa.String(length=64), nullable=False),
+        sa.Column("reason", sa.Text(), nullable=False),
+        sa.Column("payload_override", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("affected_records", sa.Integer(), nullable=False),
+        sa.Column("status", sa.String(length=32), server_default="IN_FLIGHT", nullable=False),
+        sa.Column("error_message", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("tenant_id", "idempotency_key", name="uq_ip_replay_idempotency"),
+    )
+    op.create_index(
+        "idx_ip_replay_target",
+        "ip_replay_ledger",
+        ["tenant_id", "target_type", "target_id"],
+    )
+    op.create_index(
+        "idx_ip_replay_actor",
+        "ip_replay_ledger",
+        ["tenant_id", "actor", "created_at"],
+    )
+    op.create_index(
+        "idx_ip_replay_trace",
+        "ip_replay_ledger",
+        ["tenant_id", "trace_id"],
+    )
+    op.create_index(
+        "idx_ip_replay_status",
+        "ip_replay_ledger",
+        ["tenant_id", "status", "created_at"],
     )
 
     # Enable Row-Level Security (RLS) across all tenant-scoped Engine Data Plane tables

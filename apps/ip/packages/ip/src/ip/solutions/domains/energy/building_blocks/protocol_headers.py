@@ -14,6 +14,15 @@ def build_landis_headers(api_version: str = "v2") -> dict[str, str]:
     }
 
 
+def build_siemens_headers(api_version: str = "v1") -> dict[str, str]:
+    """Builds standard HTTP headers for Siemens EnergyIP AMI REST APIs."""
+    return {
+        **build_json_headers(),
+        "X-EnergyIP-Version": api_version,
+        "X-Client-System": "SOOPA-IP",
+    }
+
+
 def build_soap_headers(soap_action: str) -> dict[str, str]:
     """Builds standard SOAP 1.1 / 1.2 headers for XML-based AMI systems."""
     return {

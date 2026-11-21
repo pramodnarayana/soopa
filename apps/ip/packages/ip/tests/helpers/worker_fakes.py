@@ -70,6 +70,8 @@ from ip.engine.domain.intervals.enums import BatchManifestStatus
 from ip.engine.domain.intervals.models import BatchManifest, BatchReconciliationSummary
 from ip.engine.domain.normalization.enums import NormalizationOutcome
 from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+from ip.engine.domain.replay.models import IpReplayLedgerRecord
+from ip.engine.domain.replay.ports import IpReplayLedgerRepositoryPort
 from ip.engine.domain.replication.enums import (
     CursorKind,
     MergeOutcome,
@@ -127,6 +129,7 @@ from orchestration.domain.exceptions import WorkflowError
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
+from replay.domain.enums import ReplayTargetType
 from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.events import DomainEvent, EventEnvelope
 from strace.ports import TraceRepositoryPort
@@ -747,6 +750,51 @@ class InMemoryBatchManifestRepo(BatchManifestRepositoryPort):
         )
 
 
+class InMemoryReplayLedgerRepo(IpReplayLedgerRepositoryPort):
+    """Pure in-memory repository for IpReplayLedgerRecord."""
+
+    def __init__(self) -> None:
+        self.records: dict[str, IpReplayLedgerRecord] = {}
+
+    async def save(self, record: IpReplayLedgerRecord) -> None:
+        self.records[record.id] = record
+
+    async def get_by_id(self, replay_id: str, tenant_id: str) -> IpReplayLedgerRecord | None:
+        rec = self.records.get(replay_id)
+        if rec and rec.tenant_id == tenant_id:
+            return rec
+        return None
+
+    async def get_by_idempotency_key(
+        self, tenant_id: str, idempotency_key: str
+    ) -> IpReplayLedgerRecord | None:
+        for r in self.records.values():
+            if r.tenant_id == tenant_id and r.idempotency_key == idempotency_key:
+                return r
+        return None
+
+    async def list_by_target(
+        self,
+        tenant_id: str,
+        target_type: ReplayTargetType,
+        target_id: str,
+        limit: int = 50,
+    ) -> tuple[IpReplayLedgerRecord, ...]:
+        matching = [
+            r
+            for r in self.records.values()
+            if r.tenant_id == tenant_id
+            and r.target_type == target_type
+            and r.target_id == target_id
+        ]
+        matching.sort(key=lambda r: r.created_at, reverse=True)
+        return tuple(matching[:limit])
+
+
+# Retain alias for test compatibility
+InMemoryReplayAuditRepo = InMemoryReplayLedgerRepo
+
+
 class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
     """In-memory IpDataPlaneUnitOfWorkPort with idempotency tracking and commit/rollback."""
 
@@ -759,6 +807,7 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
         normalized_records: FakeNormalizedRecordRepo | None = None,
         outbound_records: FakeOutboundRecordRepo | None = None,
         batch_manifests: InMemoryBatchManifestRepo | None = None,
+        replay_ledger: InMemoryReplayLedgerRepo | None = None,
     ) -> None:
         self.inbound_records = inbound_records or FakeInboundRecordRepo()
         self.replica_records = replica_records or FakeReplicaRecordRepo()
@@ -774,6 +823,8 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
         )
         self.pending_references: PendingReferenceRepositoryPort = DummyPendingRefRepo()
         self.batch_manifests = batch_manifests or InMemoryBatchManifestRepo()
+        self.replay_ledger = replay_ledger or InMemoryReplayLedgerRepo()
+        self.replay_audits = self.replay_ledger
         self.committed_idempotency_keys: set[tuple[str, str]] = set()
         self._staged_idempotency_keys: set[tuple[str, str]] = set()
         self.commit_count = 0

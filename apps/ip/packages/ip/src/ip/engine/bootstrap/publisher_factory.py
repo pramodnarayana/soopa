@@ -54,8 +54,8 @@ def _queue_or_noop(
 ) -> OutboxPublisherPort:
     if not queue_url:
         return _UnconfiguredOutboxPublisher(target_name=target_name)
-    return PubSubProvider.create_queue_publisher(
-        queue_url=queue_url,
+    return PubSubProvider.create_outbox_publisher(
+        destination_uri=queue_url,
         region_name=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
     )
@@ -66,8 +66,8 @@ def _topic_or_noop(
 ) -> OutboxPublisherPort:
     if not topic_arn:
         return _UnconfiguredOutboxPublisher(target_name=target_name)
-    return PubSubProvider.create_topic_publisher(
-        topic_arn=topic_arn,
+    return PubSubProvider.create_outbox_publisher(
+        destination_uri=topic_arn,
         region_name=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
     )

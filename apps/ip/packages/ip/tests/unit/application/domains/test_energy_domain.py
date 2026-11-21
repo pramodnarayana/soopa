@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from ip.engine.domain.normalization.dtos import ReplicaSnapshot, TransformationContext
 from ip.engine.domain.normalization.enums import NormalizationRejectionReason
-from ip.engine.domain.normalization.transformation import ReplicaSnapshot, TransformationContext
 from ip.solutions.domains.energy.canonical import (
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,

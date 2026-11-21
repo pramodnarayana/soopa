@@ -17,6 +17,15 @@ from ip.engine.application.use_cases.normalization.normalize_replica_record_use_
     NormalizeReplicaRecordUseCase,
 )
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
+from ip.engine.domain.normalization.dtos import (
+    CanonicalDraft,
+    CanonicalEntityDefinition,
+    ReplicaSnapshot,
+    SourceReference,
+    TransformationContext,
+    TransformationRejection,
+    TransformationResult,
+)
 from ip.engine.domain.normalization.enums import (
     CanonicalAction,
     NormalizationOutcome,
@@ -40,16 +49,7 @@ from ip.engine.domain.normalization.registries import (
     CanonicalWriterRegistry,
     TransformerRegistry,
 )
-from ip.engine.domain.normalization.transformation import (
-    CanonicalDraft,
-    CanonicalEntityDefinition,
-    ReplicaSnapshot,
-    SourceReference,
-    Transformation,
-    TransformationContext,
-    TransformationRejection,
-    TransformationResult,
-)
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.domain.replication.replica_record import ReplicaRecord
 from ip.engine.domain.trace.enums import IpTraceEventType
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort

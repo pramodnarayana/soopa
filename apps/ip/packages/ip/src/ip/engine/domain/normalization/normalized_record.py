@@ -10,8 +10,8 @@ from seedwork.utils import generate_id
 from strace.domain import TracedAggregateRoot, TraceReplayMetadata
 
 from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.normalization.dtos import CanonicalDataDict
 from ip.engine.domain.normalization.events import NormalizedRecordCreatedEvent
-from ip.engine.domain.normalization.transformation import CanonicalDataDict
 from ip.engine.domain.trace.enums import IpTraceEventType, PipelineStage, TraceEventStatus
 from ip.engine.domain.trace.trace_event import IpTraceEvent
 

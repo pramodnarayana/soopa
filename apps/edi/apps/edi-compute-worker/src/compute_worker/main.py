@@ -22,7 +22,7 @@ from edi.application.use_cases.pipeline.compute_transform_use_case import Comput
 from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from observability import ObservabilityProvider
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 
 from compute_worker.compute_dispatcher import EdiComputeDispatcher
@@ -37,7 +37,7 @@ from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_a
 
 class EdiComputeWorkerModule(LaunchableWorker):
     def __init__(self) -> None:
-        self.manager: SqsConsumerManager | None = None
+        self.manager: ConsumerManagerPort | None = None
         self.db_router: DatabaseRouter | None = None
 
     async def start(self) -> None:
@@ -102,7 +102,7 @@ class EdiComputeWorkerModule(LaunchableWorker):
         )
 
         self.manager = PubSubProvider.create_consumer_manager(
-            queue_url=settings.sqs.compute_queue_url,
+            source_uri=settings.sqs.compute_queue_url,
             handler=dispatcher.dispatch_raw,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,

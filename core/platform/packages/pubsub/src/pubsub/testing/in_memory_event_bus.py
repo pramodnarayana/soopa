@@ -82,7 +82,11 @@ class InMemoryEventBus(OutboxPublisherPort, MessageConsumerPort):
             self.queue.task_done()
             acknowledged = True
 
-        async def nack(*, visibility_timeout_seconds: int | None = None) -> None:
+        async def nack(
+            *,
+            requeue: bool = True,
+            visibility_timeout_seconds: int | None = None,
+        ) -> None:
             nonlocal acknowledged
             if visibility_timeout_seconds is not None and visibility_timeout_seconds > 0:
                 await asyncio.sleep(visibility_timeout_seconds)

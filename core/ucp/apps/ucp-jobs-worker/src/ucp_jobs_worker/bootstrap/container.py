@@ -10,10 +10,9 @@ from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
+from pubsub.provider import PubSubProvider
 from seedwork.domain.types import JsonDict
 from ucp.adapters.outbound.database.ucp_audit_log_cleanup_repository import (
     SqlAlchemyUcpAuditLogCleanupRepository,
@@ -51,7 +50,7 @@ class WorkerContainer:
         self.session_factory = self.db_provider.session_factory
 
         self.outbox_relay: NotifyOutboxRelay | None = None
-        self.jobs_consumer: SqsConsumerManager | None = None
+        self.jobs_consumer: ConsumerManagerPort | None = None
 
         self.sweeper_job_handler: UcpOutboxSweeperJobHandler | None = None
         self.outbox_cleanup_job_handler: UcpOutboxCleanupJobHandler | None = None
@@ -64,8 +63,8 @@ class WorkerContainer:
             model_cls=UcpOutbox,
             source=UcpOutboxSource.UCP.value,
         )
-        outbox_pub = AwsSnsPublisher(
-            topic_arn=self.settings.sns_tenant_events_topic_arn,
+        outbox_pub = PubSubProvider.create_outbox_publisher(
+            destination_uri=self.settings.sns_tenant_events_topic_arn,
             endpoint_url=self.settings.aws_endpoint_url,
             region_name=self.settings.aws_region,
         )
@@ -134,15 +133,11 @@ class WorkerContainer:
             UcpCleanupJobName.UCP_AUDIT_LOG_CLEANUP.value, audit_cleanup_handler
         )
 
-        jobs_sqs_consumer = AwsSqsConsumer(
-            queue_url=self.settings.sqs_ucp_jobs_queue_url,
+        self.jobs_consumer = PubSubProvider.create_consumer_manager(
+            source_uri=self.settings.sqs_ucp_jobs_queue_url,
+            handler=job_dispatcher.dispatch,
             region_name=self.settings.aws_region,
             endpoint_url=self.settings.aws_endpoint_url,
-        )
-        self.jobs_consumer = SqsConsumerManager(
-            consumer=jobs_sqs_consumer,
-            queue_name="ucp-jobs.fifo",
-            handler=job_dispatcher.dispatch,
         )
 
     async def dispose(self) -> None:

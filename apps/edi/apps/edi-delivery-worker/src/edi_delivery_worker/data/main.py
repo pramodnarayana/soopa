@@ -37,9 +37,9 @@ from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from observability import ObservabilityProvider
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.enums import ConsumerAction
 from pubsub.exceptions import ConsumerTerminalError
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 from secret_store import SecretStorePort, SecretStoreProvider
 from security.ports.cipher_port import CipherPort
@@ -231,7 +231,7 @@ class _BaseEdiDeliveryWorkerModule(LaunchableWorker):
 
     def __init__(self) -> None:
         self.db_router: DatabaseRouter | None = None
-        self.deliver_manager: SqsConsumerManager | None = None
+        self.deliver_manager: ConsumerManagerPort | None = None
         self.http_delivery: HttpxDeliveryClient | None = None
         self.as2_delivery: HttpxAS2DeliveryClient | None = None
 
@@ -319,7 +319,7 @@ class EdiDeliveryWorkerModule(_BaseEdiDeliveryWorkerModule):
         )
 
         self.deliver_manager = PubSubProvider.create_consumer_manager(
-            queue_url=settings.sqs.deliver_queue_url,
+            source_uri=settings.sqs.deliver_queue_url,
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
@@ -352,7 +352,7 @@ class EdiDeliveryDlqWorkerModule(_BaseEdiDeliveryWorkerModule):
 
         consumer = _setup_dlq_registry(settings=settings, uow_provider=uow_provider)
         self.deliver_manager = PubSubProvider.create_consumer_manager(
-            queue_url=settings.sqs.deliver_dlq_url,
+            source_uri=settings.sqs.deliver_dlq_url,
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,

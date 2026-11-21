@@ -1,8 +1,7 @@
 import structlog
 from dependency_injector import containers, providers
 from notification.bootstrap.container import Container as NotificationContainer
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.provider import PubSubProvider
 
 from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
     NotificationEventDispatcher,
@@ -33,16 +32,10 @@ class WorkerContainer(containers.DeclarativeContainer):
         notification_compiler=notification_package.notification_compiler,
     )
 
-    notification_queue_consumer = providers.Singleton(
-        AwsSqsConsumer,
-        queue_url=config.sqs_notification_queue_url,
+    consumer_worker = providers.Callable(
+        PubSubProvider.create_consumer_manager,
+        source_uri=config.sqs_notification_queue_url,
+        handler=notification_dispatcher.provided.dispatch_raw,
         region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
-    )
-
-    consumer_worker = providers.Singleton(
-        SqsConsumerManager,
-        consumer=notification_queue_consumer,
-        queue_name="notifications.fifo",
-        handler=notification_dispatcher.provided.dispatch_raw,
     )

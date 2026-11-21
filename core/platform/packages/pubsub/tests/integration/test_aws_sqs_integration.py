@@ -6,8 +6,8 @@ import boto3
 import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
+from pubsub.adapters.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.adapters.aws.aws_sqs_outbox_publisher import AwsSqsOutboxPublisher
 from pubsub.message import AckableMessage
 from seedwork import generate_random_hex
 from seedwork.events import EventEnvelope
@@ -58,7 +58,7 @@ async def test_pubsub_roundtrip_delivery(
 
     # Configure boto3 environment for aioboto3 used internally by the adapters
 
-    publisher = AwsSqsPublisher(
+    publisher = AwsSqsOutboxPublisher(
         queue_url=queue_url,
         region_name="us-east-1",
         endpoint_url=endpoint_url,

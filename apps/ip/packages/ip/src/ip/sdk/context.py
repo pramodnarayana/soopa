@@ -8,6 +8,8 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonDict
 
+from ip.sdk.contracts import RequestSpec
+
 
 class StitchHttpPort(Protocol):
     """Port for executing rate-limited, token-bucket HTTP calls inside a Stitch."""
@@ -22,6 +24,15 @@ class StitchHttpPort(Protocol):
         headers: dict[str, str] | None = None,
     ) -> JsonDict:
         """Dispatches an HTTP request through the connection manager."""
+        ...
+
+    async def dispatch_spec(
+        self,
+        *,
+        connection_id: str,
+        spec: RequestSpec,
+    ) -> JsonDict:
+        """Dispatches an immutable RequestSpec through the connection manager."""
         ...
 
 

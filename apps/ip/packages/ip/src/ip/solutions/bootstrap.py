@@ -61,6 +61,9 @@ from ip.solutions.domains.energy.ports import (
 )
 from ip.solutions.domains.energy.readers import create_default_canonical_reader_registry
 from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
+from ip.solutions.domains.energy.router import (
+    router as energy_meter_readings_router,
+)
 from ip.solutions.domains.energy.writers import create_default_canonical_writer_registry
 from ip.solutions.domains.tms.ports import TMS_DOMAIN_REPOSITORY_KEY
 from ip.solutions.domains.tms.repository import SqlAlchemyTmsDomainRepository
@@ -239,6 +242,7 @@ def register_solution_routes(app: FastAPI) -> None:
     """Registers solution-layer DI providers and HTTP routers onto `app`."""
     app.state.ip_simulator_provider = SolutionSimulatorApiProvider()
     app.include_router(universal_simulator_router)
+    app.include_router(energy_meter_readings_router)
 
 
 class IpSolutionOrchestratorWorkerModule(IpOrchestratorWorkerModule):

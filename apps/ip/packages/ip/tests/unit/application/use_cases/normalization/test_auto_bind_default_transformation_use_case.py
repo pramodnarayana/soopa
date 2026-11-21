@@ -20,14 +20,14 @@ from ip.engine.domain.exceptions import (
     Result,
     UpstreamHttpError,
 )
-from ip.engine.domain.normalization.registries import TransformerRegistry
-from ip.engine.domain.normalization.transformation import (
+from ip.engine.domain.normalization.dtos import (
     CanonicalDraft,
     ReplicaSnapshot,
-    Transformation,
     TransformationContext,
     TransformationResult,
 )
+from ip.engine.domain.normalization.registries import TransformerRegistry
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.ports.outbound.connection_entity_repository_port import (
     ConnectionEntityRepositoryPort,
 )

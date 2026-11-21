@@ -88,19 +88,19 @@ from ip.engine.domain.exceptions import (
     StitchRunNotFoundError,
     TenantShardNotFoundError,
 )
+from ip.engine.domain.normalization.dtos import (
+    CanonicalDraft,
+    ReplicaSnapshot,
+    TransformationContext,
+    TransformationRejection,
+    TransformationResult,
+)
 from ip.engine.domain.normalization.enums import (
     NormalizationRejectionReason,
     TransformationMode,
 )
 from ip.engine.domain.normalization.registries import TransformerRegistry
-from ip.engine.domain.normalization.transformation import (
-    CanonicalDraft,
-    ReplicaSnapshot,
-    Transformation,
-    TransformationContext,
-    TransformationRejection,
-    TransformationResult,
-)
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import (
     EntitySyncFrom,

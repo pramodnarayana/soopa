@@ -1,5 +1,6 @@
 import pytest
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
+from pubsub.domain.dtos import AckableMessage
 from seedwork.domain.types import JsonDict
 from seedwork.events import EventEnvelope
 
@@ -19,6 +20,64 @@ async def test_message_dispatcher_subscribe_and_dispatch_dict() -> None:
 
     assert len(received) == 1
     assert received[0]["data"] == 123
+
+
+@pytest.mark.asyncio
+async def test_message_dispatcher_dispatch_with_ackable_message() -> None:
+    dispatcher = MessageDispatcher(dispatch_key=DispatchKey.JOB_NAME)
+    received: list[JsonDict] = []
+
+    async def handle_job(msg: JsonDict) -> None:
+        received.append(msg)
+
+    dispatcher.subscribe("edi_control_plane_outbox_sweeper", handle_job)
+
+    async def dummy_ack() -> None:
+        pass
+
+    async def dummy_nack(
+        *, requeue: bool = True, visibility_timeout_seconds: int | None = None
+    ) -> None:
+        pass
+
+    ackable = AckableMessage(
+        payload={"job_id": "job_01", "job_name": "edi_control_plane_outbox_sweeper", "payload": {}},
+        ack=dummy_ack,
+        nack=dummy_nack,
+    )
+    await dispatcher.dispatch(ackable)
+
+    assert len(received) == 1
+    assert received[0]["job_name"] == "edi_control_plane_outbox_sweeper"
+
+
+@pytest.mark.asyncio
+async def test_message_dispatcher_dispatch_with_ackable_message_bytes() -> None:
+    dispatcher = MessageDispatcher(dispatch_key=DispatchKey.JOB_NAME)
+    received: list[JsonDict] = []
+
+    async def handle_job(msg: JsonDict) -> None:
+        received.append(msg)
+
+    dispatcher.subscribe("edi_data_plane_outbox_cleanup", handle_job)
+
+    async def dummy_ack() -> None:
+        pass
+
+    async def dummy_nack(
+        *, requeue: bool = True, visibility_timeout_seconds: int | None = None
+    ) -> None:
+        pass
+
+    ackable = AckableMessage(
+        payload=b'{"job_id": "job_02", "job_name": "edi_data_plane_outbox_cleanup", "payload": {}}',
+        ack=dummy_ack,
+        nack=dummy_nack,
+    )
+    await dispatcher.dispatch(ackable)
+
+    assert len(received) == 1
+    assert received[0]["job_name"] == "edi_data_plane_outbox_cleanup"
 
 
 @pytest.mark.asyncio

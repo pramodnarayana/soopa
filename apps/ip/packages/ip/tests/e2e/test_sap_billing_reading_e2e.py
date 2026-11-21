@@ -40,12 +40,12 @@ from ip.engine.application.use_cases.replication.replicate_records_use_case impo
 from ip.engine.bootstrap.container import create_ip_data_plane_uow
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import AuthType
-from ip.engine.domain.normalization.normalized_record import NormalizedRecord
-from ip.engine.domain.normalization.transformation import (
+from ip.engine.domain.normalization.dtos import (
     CanonicalDataDict,
     ReplicaSnapshot,
     TransformationContext,
 )
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
 from ip.engine.domain.replication.enums import CursorKind
 from ip.engine.domain.replication.replica_record import compute_record_key
 from ip.engine.domain.replication.stream_definition import StreamDefinition

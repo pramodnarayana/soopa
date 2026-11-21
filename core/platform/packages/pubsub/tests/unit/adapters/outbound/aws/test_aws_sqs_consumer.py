@@ -2,7 +2,7 @@ import json
 
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.adapters.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
 from seedwork.domain.types import JsonDict
 

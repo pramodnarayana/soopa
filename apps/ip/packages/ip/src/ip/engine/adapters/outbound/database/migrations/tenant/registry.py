@@ -29,6 +29,7 @@ ENGINE_CORE = DomainMigrationModule(
         "ip_outbox",
         "ip_processed_events",
         "ip_batch_manifests",
+        "ip_replay_ledger",
     ),
 )
 

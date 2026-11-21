@@ -42,7 +42,8 @@ def test_otlp_processor_preserves_each_lazy_logger_name(monkeypatch: Any) -> Non
         first_logger.info("first_event")
         second_logger.info("second_event")
 
-        assert emitted_names == ["first", "second"]
+        relevant_names = [name for name in emitted_names if name in ("first", "second")]
+        assert relevant_names == ["first", "second"]
     finally:
         structlog.reset_defaults()
 

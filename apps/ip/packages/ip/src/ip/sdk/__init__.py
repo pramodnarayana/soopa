@@ -27,6 +27,7 @@ from ip.sdk.registry import (
 from ip.sdk.specs import (
     ConnectorSpec,
     MutationSpec,
+    Stitch,
     StitchSpec,
     TransformerSpec,
     retry_policy,
@@ -55,6 +56,7 @@ __all__ = [
     "RequestBuilder",
     "RequestSpec",
     "RetryPolicy",
+    "Stitch",
     "StitchContext",
     "StitchHttpPort",
     "StitchKafkaPort",

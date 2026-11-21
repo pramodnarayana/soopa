@@ -1,4 +1,4 @@
-from sqlalchemy import CursorResult, select
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from strace.ports import TraceRepositoryPort
@@ -99,3 +99,16 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none() is not None
+
+    async def release_idempotency(self, tenant_id: str, idempotency_key: str) -> None:
+        """
+        Releases an idempotency reservation (used if a transient error occurred and needs retry).
+        """
+        if not tenant_id or not idempotency_key:
+            return
+
+        stmt = delete(ProcessedEvent).where(
+            ProcessedEvent.tenant_id == tenant_id,
+            ProcessedEvent.idempotency_key == idempotency_key,
+        )
+        await self.session.execute(stmt)

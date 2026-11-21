@@ -37,6 +37,13 @@ from ip.engine.bootstrap.container import (
 )
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.normalization.dtos import (
+    CanonicalDraft,
+    CanonicalEntityDefinition,
+    ReplicaSnapshot,
+    TransformationContext,
+    TransformationResult,
+)
 from ip.engine.domain.normalization.enums import (
     NormalizationOutcome,
     TransformationMode,
@@ -48,13 +55,6 @@ from ip.engine.domain.normalization.registries import (
     CanonicalEntityRegistry,
     CanonicalWriterRegistry,
     TransformerRegistry,
-)
-from ip.engine.domain.normalization.transformation import (
-    CanonicalDraft,
-    CanonicalEntityDefinition,
-    ReplicaSnapshot,
-    TransformationContext,
-    TransformationResult,
 )
 from ip.engine.domain.replication.replica_record import ReplicaRecord
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort

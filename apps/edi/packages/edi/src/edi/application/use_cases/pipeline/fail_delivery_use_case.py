@@ -27,7 +27,7 @@ class FailDeliveryUseCase:
     def __init__(
         self,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
-        publisher: OutboxPublisherPort,
+        publisher: OutboxPublisherPort | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.publisher = publisher
@@ -77,20 +77,10 @@ class FailDeliveryUseCase:
                     status=edi_msg.status,
                 )
                 await uow.edi_messages.update_outbound_delivery_metadata(edi_msg)
-                envelopes = await uow.edi_messages.flush_events(edi_msg)
+                await uow.edi_messages.flush_events(edi_msg)
             else:
                 assert edi_json is not None
-                envelopes = await uow.edi_jsons.save(edi_json)
+                await uow.edi_jsons.save(edi_json)
 
             await uow.commit()
-
-        try:
-            for env in envelopes:
-                await self.publisher.publish(env)
-            async with self.uow_factory() as ack_uow, ack_uow:
-                for env in envelopes:
-                    await ack_uow.outbox.mark_completed(env.id)
-                await ack_uow.commit()
             bound_logger.info("fail_delivery.success")
-        except Exception as e:
-            bound_logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))

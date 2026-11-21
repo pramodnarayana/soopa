@@ -10,6 +10,7 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     IpProcessedEventModel,
 )
 from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.replay.ports import IpReplayLedgerRepositoryPort
 from ip.engine.ports.outbound.batch_manifest_repository_port import BatchManifestRepositoryPort
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
@@ -85,6 +86,7 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
     pending_references: PendingReferenceRepositoryPort
     traces: TraceRepositoryPort
     batch_manifests: BatchManifestRepositoryPort
+    replay_ledger: IpReplayLedgerRepositoryPort
 
     def __init__(
         self,
@@ -102,6 +104,7 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
         pending_references: PendingReferenceRepositoryPort,
         traces: TraceRepositoryPort,
         batch_manifests: BatchManifestRepositoryPort,
+        replay_ledger: IpReplayLedgerRepositoryPort,
         domain_repositories: Mapping[str, object] | None = None,
     ) -> None:
         super().__init__(tenant_session)
@@ -118,6 +121,7 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
         self.pending_references = pending_references
         self.traces = traces
         self.batch_manifests = batch_manifests
+        self.replay_ledger = replay_ledger
         self._domain_repositories: dict[str, object] = (
             dict(domain_repositories) if domain_repositories is not None else {}
         )
