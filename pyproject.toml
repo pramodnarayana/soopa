@@ -319,14 +319,14 @@ omit = [
     "*/adapters/paramiko_sftp_tester.py",
     "*/adapters/vault.py",
     # AS2 server main (ASGI lifespan wiring — integration only)
-    "apps/edi/apps/edi-as2-server/src/as2_server/main.py",
+    "*/as2_server/main.py",
     # Transformer worker entrypoint (subprocess runner, not business logic)
-    "apps/edi/apps/edi-compute-worker/src/compute_worker/worker.py",
-    "apps/edi/apps/edi-compute-worker/src/compute_worker/main.py",
+    "*/compute_worker/worker.py",
+    "*/compute_worker/main.py",
     # Platform worker entrypoints (wiring, integration only)
-    "core/platform/apps/notification-worker/src/notification_worker/main.py",
-    "core/platform/apps/notification-channel-worker/src/notification_channel_worker/main.py",
-    "core/platform/apps/notification-jobs-worker/src/notification_jobs_worker/main.py",
+    "*/notification_worker/main.py",
+    "*/notification_channel_worker/main.py",
+    "*/notification_jobs_worker/main.py",
 ]
 
 [tool.coverage.report]
@@ -357,12 +357,12 @@ omit = [
     "*/adapters/sftp.py",
     "*/adapters/paramiko_sftp_tester.py",
     "*/adapters/vault.py",
-    "apps/edi/apps/edi-as2-server/src/as2_server/main.py",
-    "apps/edi/apps/edi-compute-worker/src/compute_worker/worker.py",
-    "apps/edi/apps/edi-compute-worker/src/compute_worker/main.py",
-    "core/platform/apps/notification-worker/src/notification_worker/main.py",
-    "core/platform/apps/notification-channel-worker/src/notification_channel_worker/main.py",
-    "core/platform/apps/notification-jobs-worker/src/notification_jobs_worker/main.py",
+    "*/as2_server/main.py",
+    "*/compute_worker/worker.py",
+    "*/compute_worker/main.py",
+    "*/notification_worker/main.py",
+    "*/notification_channel_worker/main.py",
+    "*/notification_jobs_worker/main.py",
 ]
 exclude_also = [
     "if (typing\\.)?TYPE_CHECKING:",

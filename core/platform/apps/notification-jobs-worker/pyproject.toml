@@ -67,3 +67,18 @@ extraPaths = [
 
 [tool.ruff]
 extend = "../../../../pyproject.toml"
+
+[tool.coverage.run]
+omit = [
+    "*/main.py",
+    "*/tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+omit = [
+    "*/main.py",
+    "*/tests/*",
+]
+
