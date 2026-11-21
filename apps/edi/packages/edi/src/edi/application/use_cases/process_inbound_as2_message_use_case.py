@@ -236,7 +236,7 @@ class ProcessInboundAs2MessageUseCase:
         # Decryption Step
         if is_encrypted:
             if not local_priv_key:
-                raise ValueError("Message is encrypted but local private key is missing.")
+                raise ValueError("Decryption failed: local private key is missing.")
             current_entity = self._decrypt_entity(
                 current_entity, original_headers, local_priv_key, local_cert
             )

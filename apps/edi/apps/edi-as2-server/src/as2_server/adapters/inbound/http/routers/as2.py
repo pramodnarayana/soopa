@@ -42,6 +42,13 @@ async def receive_as2(
             logger.warning("as2_business_logic_rejection", error=str(e))
             if as2_to_hdr and as2_from_hdr and msg_id_hdr:
                 error_msg = str(e).lower()
+                content_type_hdr = (
+                    headers.get("content-type") or headers.get("Content-Type") or ""
+                ).lower()
+                is_enveloped = (
+                    "pkcs7-mime" in content_type_hdr or "enveloped-data" in content_type_hdr
+                )
+
                 if "decrypt" in error_msg:
                     modifier = "error: decryption-failed"
                 elif "authentic" in error_msg or "sign" in error_msg or "cert" in error_msg:
@@ -50,6 +57,10 @@ async def receive_as2(
                     modifier = "error: integrity-check-failed"
                 elif "partnership" in error_msg or "secure" in error_msg:
                     modifier = "error: insufficient-message-security"
+                elif is_enveloped:
+                    # RFC 4130 Section 7.5.3: Decryption failure includes cases where the
+                    # encrypted message was corrupted during transit, causing payload extraction to fail.
+                    modifier = "error: decryption-failed"
                 else:
                     modifier = "error: unexpected-processing-error"
 
