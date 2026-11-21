@@ -50,7 +50,7 @@ class ComputeTransformUseCase:
         self,
         transformer: TransformerPort,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
-        publisher: OutboxPublisherPort,
+        publisher: OutboxPublisherPort | None = None,
     ) -> None:
         self.transformer = transformer
         self.uow_factory = uow_factory
@@ -163,20 +163,8 @@ class ComputeTransformUseCase:
                     tenant_id=edi_msg_fallback.tenant_id or tenant_id,
                 )
                 await failure_uow.edi_messages.update_outbound_delivery_metadata(edi_msg_fallback)
-                failure_envelopes = await failure_uow.edi_messages.flush_events(edi_msg_fallback)
+                await failure_uow.edi_messages.flush_events(edi_msg_fallback)
                 await failure_uow.commit()
-
-                try:
-                    for failure_env in failure_envelopes:
-                        await self.publisher.publish(failure_env)
-                    async with self.uow_factory() as ack_uow, ack_uow:
-                        for failure_env in failure_envelopes:
-                            await ack_uow.outbox.mark_completed(failure_env.id)
-                        await ack_uow.commit()
-                except Exception as sync_e:
-                    logger.exception(
-                        "sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e)
-                    )
 
     async def _process_transformed_transactions(
         self,
@@ -266,7 +254,7 @@ class ComputeTransformUseCase:
             transaction_type=txn_type_for_parent,
         )
         await uow.edi_messages.update_outbound_delivery_metadata(edi_msg)
-        envelopes = await uow.edi_messages.flush_events(edi_msg)
+        await uow.edi_messages.flush_events(edi_msg)
         logger.info(
             "compute_transform.outbox_event_dispatched",
             trace_id=trace_id,
@@ -274,12 +262,3 @@ class ComputeTransformUseCase:
         )
 
         await uow.commit()
-        try:
-            for env in envelopes:
-                await self.publisher.publish(env)
-            async with self.uow_factory() as ack_uow, ack_uow:
-                for env in envelopes:
-                    await ack_uow.outbox.mark_completed(env.id)
-                await ack_uow.commit()
-        except Exception as sync_e:
-            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e))

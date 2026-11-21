@@ -79,18 +79,41 @@ class MutationSpec:
 class StitchSpec:
     """Explicit specification for a functional Stitch pipeline (Zero Decorators)."""
 
-    id: str
+    id: str = ""
     trigger: str
-    handler: Callable[..., object]
+    handler: Callable[..., object] | None = None
     name: str = ""
     description: str = ""
+    connector: Callable[..., object] | None = None
+    transformer: Callable[..., object] | None = None
+    destination: Callable[..., object] | str | None = None
     concurrency_key: str | None = None
     retry: RetryPolicy | None = None
     step_timeout: timedelta | None = None
     workflow_sla: timedelta | None = None
 
     def __post_init__(self) -> None:
+        effective_id = (self.id or self.name).strip()
+        effective_name = (self.name or self.id).strip()
+        object.__setattr__(self, "id", effective_id)
+        object.__setattr__(self, "name", effective_name)
+
         if not self.id.strip():
-            raise ValueError("StitchSpec requires non-empty id")
+            raise ValueError("StitchSpec requires non-empty id or name")
         if not self.trigger.strip():
             raise ValueError("StitchSpec requires non-empty trigger event key")
+        if self.handler is None and self.transformer is None and self.connector is None:
+            raise ValueError("StitchSpec requires either handler, transformer, or connector")
+
+
+# Ubiquitous alias: Pipelines ARE Stitches
+Stitch = StitchSpec
+
+__all__ = [
+    "ConnectorSpec",
+    "MutationSpec",
+    "Stitch",
+    "StitchSpec",
+    "TransformerSpec",
+    "retry_policy",
+]

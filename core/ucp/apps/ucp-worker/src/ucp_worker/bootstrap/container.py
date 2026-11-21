@@ -3,8 +3,8 @@ from contextlib import asynccontextmanager
 
 import structlog
 from database.provider import DatabaseProvider
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
+from pubsub.provider import PubSubProvider
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.outbound.database.least_loaded_shard_allocator import (
     LeastLoadedPooledShardStrategy,
@@ -30,7 +30,7 @@ class WorkerContainer:
         self.session_factory = self.db_provider.session_factory
 
         self.events_dispatcher: UcpEventDispatcher | None = None
-        self.events_consumer: SqsConsumerManager | None = None
+        self.events_consumer: ConsumerManagerPort | None = None
 
     def wire(self) -> None:
         self._wire_events_consumer()
@@ -70,15 +70,11 @@ class WorkerContainer:
 
         # Cron-triggered scheduled jobs are handled by jobs_consumer.
 
-        ucp_identity_sync_consumer = AwsSqsConsumer(
-            queue_url=self.settings.sqs_ucp_identity_sync_queue_url,
+        self.events_consumer = PubSubProvider.create_consumer_manager(
+            source_uri=self.settings.sqs_ucp_identity_sync_queue_url,
+            handler=self.events_dispatcher.dispatch,
             region_name=self.settings.aws_region,
             endpoint_url=self.settings.aws_endpoint_url,
-        )
-        self.events_consumer = SqsConsumerManager(
-            consumer=ucp_identity_sync_consumer,
-            queue_name="ucp-events.fifo",
-            handler=self.events_dispatcher.dispatch,
         )
 
     async def dispose(self) -> None:

@@ -1,18 +1,5 @@
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from typing import Protocol
+"""Re-export canonical AckableMessage and NackCallbackPort from domain DTOs."""
 
-from seedwork.domain.types import JsonDict
+from pubsub.domain.dtos import AckableMessage, NackCallbackPort
 
-
-class NackCallbackPort(Protocol):
-    """Protocol for broker negative-acknowledgment with optional visibility timeout."""
-
-    async def __call__(self, *, visibility_timeout_seconds: int | None = None) -> None: ...
-
-
-@dataclass(frozen=True)
-class AckableMessage:
-    payload: JsonDict
-    ack: Callable[[], Awaitable[None]]
-    nack: NackCallbackPort
+__all__ = ["AckableMessage", "NackCallbackPort"]

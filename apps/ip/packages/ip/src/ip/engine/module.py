@@ -38,6 +38,9 @@ from ip.engine.adapters.inbound.api.routers.transformations_router import (
 from ip.engine.adapters.inbound.api.routers.universal_ingress_router import (
     router as universal_ingress_router,
 )
+from ip.engine.adapters.inbound.api.routers.universal_replay_router import (
+    router as universal_replay_router,
+)
 from ip.engine.application.api_provider_port import IpApiProviderPort
 from ip.engine.bootstrap.api_provider import IpApiProvider
 from ip.engine.bootstrap.container import Container
@@ -81,6 +84,7 @@ class IpApiModule:
         app.include_router(mapping_specs_router)
         app.include_router(trace_router)
         app.include_router(replay_router)
+        app.include_router(universal_replay_router)
         app.include_router(records_router)
         app.include_router(interval_streams_router)
         logger.info("ip_api_module_routes_registered")

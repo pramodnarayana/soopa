@@ -268,8 +268,10 @@ depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
     "ip.engine.adapters",
+    "ip.engine.adapters.inbound.api",
     "ip.engine.adapters.outbound.database.migrations",
-    "ip.sdk"
+    "ip.sdk",
+    "identity"
 ]
 
 [[modules]]

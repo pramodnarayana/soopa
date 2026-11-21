@@ -13,8 +13,8 @@ from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 from seedwork.domain.types import JsonDict
 
@@ -40,7 +40,7 @@ class WorkerContainer:
         )
 
         self.cp_outbox_relay: NotifyOutboxRelay | None = None
-        self.cp_manager: SqsConsumerManager | None = None
+        self.cp_manager: ConsumerManagerPort | None = None
         self.cp_sweeper_job_handler: EdiControlPlaneOutboxSweeperJobHandler | None = None
         self.cp_cleanup_job_handler: EdiControlPlaneOutboxCleanupJobHandler | None = None
         self.cp_outbox_publisher: OutboxPublisherPort | None = None
@@ -52,8 +52,8 @@ class WorkerContainer:
             source=EdiOutboxSource.EDI_CONTROL_PLANE.value,
         )
 
-        self.cp_outbox_publisher = PubSubProvider.create_topic_publisher(
-            topic_arn=self.settings.aws.sns_topic_arn,
+        self.cp_outbox_publisher = PubSubProvider.create_outbox_publisher(
+            destination_uri=self.settings.aws.sns_topic_arn,
             region_name=self.settings.aws.resolved_region,
             endpoint_url=self.settings.aws.endpoint_url,
         )
@@ -107,7 +107,7 @@ class WorkerContainer:
         )
 
         self.cp_manager = PubSubProvider.create_consumer_manager(
-            queue_url=self.settings.sqs.control_plane_jobs_queue_url,
+            source_uri=self.settings.sqs.control_plane_jobs_queue_url,
             handler=cp_dispatcher.dispatch,
             region_name=self.settings.aws.resolved_region,
             endpoint_url=self.settings.aws.endpoint_url,

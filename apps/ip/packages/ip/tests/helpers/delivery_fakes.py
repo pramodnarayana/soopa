@@ -88,7 +88,10 @@ from helpers.trace_fakes import (
     InMemoryReplicaRecordRepo,
     InMemoryTraceRepo,
 )
-from helpers.worker_fakes import InMemoryBatchManifestRepo
+from helpers.worker_fakes import (
+    InMemoryBatchManifestRepo,
+    InMemoryReplayLedgerRepo,
+)
 
 
 class FakeCipher(CipherPort):
@@ -420,6 +423,8 @@ class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
         self.pending_references: PendingReferenceRepositoryPort = DummyPendingRefRepo()
         self.traces: TraceRepositoryPort = InMemoryTraceRepo()
         self.batch_manifests = InMemoryBatchManifestRepo()
+        self.replay_ledger = InMemoryReplayLedgerRepo()
+        self.replay_audits = self.replay_ledger
         self.commits = 0
 
     async def __aenter__(self) -> FakeDataPlaneUnitOfWork:

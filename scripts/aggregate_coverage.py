@@ -12,7 +12,7 @@ def get_uv_path() -> str:
     if not uv_path:
         sys.stdout.write("❌ Error: 'uv' executable not found in PATH.\n")
         sys.exit(1)
-    return uv_path
+    return os.path.abspath(uv_path)
 
 
 def stage_package_artifacts(

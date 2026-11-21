@@ -12,7 +12,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
 from edi.domain.replication.graph import PermanentProvisioningError, TransientProvisioningError
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.adapters.aws.aws_sqs_consumer import AwsSqsConsumer
 from seedwork import generate_id
 from seedwork.events import EventEnvelope
 

@@ -51,7 +51,7 @@ class ComputeOutboundTransformUseCase:
         self,
         transformer: TransformerPort,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
-        publisher: OutboxPublisherPort,
+        publisher: OutboxPublisherPort | None = None,
     ) -> None:
         self.transformer = transformer
         self.uow_factory = uow_factory
@@ -166,7 +166,7 @@ class ComputeOutboundTransformUseCase:
                 trading_partner_id = edi_json.trading_partner_id
 
                 # 2. Save EdiMessage
-                envelopes = await self._save_edi_message(
+                await self._save_edi_message(
                     uow=uow,
                     edi_json=edi_json,
                     trace_id=trace_id,
@@ -184,7 +184,7 @@ class ComputeOutboundTransformUseCase:
                 transform_successful_key = generate_deterministic_id(
                     SystemIdPrefix.IDEMPOTENCY, command.idempotency_key, "TRANSFORMATION_SUCCESSFUL"
                 )
-                envelope = await uow.outbox.append_event(
+                await uow.outbox.append_event(
                     tenant_id=edi_json.tenant_id,
                     idempotency_key=transform_successful_key,
                     event_type=PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
@@ -203,20 +203,6 @@ class ComputeOutboundTransformUseCase:
 
                 await uow.commit()
 
-                try:
-                    for env in envelopes:
-                        await self.publisher.publish(env)
-                    await self.publisher.publish(envelope)
-                    async with self.uow_factory() as ack_uow, ack_uow:
-                        for env in envelopes:
-                            await ack_uow.outbox.mark_completed(env.id)
-                        await ack_uow.outbox.mark_completed(envelope.id)
-                        await ack_uow.commit()
-                except Exception as sync_e:
-                    logger.exception(
-                        "sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e)
-                    )
-
             logger.info("compute_outbound_transform.completed", trace_id=trace_id)
         except Exception as e:
             logger.exception("compute_outbound_transform.failed", trace_id=trace_id, error=str(e))
@@ -229,7 +215,7 @@ class ComputeOutboundTransformUseCase:
                     event_key = generate_deterministic_id(
                         SystemIdPrefix.IDEMPOTENCY, command.idempotency_key, "TRANSFORMATION_FAILED"
                     )
-                    failure_envelope = await failure_uow.outbox.append_event(
+                    await failure_uow.outbox.append_event(
                         tenant_id=edi_json_fallback.tenant_id,
                         idempotency_key=event_key,
                         event_type=PipelineEventType.TRANSFORMATION_FAILED.value,
@@ -241,12 +227,3 @@ class ComputeOutboundTransformUseCase:
                         },
                     )
                     await failure_uow.commit()
-                    try:
-                        await self.publisher.publish(failure_envelope)
-                        async with self.uow_factory() as ack_uow, ack_uow:
-                            await ack_uow.outbox.mark_completed(failure_envelope.id)
-                            await ack_uow.commit()
-                    except Exception as sync_e:
-                        logger.exception(
-                            "sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e)
-                        )

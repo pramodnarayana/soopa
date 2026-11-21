@@ -84,6 +84,13 @@ from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.dispatch.response_envelope import ResponseEventEnvelope
 from ip.engine.domain.enums import IpEventType, IpOutboxSource
 from ip.engine.domain.exceptions import IpError, Result
+from ip.engine.domain.normalization.dtos import (
+    CanonicalDraft,
+    CanonicalEntityDefinition,
+    ReplicaSnapshot,
+    TransformationContext,
+    TransformationResult,
+)
 from ip.engine.domain.normalization.enums import TransformationMode
 from ip.engine.domain.normalization.policies import (
     DefaultNormalizationErrorPolicy,
@@ -92,13 +99,6 @@ from ip.engine.domain.normalization.registries import (
     CanonicalEntityRegistry,
     CanonicalWriterRegistry,
     TransformerRegistry,
-)
-from ip.engine.domain.normalization.transformation import (
-    CanonicalDraft,
-    CanonicalEntityDefinition,
-    ReplicaSnapshot,
-    TransformationContext,
-    TransformationResult,
 )
 from ip.engine.domain.replication.enums import (
     CursorKind,

@@ -49,8 +49,12 @@ from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStorageResultDTO,
 )
 from ip.sdk.registry import default_registry
-from ip.solutions.domains.energy.landis.meter_readings import LANDIS_METER_READINGS_CONNECTOR
-from ip.solutions.domains.energy.landis.normalizer import LANDIS_METER_TRANSFORMER
+from ip.solutions.domains.energy.landis import (
+    LANDIS_METER_READINGS_CONNECTOR,
+)
+from ip.solutions.domains.energy.landis import (
+    LANDIS_METER_READINGS_TRANSFORMER as LANDIS_METER_TRANSFORMER,
+)
 
 # Explicit registration of immutable specs (Zero import-time side effects)
 default_registry.register_connector(LANDIS_METER_READINGS_CONNECTOR)

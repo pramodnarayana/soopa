@@ -24,7 +24,7 @@ class DispatchInboundTransformUseCase:
         uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
         settings: object,
-        publisher: OutboxPublisherPort,
+        publisher: OutboxPublisherPort | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.transformer = transformer
@@ -58,7 +58,7 @@ class DispatchInboundTransformUseCase:
             compute_key = generate_deterministic_id(
                 SystemIdPrefix.IDEMPOTENCY, idempotency_key, "COMPUTE_TRANSFORMATION_COMMAND"
             )
-            envelope = await uow.outbox.append_event(
+            await uow.outbox.append_event(
                 tenant_id=edi_msg.tenant_id,
                 idempotency_key=compute_key,
                 event_type=PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value,
@@ -72,11 +72,4 @@ class DispatchInboundTransformUseCase:
             )
             await uow.commit()
 
-        try:
-            await self.publisher.publish(envelope)
-            async with self.uow_factory() as uow, uow:
-                await uow.outbox.mark_completed(envelope.id)
-                await uow.commit()
-        except Exception as e:
-            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
         logger.info("inbound_transform.dispatched_to_compute", trace_id=trace_id)

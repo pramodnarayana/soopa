@@ -13,8 +13,8 @@ from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_relay_port import OutboxRelayPort
 from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 from seedwork.domain.types import JsonDict
 
@@ -54,7 +54,7 @@ class WorkerContainer:
         )
 
         self.dp_outbox_relay: OutboxRelayPort | None = None
-        self.dp_manager: SqsConsumerManager | None = None
+        self.dp_manager: ConsumerManagerPort | None = None
         self.dp_cleanup_job_handler: EdiDataPlaneOutboxCleanupJobHandler | None = None
         self.retention_cleanup_job_handler: EdiDataRetentionCleanupJobHandler | None = None
         self.dp_sweeper_job_handler: EdiDataPlaneOutboxSweeperJobHandler | None = None
@@ -142,7 +142,7 @@ class WorkerContainer:
         dp_dispatcher.subscribe(EdiJobName.EDI_DATA_PLANE_OUTBOX_SWEEPER.value, dp_sweeper_handler)
 
         self.dp_manager = PubSubProvider.create_consumer_manager(
-            queue_url=self.settings.sqs.data_plane_jobs_queue_url,
+            source_uri=self.settings.sqs.data_plane_jobs_queue_url,
             handler=dp_dispatcher.dispatch,
             region_name=self.settings.aws.resolved_region,
             endpoint_url=self.settings.aws.endpoint_url,

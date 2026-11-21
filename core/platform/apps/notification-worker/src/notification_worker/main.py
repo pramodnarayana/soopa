@@ -5,7 +5,7 @@ from typing import cast
 
 import structlog
 from observability import ObservabilityProvider
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 from notification_worker.bootstrap.container import WorkerContainer as Container
@@ -17,7 +17,7 @@ logger = structlog.get_logger(__name__)
 class NotificationWorkerModule(LaunchableWorker):
     def __init__(self) -> None:
         self.container = Container()
-        self.consumer: SqsConsumerManager | None = None
+        self.consumer: ConsumerManagerPort | None = None
 
     async def start(self) -> None:
         logger.info("notification_worker_starting")

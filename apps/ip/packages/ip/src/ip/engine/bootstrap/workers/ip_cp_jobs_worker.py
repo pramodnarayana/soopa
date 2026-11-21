@@ -13,8 +13,9 @@ from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryP
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_relay_port import OutboxRelayPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.adapters.aws.aws_sqs_consumer_manager import AwsSqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from pubsub.provider import PubSubProvider
 from seedwork.domain.types import JsonDict
@@ -59,7 +60,7 @@ class IpCpJobsWorkerModule(LaunchableWorker):
         self.cp_cleaner: OutboxCleanerUseCase | None = None
         self.cp_outbox_relay: OutboxRelayPort | None = None
         self.job_dispatcher: MessageDispatcher | None = None
-        self.cp_jobs_manager: SqsConsumerManager | None = None
+        self.cp_jobs_manager: ConsumerManagerPort | None = None
 
     async def start(self) -> None:
         logger.info("ip_cp_jobs_worker_starting")
@@ -128,7 +129,7 @@ class IpCpJobsWorkerModule(LaunchableWorker):
         self.job_dispatcher = dispatcher
 
         if self._jobs_consumer is not None:
-            self.cp_jobs_manager = SqsConsumerManager(
+            self.cp_jobs_manager = AwsSqsConsumerManager(
                 consumer=self._jobs_consumer,
                 handler=dispatcher.dispatch,
                 queue_name="ip-cp-jobs",
@@ -136,7 +137,7 @@ class IpCpJobsWorkerModule(LaunchableWorker):
             self.cp_jobs_manager.start()
         elif settings.ip_control_plane_jobs_queue_url:
             self.cp_jobs_manager = PubSubProvider.create_consumer_manager(
-                queue_url=settings.ip_control_plane_jobs_queue_url,
+                source_uri=settings.ip_control_plane_jobs_queue_url,
                 handler=dispatcher.dispatch,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,

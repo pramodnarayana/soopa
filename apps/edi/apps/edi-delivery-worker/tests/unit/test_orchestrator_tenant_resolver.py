@@ -114,4 +114,4 @@ async def test_tenant_resolver_eviction(db_router: DatabaseRouterPort) -> None:
     await resolver.resolve_shard(tenant_id=t2)
     await resolver.resolve_shard(tenant_id=t3)
 
-    assert len(resolver._cache) == 2
+    assert len(resolver._endpoint_cache) == 2

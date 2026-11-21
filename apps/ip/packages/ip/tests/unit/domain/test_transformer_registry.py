@@ -2,12 +2,12 @@
 
 from dataclasses import dataclass
 
-from ip.engine.domain.normalization.registries import TransformerRegistry
-from ip.engine.domain.normalization.transformation import (
+from ip.engine.domain.normalization.dtos import (
     ReplicaSnapshot,
     TransformationContext,
     TransformationResult,
 )
+from ip.engine.domain.normalization.registries import TransformerRegistry
 
 
 @dataclass(frozen=True)

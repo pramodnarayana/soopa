@@ -12,6 +12,7 @@ from seedwork.uow import UnitOfWorkPort
 from strace.ports import TraceRepositoryPort
 
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
+from ip.engine.domain.replay.ports import IpReplayLedgerRepositoryPort
 from ip.engine.ports.outbound.batch_manifest_repository_port import BatchManifestRepositoryPort
 from ip.engine.ports.outbound.connection_entity_repository_port import (
     ConnectionEntityRepositoryPort,
@@ -105,6 +106,7 @@ class IpDataPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     pending_references: PendingReferenceRepositoryPort
     traces: TraceRepositoryPort
     batch_manifests: BatchManifestRepositoryPort
+    replay_ledger: IpReplayLedgerRepositoryPort
 
     async def record_idempotency(self, tenant_id: str, idempotency_key: str) -> bool:
         """Atomically claims an inbound event idempotency key inside the current transaction.

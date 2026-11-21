@@ -3,8 +3,9 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import pytest
-from pubsub.aws.error_handlers import DefaultConsumerErrorHandler
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.adapters.aws.aws_sqs_consumer_manager import AwsSqsConsumerManager
+from pubsub.adapters.aws.error_handlers import DefaultConsumerErrorHandler
+from pubsub.dispatcher import DispatchKey, MessageDispatcher
 from pubsub.enums import ConsumerAction, ConsumerDecision
 from pubsub.exceptions import ConsumerTerminalError
 from pubsub.message import AckableMessage
@@ -54,7 +55,7 @@ async def test_sqs_consumer_manager_fails_fast_on_terminal_error() -> None:
     async def mock_handler(payload: JsonDict) -> None:
         pass
 
-    manager = SqsConsumerManager(
+    manager = AwsSqsConsumerManager(
         consumer=mock_consumer, handler=mock_handler, on_fatal_error=on_fatal_error
     )
     manager.start()
@@ -89,7 +90,7 @@ async def test_sqs_consumer_manager_processes_message_with_ack() -> None:
         processed.set()
         return ConsumerAction.ACK
 
-    manager = SqsConsumerManager(
+    manager = AwsSqsConsumerManager(
         consumer=consumer, handler=handler, poll_sleep_seconds=0.01, queue_name="test-queue"
     )
     manager.start()
@@ -125,7 +126,7 @@ async def test_sqs_consumer_manager_processes_message_with_nack() -> None:
         processed.set()
         return ConsumerAction.NACK
 
-    manager = SqsConsumerManager(
+    manager = AwsSqsConsumerManager(
         consumer=consumer, handler=handler, poll_sleep_seconds=0.01, queue_name="test-queue"
     )
     manager.start()
@@ -165,7 +166,7 @@ async def test_sqs_consumer_manager_delegates_to_error_handler_on_exception() ->
     async def failing_handler(payload: JsonDict) -> None:
         raise ValueError("Handler failure")
 
-    manager = SqsConsumerManager(
+    manager = AwsSqsConsumerManager(
         consumer=consumer,
         handler=failing_handler,
         error_handler=error_handler,
@@ -220,7 +221,7 @@ async def test_sqs_consumer_manager_propagates_consumer_decision_visibility_time
         processed.set()
         return ConsumerDecision(action=ConsumerAction.NACK, visibility_timeout_seconds=35)
 
-    manager = SqsConsumerManager(
+    manager = AwsSqsConsumerManager(
         consumer=consumer,
         handler=handler,
         poll_sleep_seconds=0.01,
@@ -241,6 +242,52 @@ def test_sqs_consumer_manager_background_tasks_and_properties() -> None:
     async def dummy(payload: JsonDict) -> None:
         pass
 
-    manager = SqsConsumerManager(consumer=consumer, handler=dummy)
+    manager = AwsSqsConsumerManager(consumer=consumer, handler=dummy)
     assert manager.background_tasks() == []
     assert manager.task is None
+
+
+@pytest.mark.asyncio
+async def test_sqs_consumer_manager_dispatches_cleanly_to_message_dispatcher() -> None:
+    dispatcher = MessageDispatcher(dispatch_key=DispatchKey.JOB_NAME.value)
+    dispatched_jobs: list[JsonDict] = []
+
+    async def sample_job(payload: JsonDict) -> None:
+        dispatched_jobs.append(payload)
+
+    dispatcher.subscribe("edi_control_plane_outbox_sweeper", sample_job)
+
+    msg_acked = False
+
+    async def ack() -> None:
+        nonlocal msg_acked
+        msg_acked = True
+
+    async def nack(*, requeue: bool = True, visibility_timeout_seconds: int | None = None) -> None:
+        pass
+
+    msg = AckableMessage(
+        payload={
+            "job_id": "job_123",
+            "job_name": "edi_control_plane_outbox_sweeper",
+            "payload": {},
+        },
+        ack=ack,
+        nack=nack,
+    )
+    consumer = FakeQueueConsumer([msg])
+
+    manager = AwsSqsConsumerManager(
+        consumer=consumer,
+        handler=dispatcher.dispatch,
+        poll_sleep_seconds=0.01,
+        queue_name="edi-control-plane-jobs.fifo",
+    )
+    manager.start()
+
+    await asyncio.sleep(0.1)
+    await manager.stop()
+
+    assert len(dispatched_jobs) == 1
+    assert dispatched_jobs[0]["job_name"] == "edi_control_plane_outbox_sweeper"
+    assert msg_acked is True

@@ -16,8 +16,8 @@ from identity.domain.constants import IdentityEventType
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.adapters.aws.aws_sqs_consumer import AwsSqsConsumer
+from pubsub.adapters.aws.aws_sqs_consumer_manager import AwsSqsConsumerManager
 from seedwork import generate_random_hex
 
 
@@ -109,7 +109,7 @@ async def test_manager_dispatches_message_to_subscribed_handler(
         endpoint_url=endpoint_url,
     )
 
-    manager = SqsConsumerManager(
+    manager = AwsSqsConsumerManager(
         consumer=consumer_port,
         queue_name=queue_name,
         handler=dispatcher.dispatch_raw,

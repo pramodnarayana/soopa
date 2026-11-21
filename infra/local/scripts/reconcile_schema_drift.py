@@ -390,6 +390,64 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
 
             await shard_session.execute(
                 text("""
+                CREATE TABLE IF NOT EXISTS public.ip_replay_ledger (
+                    id VARCHAR(64) NOT NULL PRIMARY KEY,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    actor VARCHAR(128) NOT NULL,
+                    target_type VARCHAR(64) NOT NULL,
+                    target_id VARCHAR(128) NOT NULL,
+                    target_stage VARCHAR(64) NOT NULL,
+                    trace_id VARCHAR(64) NOT NULL,
+                    idempotency_key VARCHAR(128) NOT NULL,
+                    reason TEXT NOT NULL,
+                    payload_override JSONB,
+                    status VARCHAR(32) NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    completed_at TIMESTAMPTZ,
+                    CONSTRAINT uq_ip_replay_idempotency UNIQUE (tenant_id, idempotency_key)
+                );
+                """)
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_ip_replay_target ON public.ip_replay_ledger (tenant_id, target_type, target_id);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_ip_replay_actor ON public.ip_replay_ledger (tenant_id, actor, created_at);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_ip_replay_trace ON public.ip_replay_ledger (tenant_id, trace_id);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_ip_replay_status ON public.ip_replay_ledger (tenant_id, status, created_at);"
+                )
+            )
+            await shard_session.execute(
+                text("ALTER TABLE public.ip_replay_ledger ENABLE ROW LEVEL SECURITY;")
+            )
+            await shard_session.execute(
+                text("ALTER TABLE public.ip_replay_ledger FORCE ROW LEVEL SECURITY;")
+            )
+            await shard_session.execute(
+                text(
+                    "DROP POLICY IF EXISTS tenant_isolation_ip_replay_ledger ON public.ip_replay_ledger;"
+                )
+            )
+            await shard_session.execute(
+                text("""
+                CREATE POLICY tenant_isolation_ip_replay_ledger ON public.ip_replay_ledger
+                    USING (tenant_id = current_setting('platform.current_tenant_id', true));
+                """)
+            )
+
+            await shard_session.execute(
+                text("""
                 CREATE TABLE IF NOT EXISTS public.mdm_billing_readings (
                     id VARCHAR(64) NOT NULL,
                     tenant_id VARCHAR(128) NOT NULL,

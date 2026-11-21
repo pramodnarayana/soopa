@@ -2,6 +2,14 @@
 
 from dataclasses import dataclass
 
+from ip.engine.domain.normalization.dtos import (
+    CanonicalDraft,
+    CanonicalEntityDefinition,
+    ReplicaSnapshot,
+    SourceReference,
+    TransformationContext,
+    TransformationResult,
+)
 from ip.engine.domain.normalization.enums import (
     CanonicalAction,
     NormalizationOutcome,
@@ -17,15 +25,7 @@ from ip.engine.domain.normalization.ledger import (
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
 )
-from ip.engine.domain.normalization.transformation import (
-    CanonicalDraft,
-    CanonicalEntityDefinition,
-    ReplicaSnapshot,
-    SourceReference,
-    Transformation,
-    TransformationContext,
-    TransformationResult,
-)
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.domain.trace.enums import IpTraceEventType, TraceEventStatus
 from seedwork.domain.types import JsonDict
 

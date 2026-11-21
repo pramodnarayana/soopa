@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.normalization.enums import NormalizationRejectionReason
-from ip.engine.domain.normalization.transformation import (
+from ip.engine.domain.normalization.dtos import (
     CanonicalDraft,
     ReplicaSnapshot,
     TransformationContext,
     TransformationRejection,
     TransformationResult,
 )
+from ip.engine.domain.normalization.enums import NormalizationRejectionReason
 from ip.engine.ports.outbound.transformer_port import TransformerPort
 from ip.solutions.domains.energy.canonical import (
     EnergyEntityType,

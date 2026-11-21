@@ -8,7 +8,7 @@ from database.router import DatabaseRouterPort
 from database.types import GlobalSession, TenantSession
 from outbox.adapters.inbound.multi_shard_outbox_drain_relay import MultiShardOutboxDrainRelay
 from outbox.ports.outbox_relay_port import OutboxRelayPort
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.adapters.aws.aws_sqs_consumer_manager import AwsSqsConsumerManager
 from pubsub.message import AckableMessage
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from seedwork.domain.types import JsonDict
@@ -79,7 +79,7 @@ class FakeMessageConsumer(MessageConsumerPort):
 
     @asynccontextmanager
     async def poll_raw_message(self) -> AsyncGenerator[AckableMessage | None, None]:
-        await asyncio.sleep(10)
+        await asyncio.sleep(0.01)
         yield None
 
 
@@ -111,7 +111,7 @@ async def test_worker_container_lifecycle() -> None:
 
     fake_relay = FakeOutboxRelay()
     fake_consumer = FakeMessageConsumer()
-    consumer_manager = SqsConsumerManager(
+    consumer_manager = AwsSqsConsumerManager(
         consumer=fake_consumer,
         handler=_noop_handler,
         queue_name="test-queue",
@@ -137,7 +137,7 @@ async def test_worker_module_background_tasks() -> None:
 
     fake_relay = FakeOutboxRelay()
     fake_consumer = FakeMessageConsumer()
-    consumer_manager = SqsConsumerManager(
+    consumer_manager = AwsSqsConsumerManager(
         consumer=fake_consumer,
         handler=_noop_handler,
         queue_name="test-queue",

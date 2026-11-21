@@ -17,6 +17,13 @@ from ip.engine.application.use_cases.normalization.process_inbound_range_use_cas
     ProcessInboundRangeUseCase,
 )
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
+from ip.engine.domain.normalization.dtos import (
+    CanonicalDraft,
+    CanonicalEntityDefinition,
+    ReplicaSnapshot,
+    TransformationContext,
+    TransformationResult,
+)
 from ip.engine.domain.normalization.enums import NormalizationOutcome, TransformationMode
 from ip.engine.domain.normalization.ledger import (
     NormalizationLedgerEntry,
@@ -31,14 +38,7 @@ from ip.engine.domain.normalization.registries import (
     CanonicalWriterRegistry,
     TransformerRegistry,
 )
-from ip.engine.domain.normalization.transformation import (
-    CanonicalDraft,
-    CanonicalEntityDefinition,
-    ReplicaSnapshot,
-    Transformation,
-    TransformationContext,
-    TransformationResult,
-)
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import CursorKind, MergeOutcome, SyncMode
 from ip.engine.domain.replication.inbound_record import InboundBatchItemSpec, InboundRecord

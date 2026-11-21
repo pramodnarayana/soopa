@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.normalization.enums import NormalizationRejectionReason
-from ip.engine.domain.normalization.transformation import (
+from ip.engine.domain.normalization.dtos import (
     ReplicaSnapshot,
     TransformationContext,
 )
+from ip.engine.domain.normalization.enums import NormalizationRejectionReason
 from ip.solutions.domains.energy.canonical import EnergyEntityType
 from ip.solutions.domains.energy.sap.billing_reading_transformer import (
     SapBillingReadingTransformer,

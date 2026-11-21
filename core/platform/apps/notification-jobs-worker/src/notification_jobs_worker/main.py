@@ -6,7 +6,7 @@ from typing import cast
 import structlog
 from observability import ObservabilityProvider
 from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 from notification_jobs_worker.bootstrap.container import WorkerContainer as Container
@@ -19,7 +19,7 @@ class NotificationJobsWorkerModule(LaunchableWorker):
     def __init__(self) -> None:
         self.container = Container()
         self.outbox_listener: NotifyOutboxRelay | None = None
-        self.jobs_consumer: SqsConsumerManager | None = None
+        self.jobs_consumer: ConsumerManagerPort | None = None
 
     async def start(self) -> None:
         logger.info("notification_jobs_worker_starting")

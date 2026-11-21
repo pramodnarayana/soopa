@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from edi.adapters.outbound.database.replication_adapter import SqlAlchemyReplicationAdapter
 from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
 from observability import ObservabilityProvider
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
@@ -27,7 +27,7 @@ from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_a
 class EdiConfigSyncWorkerModule(LaunchableWorker):
     def __init__(self) -> None:
         self.db_router: DatabaseRouter | None = None
-        self.sqs_manager: SqsConsumerManager | None = None
+        self.sqs_manager: ConsumerManagerPort | None = None
 
     async def start(self) -> None:
         logger.info("config_sync_worker_starting")
@@ -51,7 +51,7 @@ class EdiConfigSyncWorkerModule(LaunchableWorker):
         )
 
         self.sqs_manager = PubSubProvider.create_consumer_manager(
-            queue_url=settings.sqs.provisioning_queue_url,
+            source_uri=settings.sqs.provisioning_queue_url,
             handler=dispatcher.dispatch_raw,
             region_name=settings.aws.resolved_region,
             endpoint_url=settings.aws.endpoint_url,

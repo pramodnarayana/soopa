@@ -463,12 +463,49 @@ class BatchManifestModel(IpTenantBase, TenantTraceableOrmModel):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class IpReplayLedgerModel(IpTenantBase):
+    """PostgreSQL Table for app-owned IP Replay Audit Ledger (`public.ip_replay_ledger`)."""
+
+    __tablename__ = "ip_replay_ledger"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key", name="uq_ip_replay_idempotency"),
+        Index("idx_ip_replay_target", "tenant_id", "target_type", "target_id"),
+        Index("idx_ip_replay_actor", "tenant_id", "actor", "created_at"),
+        Index("idx_ip_replay_trace", "tenant_id", "trace_id"),
+        Index("idx_ip_replay_status", "tenant_id", "status", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_stage: Mapped[str] = mapped_column(String(32), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    parent_trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    original_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    actor: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_override: Mapped[JsonDict | None] = mapped_column(JSONB, nullable=True)
+    affected_records: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="IN_FLIGHT")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+IpReplayAuditLogModel = IpReplayLedgerModel
+
+
 __all__ = [
     "BatchManifestModel",
     "GlobalEntityMapModel",
     "InboundRecordModel",
     "IpDataPlaneOutboxRecord",
     "IpProcessedEventModel",
+    "IpReplayAuditLogModel",
+    "IpReplayLedgerModel",
     "IpTraceEventModel",
     "NormalizationLedgerModel",
     "NormalizationRejectionModel",

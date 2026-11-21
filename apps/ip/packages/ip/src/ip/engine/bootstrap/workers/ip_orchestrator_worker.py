@@ -8,8 +8,9 @@ from collections.abc import Callable
 import structlog
 from database.router import DatabaseRouter, DatabaseRouterPort
 from dependency_injector import providers
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.adapters.aws.aws_sqs_consumer_manager import AwsSqsConsumerManager
 from pubsub.envelope_dispatcher import EventEnvelopeDispatcher
+from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from pubsub.provider import PubSubProvider
 from seedwork.infra.worker import LaunchableWorker
@@ -176,8 +177,8 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         self.container: Container | None = None
         self.dispatcher: EventEnvelopeDispatcher | None = None
         self.route_registry: IpOrchestratorRouteRegistry | None = None
-        self.realtime_manager: SqsConsumerManager | None = None
-        self.bulk_manager: SqsConsumerManager | None = None
+        self.realtime_manager: ConsumerManagerPort | None = None
+        self.bulk_manager: ConsumerManagerPort | None = None
         self.stitch_tick_loop: IpMultiShardStitchTickLoop | None = None
 
     async def start(self) -> None:
@@ -251,7 +252,7 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         dispatcher: EventEnvelopeDispatcher,
     ) -> None:
         if self._realtime_consumer is not None:
-            self.realtime_manager = SqsConsumerManager(
+            self.realtime_manager = AwsSqsConsumerManager(
                 consumer=self._realtime_consumer,
                 handler=dispatcher.handle,
                 queue_name="ip-orchestrator-realtime",
@@ -259,7 +260,7 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
             self.realtime_manager.start()
         elif settings.ip_orchestrator_realtime_queue_url:
             self.realtime_manager = PubSubProvider.create_consumer_manager(
-                queue_url=settings.ip_orchestrator_realtime_queue_url,
+                source_uri=settings.ip_orchestrator_realtime_queue_url,
                 handler=dispatcher.handle,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,
@@ -267,7 +268,7 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
             self.realtime_manager.start()
 
         if self._bulk_consumer is not None:
-            self.bulk_manager = SqsConsumerManager(
+            self.bulk_manager = AwsSqsConsumerManager(
                 consumer=self._bulk_consumer,
                 handler=dispatcher.handle,
                 queue_name="ip-orchestrator-bulk",
@@ -275,7 +276,7 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
             self.bulk_manager.start()
         elif settings.ip_orchestrator_bulk_queue_url:
             self.bulk_manager = PubSubProvider.create_consumer_manager(
-                queue_url=settings.ip_orchestrator_bulk_queue_url,
+                source_uri=settings.ip_orchestrator_bulk_queue_url,
                 handler=dispatcher.handle,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,

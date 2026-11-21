@@ -1,0 +1,243 @@
+"""AWS SQS message consumer adapter implementing MessageConsumerPort."""
+
+from __future__ import annotations
+
+import json
+import time
+from collections.abc import AsyncGenerator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from types import TracebackType
+from typing import Protocol, cast
+
+import aioboto3
+import structlog
+from botocore.exceptions import BotoCoreError, ClientError
+from seedwork.domain.types import JsonDict
+
+from pubsub.domain.dtos import AckableMessage
+from pubsub.enums import DEFAULT_SQS_NACK_VISIBILITY_SEC, MAX_SQS_VISIBILITY_TIMEOUT_SEC
+from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
+from pubsub.ports.message_consumer_port import MessageConsumerPort
+
+logger = structlog.get_logger(__name__)
+
+
+class _SqsClientProtocol(Protocol):
+    async def receive_message(self, **kwargs: object) -> JsonDict: ...
+    async def delete_message(self, **kwargs: object) -> None: ...
+    async def change_message_visibility(self, **kwargs: object) -> None: ...
+
+
+class AwsSqsConsumer(MessageConsumerPort):
+    """
+    AWS SQS Adapter for long-polling messages from an SQS queue.
+    Handles aioboto3 session pooling, SNS envelope unwrapping, and visibility resets.
+    """
+
+    def __init__(
+        self,
+        queue_url: str,
+        region_name: str = "us-east-1",
+        endpoint_url: str | None = None,
+        wait_time_seconds: int = 20,
+    ) -> None:
+        if not queue_url:
+            logger.error(
+                "sqs_listener_missing_queue_url",
+                message="SQS listener started without a queue URL",
+            )
+            raise ValueError("SQS queue URL must be provided")
+
+        if not (0 <= wait_time_seconds <= 20):
+            raise ValueError(
+                f"wait_time_seconds must be between 0 and 20 (AWS SQS limit), got {wait_time_seconds}"
+            )
+
+        self.queue_url = queue_url
+        self.region_name = region_name
+        self.endpoint_url = endpoint_url
+        self.wait_time_seconds = wait_time_seconds
+        self.session = aioboto3.Session()
+        self._client: _SqsClientProtocol | None = None
+        self._client_context: AbstractAsyncContextManager[_SqsClientProtocol] | None = None
+
+    async def __aenter__(self) -> AwsSqsConsumer:
+        if not self._client:
+            self._client_context = self.session.client(
+                "sqs",
+                region_name=self.region_name,
+                endpoint_url=self.endpoint_url,
+            )
+            self._client = await self._client_context.__aenter__()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        if self._client_context:
+            await self._client_context.__aexit__(exc_type, exc_val, exc_tb)
+            self._client = None
+            self._client_context = None
+
+    @asynccontextmanager
+    async def poll_raw_message(self) -> AsyncGenerator[AckableMessage | None, None]:
+        if self._client:
+            async with self._process_with_client(self._client) as event:
+                yield event
+        else:
+            async with (
+                self.session.client(
+                    "sqs",
+                    region_name=self.region_name,
+                    endpoint_url=self.endpoint_url,
+                ) as sqs_client,
+                self._process_with_client(sqs_client) as event,
+            ):
+                yield event
+
+    @staticmethod
+    def _extract_event_payload(body_str: str) -> JsonDict:
+        raw_body = json.loads(body_str)
+
+        if (
+            isinstance(raw_body, dict)
+            and raw_body.get("Type") == "Notification"
+            and "Message" in raw_body
+        ):
+            unwrapped = json.loads(raw_body["Message"])
+            if not isinstance(unwrapped, dict):
+                raise ValueError("Unwrapped SNS payload is not a JSON object")
+            return unwrapped
+
+        if not isinstance(raw_body, dict):
+            raise TypeError("SQS payload is not a JSON object")
+
+        return raw_body
+
+    @staticmethod
+    def _handle_client_error(e: ClientError) -> None:
+        error_code = e.response.get("Error", {}).get("Code", "")
+        if error_code in (
+            "AWS.SimpleQueueService.NonExistentQueue",
+            "InvalidParameterValue",
+            "AccessDenied",
+        ):
+            raise ConsumerTerminalError(str(e)) from e
+        raise ConsumerTransientError(str(e)) from e
+
+    async def _receive_single_message(self, sqs_client: _SqsClientProtocol) -> JsonDict | None:
+        try:
+            logger.debug("sqs_consumer_polling_started", queue_url=self.queue_url)
+            response = await sqs_client.receive_message(
+                QueueUrl=self.queue_url,
+                MaxNumberOfMessages=1,
+                WaitTimeSeconds=self.wait_time_seconds,
+                MessageAttributeNames=["All"],
+            )
+
+            messages = cast(list[JsonDict], response.get("Messages", []))
+            if not messages:
+                logger.debug("sqs_consumer_polling_empty", queue_url=self.queue_url)
+                return None
+            return messages[0]
+        except ClientError as e:
+            self._handle_client_error(e)
+            return None
+        except BotoCoreError as e:
+            raise ConsumerTransientError(str(e)) from e
+
+    async def _delete_message(self, sqs_client: _SqsClientProtocol, receipt_handle: str) -> None:
+        try:
+            await sqs_client.delete_message(QueueUrl=self.queue_url, ReceiptHandle=receipt_handle)
+        except ClientError as e:
+            self._handle_client_error(e)
+        except BotoCoreError as e:
+            raise ConsumerTransientError(str(e)) from e
+
+    @asynccontextmanager
+    async def _process_with_client(
+        self, sqs_client: _SqsClientProtocol
+    ) -> AsyncGenerator[AckableMessage | None, None]:
+        msg = await self._receive_single_message(sqs_client)
+        if not msg:
+            yield None
+            return
+
+        message_id = cast(str, msg.get("MessageId", ""))
+        receipt_handle = cast(str, msg.get("ReceiptHandle", ""))
+        body_str = cast(str, msg.get("Body", ""))
+
+        logger.info(
+            "sqs_consumer_received_raw_boto_message",
+            queue_url=self.queue_url,
+            message_id=message_id,
+            body_length=len(body_str),
+        )
+
+        received_at = time.monotonic()
+
+        try:
+            event_data = self._extract_event_payload(body_str)
+
+            async def ack() -> None:
+                await self._delete_message(sqs_client, receipt_handle)
+
+            async def nack(
+                *,
+                requeue: bool = True,
+                visibility_timeout_seconds: int | None = None,
+            ) -> None:
+                elapsed_sec = int(time.monotonic() - received_at)
+                remaining_allowance = max(0, MAX_SQS_VISIBILITY_TIMEOUT_SEC - elapsed_sec)
+                if remaining_allowance <= 0:
+                    logger.error(
+                        "sqs_visibility_timeout_allowance_exhausted",
+                        queue_url=self.queue_url,
+                        message_id=message_id,
+                        elapsed_seconds=elapsed_sec,
+                    )
+                    return
+
+                target_timeout = (
+                    DEFAULT_SQS_NACK_VISIBILITY_SEC
+                    if visibility_timeout_seconds is None
+                    else max(0, visibility_timeout_seconds)
+                )
+                resolved_timeout = min(
+                    remaining_allowance, min(MAX_SQS_VISIBILITY_TIMEOUT_SEC, target_timeout)
+                )
+                try:
+                    await sqs_client.change_message_visibility(
+                        QueueUrl=self.queue_url,
+                        ReceiptHandle=receipt_handle,
+                        VisibilityTimeout=resolved_timeout,
+                    )
+                except (ClientError, BotoCoreError) as e:
+                    logger.error(
+                        "failed_to_reset_visibility_timeout",
+                        error=str(e),
+                        visibility_timeout_seconds=resolved_timeout,
+                    )
+
+            payload_dto = event_data
+
+        except (json.JSONDecodeError, ValueError):
+            logger.exception(
+                "sqs_message_json_decode_failed",
+                message_id=message_id,
+                payload_length=len(body_str),
+            )
+            await self._delete_message(sqs_client, receipt_handle)
+            yield None
+            return
+
+        yield AckableMessage(
+            payload=payload_dto,
+            ack=ack,
+            nack=nack,
+            destination_uri=self.queue_url,
+            message_id=message_id,
+        )

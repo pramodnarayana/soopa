@@ -6,6 +6,8 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from typing import Annotated
 
 import structlog
+from database.olap.ports.olap_client_port import OlapClientPort
+from database.olap.provider import OlapProvider
 from database.provider import DatabaseProvider
 from database.router import DatabaseRouterPort
 from fastapi import Depends, HTTPException, Path, Request, status
@@ -70,6 +72,8 @@ from ip.engine.ports.outbound.uow import (
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
 from security.ports.cipher_port import CipherPort
 from sqlalchemy.ext.asyncio import AsyncSession
+from storage.ports.payload_storage_port import PayloadStoragePort
+from storage.provider import StorageProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -559,6 +563,30 @@ def get_interval_rollup_repository(
     return repo
 
 
+def get_olap_client(request: Request) -> OlapClientPort:
+    """Resolves OlapClientPort from application state or OlapProvider."""
+    try:
+        client: OlapClientPort | None = request.app.state.olap_client
+    except AttributeError:
+        client = None
+    if client is None:
+        client = OlapProvider.create_client()
+        request.app.state.olap_client = client
+    return client
+
+
+def get_payload_storage(request: Request) -> PayloadStoragePort:
+    """Resolves PayloadStoragePort from application state or StorageProvider."""
+    try:
+        storage: PayloadStoragePort | None = request.app.state.payload_storage
+    except AttributeError:
+        storage = None
+    if storage is None:
+        storage = StorageProvider.create_payload_storage()
+        request.app.state.payload_storage = storage
+    return storage
+
+
 __all__ = [
     "get_add_connection_entity_use_case",
     "get_catalog_registry",
@@ -579,6 +607,8 @@ __all__ = [
     "get_ip_stage_replay_processors",
     "get_list_connection_entities_use_case",
     "get_list_sync_runs_use_case",
+    "get_olap_client",
+    "get_payload_storage",
     "get_receive_push_executor_factory",
     "get_remove_connection_entity_use_case",
     "get_reset_connection_entity_checkpoint_use_case",

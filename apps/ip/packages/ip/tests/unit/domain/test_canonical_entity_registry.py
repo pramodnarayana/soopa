@@ -1,8 +1,8 @@
 """Unit tests for CanonicalEntityRegistry and DefaultNormalizationErrorPolicy."""
 
+from ip.engine.domain.normalization.dtos import CanonicalEntityDefinition
 from ip.engine.domain.normalization.policies import DefaultNormalizationErrorPolicy
 from ip.engine.domain.normalization.registries import CanonicalEntityRegistry
-from ip.engine.domain.normalization.transformation import CanonicalEntityDefinition
 
 
 def test_canonical_entity_registry_resolves_registered_definitions() -> None:

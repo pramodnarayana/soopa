@@ -14,10 +14,8 @@ from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
-from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
+from pubsub.provider import PubSubProvider
 from seedwork.domain.types import JsonDict
 
 from notification_jobs_worker.adapters.inbound.jobs.notification_outbox_cleanup_job import (
@@ -61,9 +59,9 @@ class WorkerContainer(containers.DeclarativeContainer):
         config=config,
     )
 
-    outbox_publisher = providers.Singleton(
-        AwsSnsPublisher,
-        topic_arn=config.sns_topic_arn,
+    outbox_publisher = providers.Callable(
+        PubSubProvider.create_outbox_publisher,
+        destination_uri=config.sns_topic_arn,
         region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
     )
@@ -116,16 +114,10 @@ class WorkerContainer(containers.DeclarativeContainer):
         sweeper_handler=outbox_sweeper_job_handler,
     )
 
-    jobs_sqs_consumer = providers.Factory(
-        AwsSqsConsumer,
-        queue_url=config.sqs_notification_jobs_queue_url,
+    jobs_consumer = providers.Callable(
+        PubSubProvider.create_consumer_manager,
+        source_uri=config.sqs_notification_jobs_queue_url,
+        handler=job_dispatcher.provided.dispatch,
         region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
-    )
-
-    jobs_consumer = providers.Singleton(
-        SqsConsumerManager,
-        consumer=jobs_sqs_consumer,
-        queue_name="notification-jobs.fifo",
-        handler=job_dispatcher.provided.dispatch,
     )

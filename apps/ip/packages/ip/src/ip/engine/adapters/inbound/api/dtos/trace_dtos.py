@@ -10,9 +10,9 @@ from ip.engine.application.responses import (
     IpTraceLineageItemDTO,
 )
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.normalization.dtos import CanonicalDataDict
 from ip.engine.domain.normalization.ledger import NormalizationRejectionEntry
 from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
-from ip.engine.domain.normalization.transformation import CanonicalDataDict
 from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
 from pydantic import BaseModel, Field

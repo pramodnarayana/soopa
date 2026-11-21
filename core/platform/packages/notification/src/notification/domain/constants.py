@@ -5,6 +5,7 @@ class NotificationEventType(StrEnum):
     """Canonical cross-context event types consumed by the notification worker."""
 
     NOTIFICATION_TRIGGERED = "notification.triggered"
+    EMAIL_REQUESTED = "email.requested"
 
 
 class NotificationCleanupJobName(StrEnum):

@@ -1193,6 +1193,7 @@ class FakeDataPlaneUnitOfWork:
         self.repository.outbox_repo = self.outbox
         self.committed = False
         self.rolled_back = False
+        self.processed_idempotency_keys: set[tuple[str, str]] = set()
 
     async def __aenter__(self) -> "FakeDataPlaneUnitOfWork":
         return self
@@ -1213,7 +1214,22 @@ class FakeDataPlaneUnitOfWork:
         self.rolled_back = True
 
     async def record_idempotency(self, tenant_id: str, idempotency_key: str) -> bool:
+        if not tenant_id or not idempotency_key:
+            return True
+        key = (tenant_id, idempotency_key)
+        if key in self.processed_idempotency_keys:
+            return False
+        self.processed_idempotency_keys.add(key)
         return True
+
+    async def has_been_processed(self, tenant_id: str, idempotency_key: str) -> bool:
+        if not tenant_id or not idempotency_key:
+            return False
+        return (tenant_id, idempotency_key) in self.processed_idempotency_keys
+
+    async def release_idempotency(self, tenant_id: str, idempotency_key: str) -> None:
+        if tenant_id and idempotency_key:
+            self.processed_idempotency_keys.discard((tenant_id, idempotency_key))
 
 
 class FakeControlPlaneUnitOfWork:

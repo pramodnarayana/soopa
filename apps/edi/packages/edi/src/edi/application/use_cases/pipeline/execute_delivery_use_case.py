@@ -38,7 +38,7 @@ class ExecuteDeliveryUseCase:
         self,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         strategies: Mapping[str, BaseDeliveryStrategy],
-        publisher: OutboxPublisherPort,
+        publisher: OutboxPublisherPort | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.strategies = strategies
@@ -58,18 +58,18 @@ class ExecuteDeliveryUseCase:
         if not strategy:
             raise ValueError(f"Unknown delivery strategy_type: {command.strategy_type}")
 
-        # 1. Fetch message and perform pre-delivery idempotency check
+        # 1. Fetch message and perform pre-delivery atomic idempotency reservation
         async with self.uow_factory() as uow, uow:
             if idempotency_key:
-                # Do a read-only check first so we don't insert until we actually succeed
-                is_processed = await uow.has_been_processed(command.tenant_id, idempotency_key)
-                if is_processed:
+                is_new = await uow.record_idempotency(command.tenant_id, idempotency_key)
+                if not is_new:
                     logger.info(
                         "delivery_worker.duplicate_deliver_skipped",
                         trace_id=command.trace_id,
                         idempotency_key=idempotency_key,
                     )
                     return EdiTraceEventType.DELIVERY_SUCCESSFUL
+                await uow.commit()
 
             edi_msg = await self._resolve_edi_message(uow, command.trace_id)
             if not edi_msg:
@@ -99,11 +99,12 @@ class ExecuteDeliveryUseCase:
                 partner_id=command.partner_id,
                 error=str(e),
             )
-            await self._record_transient_failure_attempt(command.trace_id, e)
+            # Atomically release the pre-delivery reservation and record failure attempt
+            await self._record_transient_failure_attempt(command, idempotency_key, e)
             return EdiTraceEventType.DELIVERY_ATTEMPT_FAILED
 
-        # 3. Record final outcome and lock idempotency in a single transaction
-        await self._record_delivery_outcome(command, idempotency_key, edi_msg, failure_error)
+        # 3. Record final outcome in outbox
+        await self._record_delivery_outcome(command, edi_msg, failure_error)
 
         return (
             EdiTraceEventType.DELIVERY_FAILED
@@ -114,42 +115,15 @@ class ExecuteDeliveryUseCase:
     async def _record_delivery_outcome(
         self,
         command: ExecuteDeliveryCommand,
-        idempotency_key: str | None,
         edi_msg: EdiMessage,
         failure_error: TerminalDeliveryError | None,
     ) -> None:
         async with self.uow_factory() as uow, uow:
-            if idempotency_key:
-                is_new = await uow.record_idempotency(command.tenant_id, idempotency_key)
-                if not is_new:
-                    logger.info(
-                        "delivery_worker.concurrent_duplicate_deliver_skipped",
-                        trace_id=command.trace_id,
-                        idempotency_key=idempotency_key,
-                    )
-                    return
-
-            envelopes = await self._flush_delivery_events(uow, command, edi_msg, failure_error)
+            await self._flush_delivery_events(uow, command, edi_msg, failure_error)
             if edi_msg.direction == EdiDirection.OUTBOUND:
                 edi_msg.connection_type = command.connection_type
                 await uow.edi_messages.update_outbound_delivery_metadata(edi_msg)
             await uow.commit()
-
-        try:
-            for env in envelopes:
-                await self.publisher.publish(env)
-                logger.info(
-                    "delivery_worker.outbox_event_published",
-                    event_id=env.id,
-                    event_type=env.event_type,
-                    trace_id=command.trace_id,
-                )
-            async with self.uow_factory() as ack_uow, ack_uow:
-                for env in envelopes:
-                    await ack_uow.outbox.mark_completed(env.id)
-                await ack_uow.commit()
-        except Exception as sync_e:
-            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e))
 
     async def _resolve_edi_message(
         self, uow: DataPlaneUnitOfWorkPort, trace_id: str
@@ -162,26 +136,31 @@ class ExecuteDeliveryUseCase:
         return edi_msg
 
     async def _record_transient_failure_attempt(
-        self, trace_id: str, e: TransientDeliveryError
+        self,
+        command: ExecuteDeliveryCommand,
+        idempotency_key: str | None,
+        e: TransientDeliveryError,
     ) -> None:
         async with self.uow_factory() as failure_uow, failure_uow:
-            edi_msg_fallback = await failure_uow.edi_messages.get_edi_message(trace_id)
+            if idempotency_key:
+                await failure_uow.release_idempotency(command.tenant_id, idempotency_key)
+
+            edi_msg_fallback = await failure_uow.edi_messages.get_edi_message(command.trace_id)
             if edi_msg_fallback:
                 edi_msg_fallback.mark_delivery_attempt_failed(
                     reason=e.message, error_code=e.code, error_details=e.details
                 )
                 await failure_uow.edi_messages.update_outbound_delivery_metadata(edi_msg_fallback)
                 await failure_uow.edi_messages.flush_events(edi_msg_fallback)
-                await failure_uow.commit()
-                return
+            else:
+                edi_json_fallback = await failure_uow.edi_jsons.get_edi_json(command.trace_id)
+                if edi_json_fallback:
+                    edi_json_fallback.mark_delivery_attempt_failed(
+                        reason=e.message, error_code=e.code, error_details=e.details
+                    )
+                    await failure_uow.edi_jsons.save(edi_json_fallback)
 
-            edi_json_fallback = await failure_uow.edi_jsons.get_edi_json(trace_id)
-            if edi_json_fallback:
-                edi_json_fallback.mark_delivery_attempt_failed(
-                    reason=e.message, error_code=e.code, error_details=e.details
-                )
-                await failure_uow.edi_jsons.save(edi_json_fallback)
-                await failure_uow.commit()
+            await failure_uow.commit()
 
     async def _flush_delivery_events(
         self,

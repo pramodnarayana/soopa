@@ -7,7 +7,7 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonDict, JsonPrimitive
 
-from ip.engine.domain.normalization.transformation import CanonicalDataDict
+from ip.engine.domain.normalization.dtos import CanonicalDataDict
 
 
 @dataclass(frozen=True)

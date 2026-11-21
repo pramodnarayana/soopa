@@ -42,7 +42,7 @@ class DispatchOutboundTransformUseCase:
         uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
         settings: OutboundTransformSettingsPort,
-        publisher: OutboxPublisherPort,
+        publisher: OutboxPublisherPort | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.transformer = transformer
@@ -209,7 +209,7 @@ class DispatchOutboundTransformUseCase:
                 trading_partner_id=trading_partner_id,
             )
 
-            envelope = await self._offload_to_compute_queue(
+            await self._offload_to_compute_queue(
                 trace_id,
                 edi_json.tenant_id or "",
                 standard,
@@ -221,11 +221,4 @@ class DispatchOutboundTransformUseCase:
             )
             await uow.commit()
 
-        try:
-            await self.publisher.publish(envelope)
-            async with self.uow_factory() as uow, uow:
-                await uow.outbox.mark_completed(envelope.id)
-                await uow.commit()
-        except Exception as e:
-            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
         logger.info("outbound_transform.completed", trace_id=trace_id)

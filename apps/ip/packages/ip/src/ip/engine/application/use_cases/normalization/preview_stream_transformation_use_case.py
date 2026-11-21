@@ -11,13 +11,13 @@ from seedwork.utils import generate_id
 
 from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import IpError, Result, TransformerNotFoundError
-from ip.engine.domain.normalization.ledger import EntityShadowDiff, FieldShadowDiff
-from ip.engine.domain.normalization.transformation import (
+from ip.engine.domain.normalization.dtos import (
     CanonicalDraft,
     ReplicaSnapshot,
     SourceReference,
     TransformationContext,
 )
+from ip.engine.domain.normalization.ledger import EntityShadowDiff, FieldShadowDiff
 from ip.engine.ports.outbound.transformer_port import TransformerRegistryPort
 
 logger = structlog.get_logger(__name__)

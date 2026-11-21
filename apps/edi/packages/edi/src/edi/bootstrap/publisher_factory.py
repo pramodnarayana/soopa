@@ -21,8 +21,8 @@ def create_edi_pipeline_publisher(
     """
 
     def publisher_for(queue_url: str) -> OutboxPublisherPort:
-        return PubSubProvider.create_queue_publisher(
-            queue_url=queue_url,
+        return PubSubProvider.create_outbox_publisher(
+            destination_uri=queue_url,
             region_name=region_name,
             endpoint_url=endpoint_url,
         )
