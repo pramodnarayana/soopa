@@ -50,6 +50,8 @@ def to_definition_http_response(dto: StitchDefinitionSummaryDTO) -> StitchDefini
                 effect_policy=n.effect_policy,
                 wait_event_key=n.wait_event_key,
                 queue_name=n.queue_name,
+                boundary=n.boundary,
+                track=n.track,
             )
             for n in dto.nodes
         ],

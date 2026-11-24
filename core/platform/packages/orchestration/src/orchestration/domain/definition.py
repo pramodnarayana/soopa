@@ -103,6 +103,8 @@ class NodeDefinition:
     repeat_until: RepeatUntilSpec | None = None
     step_timeout: timedelta = timedelta(minutes=5)
     queue_name: str = "default"
+    boundary: str | None = None
+    track: int = 0
 
 
 @dataclass(frozen=True)

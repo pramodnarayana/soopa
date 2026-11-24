@@ -696,7 +696,7 @@ export function ConnectionEntitiesSyncTab({
       },
       {
         id: 'normalization',
-        header: 'Normalization (L3)',
+        header: 'Normalization',
         cell: ({ row }) => {
           const binding = (transformationsView.data ?? []).find(
             (t) => t.stream === row.original.streamName,

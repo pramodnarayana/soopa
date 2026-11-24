@@ -72,6 +72,7 @@ def to_stitch_http_response(dto: StitchSummaryDTO) -> StitchHttpResponse:
         mapping_spec_id=dto.mapping_spec_id,
         filter_conditions=dict(dto.filter_conditions),
         is_active=dto.is_active,
+        linked_stitch_id=dto.linked_stitch_id,
     )
 
 

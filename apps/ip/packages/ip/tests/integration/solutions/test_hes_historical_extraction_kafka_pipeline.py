@@ -286,11 +286,11 @@ def _configure_test_container(
     stitch_catalog = container.stitch_catalog()
     stitch_catalog.register_stitch(
         Stitch(
-            id="stch_default_hes_historical_extraction",
+            id="stch_hes_historical_extraction",
             tenant_id="*",
             canonical_event_type="command.historical_extract_requests",
             target_workflow_id=_WORKFLOW_ID,
-            name="Default HES Historical Extraction",
+            name="HES Historical Interval Extraction",
             description="Decomposes MDM historical extract requests into atomic daily pull tasks per HES connection.",
             idempotency_key_field="source_inbound_record_id",
             is_active=True,

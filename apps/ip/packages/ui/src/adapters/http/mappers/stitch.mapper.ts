@@ -29,6 +29,8 @@ export function mapStitchDefinitionFromWire(wire: StitchDefinitionWire): StitchD
       effectPolicy: node.effect_policy,
       waitEventKey: node.wait_event_key,
       queueName: node.queue_name,
+      boundary: node.boundary,
+      track: node.track,
     })),
   };
 }
@@ -50,6 +52,7 @@ export function mapStitchFromWire(wire: StitchWire): Stitch {
     concurrencyKeyField: wire.concurrency_key_field,
     resourceHintField: wire.resource_hint_field,
     isActive: wire.is_active,
+    linkedStitchId: wire.linked_stitch_id,
   };
 }
 

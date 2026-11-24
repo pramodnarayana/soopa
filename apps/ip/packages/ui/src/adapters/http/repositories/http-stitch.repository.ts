@@ -201,6 +201,7 @@ export class HttpStitchRepository implements StitchRepositoryPort {
         params: {
           workflow_id: filter?.workflowId,
           status: filter?.status,
+          trace_id: filter?.traceId,
           limit: filter?.limit ?? 50,
         },
         signal,

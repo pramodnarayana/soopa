@@ -3,12 +3,14 @@ import type {
   GlobalEntityMapEntry,
   InboundRecord,
   NormalizedRecord,
+  OutboundRecord,
   ReplicaRecord,
 } from '../domain/trace';
 import type {
   ListGemRecordsFilter,
   ListInboundRecordsFilter,
   ListNormalizedRecordsFilter,
+  ListOutboundRecordsFilter,
   ListReplicaRecordsFilter,
 } from '../ports/record-repository.port';
 import { useIpWorkspace } from '../provider/IpRepositoriesContext';
@@ -62,6 +64,19 @@ export function useInboundRecordsQuery(
   const query = useQuery({
     queryKey: ipQueryKeys.records.inbound(tenantId, filter),
     queryFn: ({ signal }) => repositories.records.listInboundRecords(tenantId, filter, signal),
+    enabled: Boolean(tenantId) && enabled,
+  });
+  return projectResultQuery(query);
+}
+
+export function useOutboundRecordsQuery(
+  filter?: ListOutboundRecordsFilter,
+  enabled = true,
+): IpQueryView<readonly OutboundRecord[]> {
+  const { tenantId, repositories } = useIpWorkspace();
+  const query = useQuery({
+    queryKey: ipQueryKeys.records.outbound(tenantId, filter),
+    queryFn: ({ signal }) => repositories.records.listOutboundRecords(tenantId, filter, signal),
     enabled: Boolean(tenantId) && enabled,
   });
   return projectResultQuery(query);

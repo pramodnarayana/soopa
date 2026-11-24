@@ -20,6 +20,8 @@ class StitchNodeHttpResponse(BaseModel):
     effect_policy: str
     wait_event_key: str | None = None
     queue_name: str
+    boundary: str | None = None
+    track: int = 0
 
 
 class StitchDefinitionHttpResponse(BaseModel):
@@ -48,6 +50,7 @@ class RegisterStitchHttpRequest(BaseModel):
     concurrency_key_field: str = ""
     filter_conditions: dict[str, JsonPrimitive] = Field(default_factory=dict)
     is_active: bool = True
+    linked_stitch_id: str | None = None
 
     @model_validator(mode="after")
     def resolve_workflow_ids(self) -> Self:
@@ -73,6 +76,7 @@ class StitchHttpResponse(BaseModel):
     mapping_spec_id: str | None = None
     filter_conditions: dict[str, JsonPrimitive] = Field(default_factory=dict)
     is_active: bool
+    linked_stitch_id: str | None = None
 
     @model_validator(mode="after")
     def sync_workflow_ids(self) -> Self:

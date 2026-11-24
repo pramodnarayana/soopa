@@ -115,7 +115,7 @@ export function mapGlobalEntityMapFromWire(wire: GlobalEntityMapWire): GlobalEnt
   };
 }
 
-function mapOutboundFromWire(wire: OutboundRecordWire): OutboundRecord {
+export function mapOutboundFromWire(wire: OutboundRecordWire): OutboundRecord {
   return {
     id: wire.id,
     tenantId: wire.tenant_id,

@@ -3,7 +3,6 @@ import {
   Button,
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -75,11 +74,7 @@ export function ModifyAndReplayModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-5xl">
         <DialogHeader>
-          <DialogTitle>Modify & Replay Studio</DialogTitle>
-          <DialogDescription>
-            Patch a malformed L1 ingress or L3 canonical payload side-by-side without mutating
-            immutable historical records. A child trace linked via parent_trace_id will be created.
-          </DialogDescription>
+          <DialogTitle>Modify & Replay</DialogTitle>
         </DialogHeader>
 
         <ApiProblemBanner problem={problem} />

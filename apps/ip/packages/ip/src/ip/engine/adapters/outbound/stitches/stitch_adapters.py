@@ -126,12 +126,14 @@ class IpStitchCanonicalDispatcherAdapter(IpStitchCanonicalDispatcherPort, Stitch
         tenant_id: str,
         workflow_id: str | None = None,
         status: RunStatus | None = None,
+        trace_id: str | None = None,
         limit: int = 50,
     ) -> Result[tuple[WorkflowRun, ...], IpError]:
         bound = logger.bind(
             tenant_id=tenant_id,
             workflow_id=workflow_id,
             status=status.value if status is not None else None,
+            trace_id=trace_id,
             limit=limit,
         )
         bound.info("ip_stitch_adapter.list_runs_started")
@@ -156,6 +158,7 @@ class IpStitchCanonicalDispatcherAdapter(IpStitchCanonicalDispatcherPort, Stitch
                         tenant_id,
                         workflow_id=workflow_id,
                         status=status,
+                        trace_id=trace_id,
                         limit=limit,
                     )
                     bound.info(

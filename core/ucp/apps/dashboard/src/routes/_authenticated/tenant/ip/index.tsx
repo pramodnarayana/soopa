@@ -1,10 +1,8 @@
-import { IpCommandCenterPage } from '@soopa/ip-ui';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/_authenticated/tenant/ip/')({
-  component: IpCommandCenterRoute,
+  beforeLoad: () => {
+    throw redirect({ to: '/tenant/ip/stitches' });
+  },
+  component: () => null,
 });
-
-function IpCommandCenterRoute() {
-  return <IpCommandCenterPage />;
-}

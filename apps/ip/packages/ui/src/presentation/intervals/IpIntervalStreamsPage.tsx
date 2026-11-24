@@ -119,9 +119,7 @@ export function IpIntervalStreamsPage({
   return (
     <div className="space-y-6">
       <IpPageHeader
-        eyebrow="Columnar Batch Data Plane"
-        title="High-Frequency Interval Streams"
-        subtitle="Zero-Missing-Data batch reconciliation, 96-slot daily feeder completeness, Time-of-Use (TOU) settlement rollups, and two-tier L1–L5 Parquet lineage."
+        title="Interval Streams"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {connections.length > 0 ? (

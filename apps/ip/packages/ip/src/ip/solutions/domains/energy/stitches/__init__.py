@@ -23,8 +23,16 @@ from ip.solutions.domains.energy.stitches.continuous_stream import (
     SIEMENS_METER_READINGS_STREAM_STITCH,
 )
 from ip.solutions.domains.energy.stitches.hes_historical_extraction import (
+    build_hes_historical_dispatch_definition,
+    build_hes_historical_dispatch_stitch,
     build_hes_historical_extraction_definition,
     build_hes_historical_extraction_stitch,
+    build_itron_batch_ingestion_definition,
+    build_itron_batch_ingestion_stitch,
+    build_landis_batch_ingestion_definition,
+    build_landis_batch_ingestion_stitch,
+    build_siemens_batch_ingestion_definition,
+    build_siemens_batch_ingestion_stitch,
 )
 from ip.solutions.domains.energy.stitches.meter_reading_erp_sync import (
     build_meter_reading_erp_sync_definition,
@@ -50,6 +58,10 @@ def build_energy_stitch_definitions() -> tuple[WorkflowDefinition, ...]:
         build_outage_restoration_definition(),
         build_meter_reading_erp_sync_definition(),
         build_hes_historical_extraction_definition(),
+        build_hes_historical_dispatch_definition(),
+        build_itron_batch_ingestion_definition(),
+        build_landis_batch_ingestion_definition(),
+        build_siemens_batch_ingestion_definition(),
     )
 
 
@@ -58,6 +70,10 @@ def build_energy_stitches() -> tuple[Stitch, ...]:
     return (
         build_meter_reading_erp_sync_stitch(),
         build_hes_historical_extraction_stitch(),
+        build_hes_historical_dispatch_stitch(),
+        build_itron_batch_ingestion_stitch(),
+        build_landis_batch_ingestion_stitch(),
+        build_siemens_batch_ingestion_stitch(),
     )
 
 
@@ -78,11 +94,19 @@ __all__ = [
     "PushToKafkaResult",
     "build_energy_stitch_definitions",
     "build_energy_stitches",
+    "build_hes_historical_dispatch_definition",
+    "build_hes_historical_dispatch_stitch",
     "build_hes_historical_extraction_definition",
     "build_hes_historical_extraction_stitch",
+    "build_itron_batch_ingestion_definition",
+    "build_itron_batch_ingestion_stitch",
+    "build_landis_batch_ingestion_definition",
+    "build_landis_batch_ingestion_stitch",
     "build_meter_reading_erp_sync_definition",
     "build_meter_reading_erp_sync_stitch",
     "build_outage_restoration_definition",
+    "build_siemens_batch_ingestion_definition",
+    "build_siemens_batch_ingestion_stitch",
     "execute_multi_hes_backfill",
     "push_to_kafka",
     "resolve_hes_fetcher",

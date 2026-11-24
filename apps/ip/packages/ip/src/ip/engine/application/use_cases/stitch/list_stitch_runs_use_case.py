@@ -21,6 +21,7 @@ class ListStitchRunsQuery:
     tenant_id: str
     workflow_id: str | None = None
     status: RunStatus | None = None
+    trace_id: str | None = None
     limit: int = 50
 
 
@@ -37,6 +38,7 @@ class ListStitchRunsUseCase:
             tenant_id=query.tenant_id,
             workflow_id=query.workflow_id,
             status=query.status.value if query.status is not None else None,
+            trace_id=query.trace_id,
             limit=query.limit,
         )
         bound.info("list_stitch_runs.received")
@@ -44,6 +46,7 @@ class ListStitchRunsUseCase:
             tenant_id=query.tenant_id,
             workflow_id=query.workflow_id,
             status=query.status,
+            trace_id=query.trace_id,
             limit=query.limit,
         )
         if res.is_err:

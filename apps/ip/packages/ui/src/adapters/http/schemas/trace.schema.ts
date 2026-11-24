@@ -234,3 +234,4 @@ export const InboundRecordListWireSchema = z.array(InboundRecordWireSchema);
 export const ReplicaRecordListWireSchema = z.array(ReplicaRecordWireSchema);
 export const NormalizedRecordListWireSchema = z.array(NormalizedRecordWireSchema);
 export const GlobalEntityMapListWireSchema = z.array(GlobalEntityMapWireSchema);
+export const OutboundRecordListWireSchema = z.array(OutboundRecordWireSchema);

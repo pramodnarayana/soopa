@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { HttpRecordRepository } from '../adapters/http/repositories/http-record.repository';
 import { ipQueryKeys } from '../application/query-keys';
 import { PipelineLayer } from '../domain/enums';
+import { DataExplorer } from '../presentation/records/DataExplorer';
+import { RecordDetail } from '../presentation/records/RecordDetail';
 import { SyncedDataInspectionPanel } from '../presentation/records/SyncedDataInspectionPanel';
 import { TraceWaterfallStageContent } from '../presentation/traces/TraceWaterfallStages';
 import { IpUIProvider } from '../provider/IpUIProvider';
@@ -179,15 +181,15 @@ describe('SyncedDataInspectionPanel RBAC', () => {
       qc,
     );
 
-    expect(html).toContain('L3: Normalized Canonical');
-    expect(html).toContain('GEM: Identity Map');
-    expect(html).toContain('L2: Staging Replica');
-    expect(html).toContain('L1: Raw Wire Inbound');
-    expect(html).toContain('Activity &amp; Traces');
+    expect(html).toContain('Business Records');
+    expect(html).toContain('Cross-System Mappings');
+    expect(html).toContain('Replica Documents');
+    expect(html).toContain('Inbound Payloads');
+    expect(html).toContain('Lifecycle History');
     expect(html).toContain('Customer Support (Full Diagnostic)');
-    expect(html).toContain('Canonical Entity');
+    expect(html).toContain('Entity');
     expect(html).toContain('Source Identifier');
-    expect(html).toContain('Normalized At');
+    expect(html).toContain('Processed At');
     expect(html).toContain('Payload');
   });
 
@@ -205,13 +207,11 @@ describe('SyncedDataInspectionPanel RBAC', () => {
       qc,
     );
 
-    expect(html).toContain('Canonical Entity');
+    expect(html).toContain('Entity');
     expect(html).toContain('Source Identifier');
-    expect(html).toContain('Normalized At');
+    expect(html).toContain('Processed At');
     expect(html).toContain('Payload');
-    expect(html).toContain(
-      'No normalized canonical records found. Trigger a sync to populate this table.',
-    );
+    expect(html).toContain('No business records found. Trigger a sync to populate this table.');
   });
 
   it('hides raw wire tabs for customer role in SyncedDataInspectionPanel', () => {
@@ -222,12 +222,12 @@ describe('SyncedDataInspectionPanel RBAC', () => {
       qc,
     );
 
-    expect(html).toContain('L3: Normalized Canonical');
-    expect(html).toContain('GEM: Identity Map');
-    expect(html).toContain('Activity &amp; Traces');
+    expect(html).toContain('Business Records');
+    expect(html).toContain('Cross-System Mappings');
+    expect(html).toContain('Lifecycle History');
     expect(html).toContain('Customer (Restricted)');
-    expect(html).not.toContain('L2: Staging Replica');
-    expect(html).not.toContain('L1: Raw Wire Inbound');
+    expect(html).not.toContain('Replica Documents');
+    expect(html).not.toContain('Inbound Payloads');
   });
 
   it('renders restricted diagnostic cards for customer role in TraceWaterfallStageContent', () => {
@@ -276,7 +276,7 @@ describe('SyncedDataInspectionPanel RBAC', () => {
       'support',
       qc,
     );
-    expect(supportL1Html).toContain('L1 Raw Wire Capture');
+    expect(supportL1Html).toContain('Inbound');
 
     const supportL2Html = renderWithRole(
       <TraceWaterfallStageContent
@@ -464,5 +464,101 @@ describe('HttpRecordRepository Inspection Endpoints', () => {
     expect(inbUrl.searchParams.get('hydrate_payloads')).toBe('true');
     expect(inbUrl.searchParams.get('limit')).toBe('30');
     expect(inbUrl.searchParams.get('offset')).toBe('4');
+  });
+
+  it('renders DataExplorer with searchable entity selector without compiler jargon', () => {
+    const qc = createRecordQueryClient();
+    const html = renderWithRole(
+      <DataExplorer
+        connectionId={SEED_CONNECTION_ID}
+        initialEntityKey="Type A"
+        onOpenTrace={() => undefined}
+      />,
+      'support',
+      qc,
+    );
+
+    // Verifies friendly entity is derived and rendered
+    expect(html).toContain('Type A');
+    // Verifies business columns are rendered
+    expect(html).toContain('Identifier');
+    expect(html).toContain('Serial');
+    expect(html).toContain('Model');
+    expect(html).toContain('Vendor');
+    expect(html).toContain('Delivery Status');
+    expect(html).toContain('Updated');
+    expect(html).toContain('Details');
+    // Verifies compiler jargon is strictly absent
+    expect(html).not.toContain('Normalized Canonical');
+    expect(html).not.toContain('Canonical Entity');
+  });
+
+  it('renders RecordDetail with pipeline progression stages, GEM identity bridge, delivery diagnostics', () => {
+    const qc = createRecordQueryClient();
+    qc.setQueryData(
+      ipQueryKeys.traces.detail(SEED_TENANT_ID, SEED_TRACE.traceId, true),
+      ok(SEED_TRACE),
+    );
+
+    const html = renderWithRole(
+      <RecordDetail
+        record={SEED_TRACE.normalizedRecords[0]!}
+        entityName="Invoice"
+        fallbackOutbound={SEED_TRACE.outboundRecords[0]!}
+        onOpenTraceDetail={() => undefined}
+      />,
+      'support',
+      qc,
+    );
+
+    // Verify 4-stage progression bar labels (pure data lifecycle)
+    expect(html).toContain('Inbound');
+    expect(html).toContain('Replica');
+    expect(html).toContain('Invoice');
+    expect(html).toContain('Outbound');
+
+    // Verify Workflow action button is present in the header
+    expect(html).toContain('Workflow (Stitches)');
+
+    // Verify Pure SaaS Normalized Entity Presentation
+    expect(html).toContain('Invoice #REC-77410');
+    expect(html).toContain('Record Attributes');
+  });
+
+  it('renders Normalized Entity with GEM 2-sided split comparison layout', () => {
+    const qc = createRecordQueryClient();
+    qc.setQueryData(
+      ipQueryKeys.traces.detail(SEED_TENANT_ID, SEED_TRACE.traceId, true),
+      ok(SEED_TRACE),
+    );
+
+    const html = renderWithRole(
+      <RecordDetail
+        record={SEED_TRACE.normalizedRecords[0]!}
+        entityName="Invoice"
+        fallbackOutbound={SEED_TRACE.outboundRecords[0]!}
+        initialStage="entity"
+        onOpenTraceDetail={() => undefined}
+      />,
+      'support',
+      qc,
+    );
+
+    // Verify GEM section header is strictly "GEM" without verbose boilerplate
+    expect(html).toContain('GEM');
+    expect(html).not.toContain('Cross-System Identity Mapping (GEM)');
+
+    // Verify 2-sided split row layout for source and destination details with consistent field names and values
+    expect(html).toContain('Source Entity Details');
+    expect(html).toContain('Destination Entity Details');
+    expect(html).toContain('System');
+    expect(html).toContain('Entity Type');
+    expect(html).toContain('Entity ID');
+    expect(html).not.toContain('Canonical ID');
+
+    // Verify real identifiers from SEED_TRACE without internal engine canonical IDs
+    expect(html).toContain('REC-77410');
+    expect(html).toContain('GLX-ENT-44910');
+    expect(html).toContain('RESOLVED');
   });
 });

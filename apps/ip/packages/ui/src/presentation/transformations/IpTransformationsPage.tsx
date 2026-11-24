@@ -366,9 +366,7 @@ export function IpTransformationsPage({ initialConnectionId = '' }: IpTransforma
   return (
     <div className="space-y-6">
       <IpPageHeader
-        eyebrow="L2 → L3 Canonical Normalization"
-        title="Transformations & Shadow Diff Workbench"
-        subtitle="Attach versioned code Transformers to source streams, run non-mutating shadow candidates in parallel, and promote verified upgrades in one click."
+        title="Transformations"
         actions={
           <Button
             type="button"

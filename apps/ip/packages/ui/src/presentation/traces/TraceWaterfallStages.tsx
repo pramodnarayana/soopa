@@ -44,7 +44,7 @@ function InboundWireStagePanel({
     return (
       <Card>
         <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          No direct L1 InboundRecord on this child trace (replayed from downstream L2/L3/L5 state).
+          No direct Inbound record on this child trace (replayed from downstream state).
         </CardContent>
       </Card>
     );
@@ -55,7 +55,7 @@ function InboundWireStagePanel({
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle className="flex flex-wrap items-center gap-2">
-            <span>L1 Raw Wire Capture · {record.appId}</span>
+            <span>Inbound · {record.appId}</span>
             <StatusBadge label={record.ingestionMode} tone={StatusTone.NEUTRAL} />
           </CardTitle>
           <CardDescription>
@@ -83,9 +83,7 @@ function InboundWireStagePanel({
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="space-y-1.5">
-          <div className="text-xs font-semibold text-muted-foreground uppercase">
-            Request Payload & Redacted Headers
-          </div>
+          <div className="text-xs font-semibold text-muted-foreground uppercase">Request</div>
           <MonacoCodeViewer
             height={280}
             value={stringifyJsonPretty({
@@ -97,7 +95,7 @@ function InboundWireStagePanel({
         </div>
         <div className="space-y-1.5">
           <div className="text-xs font-semibold text-muted-foreground uppercase">
-            Wire Response ({record.responseStatusCode ?? 200})
+            Response ({record.responseStatusCode ?? 200})
           </div>
           <MonacoCodeViewer
             height={280}
@@ -140,7 +138,7 @@ function ReplicaStagePanel({
       {records.length === 0 && rejections.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No L2 Universal Replica records materialized on this trace.
+            No Replica records materialized on this trace.
           </CardContent>
         </Card>
       ) : null}
@@ -168,7 +166,7 @@ function ReplicaStagePanel({
   );
 }
 
-function CanonicalStagePanel({
+function BusinessRecordsStagePanel({
   records,
   rejections,
   trace,
@@ -181,9 +179,9 @@ function CanonicalStagePanel({
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>GlobalEntityMap (GEM) Rosetta Cross-References</CardTitle>
+          <CardTitle>Cross-System Identity Mappings</CardTitle>
           <CardDescription>
-            Bidirectional identity bindings linking source system keys, canonical UUIDs, and
+            Bidirectional identity bindings linking source system keys, entity identifiers, and
             destination ERP/CRM IDs.
           </CardDescription>
         </CardHeader>
@@ -213,7 +211,7 @@ function CanonicalStagePanel({
             <div>
               <CardTitle className="font-mono text-sm">{norm.canonicalType}</CardTitle>
               <CardDescription>
-                Source ID <span className="font-mono">{norm.sourceId}</span> · Normalized{' '}
+                Source ID <span className="font-mono">{norm.sourceId}</span> · Processed{' '}
                 {formatRelativeTimestamp(norm.normalizedAt)}
               </CardDescription>
             </div>
@@ -239,7 +237,7 @@ function StitchEventsStagePanel({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>L4 Orchestration & Chronological Audit Events ({events.length})</CardTitle>
+          <CardTitle>Stitch / Workflow Timeline Events ({events.length})</CardTitle>
           <CardDescription>
             Immutable trace transition log across ingestion, canonical fan-out, Stitch step
             execution, and replay actors.
@@ -367,8 +365,8 @@ function RestrictedDiagnosticStageCard({ layerLabel }: { readonly layerLabel: st
         <div className="space-y-1">
           <h3 className="text-base font-semibold text-foreground">{layerLabel} is Restricted</h3>
           <p className="max-w-md text-sm text-muted-foreground">
-            Internal diagnostic payloads (L1 raw wire captures &amp; L2 replica staging) are
-            restricted to Customer Support engineers with the{' '}
+            Internal diagnostic payloads (inbound wire captures and replica staging) are restricted
+            to Customer Support engineers with the{' '}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
               ip:records:raw:read
             </code>{' '}
@@ -424,7 +422,7 @@ export function TraceWaterfallStageContent({
   }
   if (activeLayer === PipelineLayer.L3_NORMALIZE) {
     return (
-      <CanonicalStagePanel
+      <BusinessRecordsStagePanel
         records={trace.normalizedRecords}
         rejections={trace.normalizationRejections}
         trace={trace}
@@ -438,7 +436,7 @@ export function TraceWaterfallStageContent({
     return (
       <Card>
         <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          No L5 OutboundRecord HTTP deliveries have executed for this trace yet.
+          No Outbound deliveries have executed for this trace yet.
         </CardContent>
       </Card>
     );

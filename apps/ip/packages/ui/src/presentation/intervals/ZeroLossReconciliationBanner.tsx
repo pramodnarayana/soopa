@@ -3,7 +3,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   CopyableIdPill,
@@ -185,11 +184,7 @@ export function ZeroLossReconciliationBanner({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Zero-Missing-Data Batch Reconciliation Guarantee</CardTitle>
-          <CardDescription>
-            Audit ledger tracking exact batch preservation across ingestion, deduplication, and
-            canonical commit.
-          </CardDescription>
+          <CardTitle>Batch Reconciliation</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="rounded-lg border border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
@@ -220,7 +215,7 @@ export function ZeroLossReconciliationBanner({
           icon={<Database />}
         />
         <StatCard
-          title="Valid Canonical"
+          title="Valid Records"
           value={validTotal.toLocaleString()}
           subtitle={`${overview?.completedBatches ?? 0} completed batches`}
           icon={<CheckCircle2 />}
@@ -243,15 +238,11 @@ export function ZeroLossReconciliationBanner({
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 pb-3">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <span>Zero-Missing-Data Accounting Equation</span>
+              <span>Accounting Equation</span>
               <Badge variant={isBalanced ? 'success' : 'destructive'}>
                 {isBalanced ? 'ZERO-LOSS BALANCED' : 'RECONCILIATION IMBALANCE'}
               </Badge>
             </CardTitle>
-            <CardDescription className="mt-1">
-              Mathematical invariant across L1 Raw Buffer, L2 Deduplication, L3 VEE Validation, and
-              In-Flight batches.
-            </CardDescription>
           </div>
           <div className="rounded-md border border-border bg-muted/50 px-3 py-1.5 font-mono text-xs text-foreground tabular-nums">
             Raw ({rawTotal.toLocaleString()}) = Valid ({validTotal.toLocaleString()}) + Dup (

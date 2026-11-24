@@ -65,9 +65,34 @@ export {
   type ZeroLossReconciliationBannerProps,
 } from './presentation/intervals/ZeroLossReconciliationBanner';
 export {
+  BusinessDataExplorer,
+  type BusinessDataExplorerProps,
+  DataExplorer,
+  type DataExplorerProps,
+  deriveFriendlyEntityName,
+} from './presentation/records/DataExplorer';
+export { IpDataExplorerPage } from './presentation/records/IpDataExplorerPage';
+export {
   NormalizedEntityDataTable,
   type NormalizedEntityDataTableProps,
 } from './presentation/records/NormalizedEntityDataTable';
+export {
+  type PipelineStage,
+  RecordDetail,
+  RecordDetailInlineExpansion,
+  type RecordDetailInlineExpansionProps,
+  type RecordDetailProps,
+} from './presentation/records/RecordDetail';
+export {
+  RecordInspectorDrawer,
+  type RecordInspectorDrawerProps,
+} from './presentation/records/RecordInspectorDrawer';
+export {
+  BusinessEntityDataTable,
+  type BusinessEntityDataTableProps,
+  RecordsTable,
+  type RecordsTableProps,
+} from './presentation/records/RecordsTable';
 export {
   SyncedDataInspectionPanel,
   type SyncedDataInspectionPanelProps,
@@ -94,6 +119,25 @@ export {
   type StitchDagCanvasProps,
 } from './presentation/stitches/StitchDagCanvas';
 export {
+  type DataPlaneTab,
+  StitchDetailDataExplorer,
+  type StitchDetailDataExplorerProps,
+} from './presentation/stitches/StitchDetailDataExplorer';
+export {
+  StitchExecutionsTable,
+  type StitchExecutionsTableProps,
+} from './presentation/stitches/StitchExecutionsTable';
+export {
+  type NodeArchetype,
+  resolveNodeArchetype,
+  VisualStitchPipeline,
+  type VisualStitchPipelineProps,
+} from './presentation/stitches/VisualStitchPipeline';
+export {
+  IpTraceStitchesPage,
+  type IpTraceStitchesPageProps,
+} from './presentation/traces/IpTraceStitchesPage';
+export {
   IpTracesTimelinePage,
   type IpTracesTimelinePageProps,
 } from './presentation/traces/IpTracesTimelinePage';
@@ -112,6 +156,7 @@ export {
   type IpWorkspaceContextValue,
   type RouteStitchMapperParams,
   type RouteStitchWorkbenchParams,
+  type StitchDefinitionNavParams,
   type StitchMapperParams,
   useIpWorkspace,
 } from './provider/IpRepositoriesContext';

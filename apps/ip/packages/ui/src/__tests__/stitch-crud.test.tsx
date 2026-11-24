@@ -236,7 +236,7 @@ describe('Stitch CRUD UI Presentation', () => {
       </QueryClientProvider>,
     );
 
-    expect(html).toContain('Stitches &amp; Topological DAG Runs');
+    expect(html).toContain('Stitches');
     expect(html).toContain('Register Stitch');
     expect(html).toContain('Stitch &amp; Field Mapper');
     expect(html).toContain('Test Event Dispatch');

@@ -51,16 +51,26 @@ function IpLayout() {
       toStitches: () => {
         void navigate({ to: '/tenant/ip/stitches' });
       },
-      toStitchDefinition: (workflowId: string) => {
+      toStitchDefinition: (
+        workflowId: string,
+        search?: { traceId?: string; runId?: string; tab?: 'canvas' | 'executions' | 'data' },
+      ) => {
         void navigate({
           to: '/tenant/ip/stitches/definitions/$workflowId',
           params: { workflowId },
+          search: search ?? {},
         });
       },
       toStitchRun: (runId: string) => {
         void navigate({
           to: '/tenant/ip/stitches/runs/$runId',
           params: { runId },
+        });
+      },
+      toTraceStitches: (traceId: string) => {
+        void navigate({
+          to: '/tenant/ip/traces/$traceId/stitches',
+          params: { traceId },
         });
       },
       toIntervals: (connectionId?: string) => {

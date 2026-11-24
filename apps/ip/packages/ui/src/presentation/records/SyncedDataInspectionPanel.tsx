@@ -250,11 +250,11 @@ export function SyncedDataInspectionPanel({
     () => [
       {
         accessorKey: 'canonicalType',
-        header: 'Canonical Entity',
+        header: 'Entity',
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
             <span className="font-semibold text-foreground">{row.original.canonicalType}</span>
-            <CopyableIdPill value={row.original.id} prefixLabel="L3 ID" />
+            <CopyableIdPill value={row.original.id} prefixLabel="ID" />
           </div>
         ),
       },
@@ -267,7 +267,7 @@ export function SyncedDataInspectionPanel({
       },
       {
         accessorKey: 'normalizedAt',
-        header: 'Normalized At',
+        header: 'Processed At',
         cell: ({ row }) => (
           <span className="text-xs text-muted-foreground">
             {formatRelativeTimestamp(row.original.normalizedAt)}
@@ -284,7 +284,7 @@ export function SyncedDataInspectionPanel({
             size="sm"
             onClick={() => {
               setSelectedRecordTitle(
-                `Canonical Record: ${row.original.canonicalType} (${row.original.sourceId})`,
+                `Record Details: ${row.original.canonicalType} (${row.original.sourceId})`,
               );
               setSelectedRecordJson(stringifyJsonPretty(row.original.canonicalData));
             }}
@@ -323,7 +323,7 @@ export function SyncedDataInspectionPanel({
       },
       {
         id: 'crosswalk',
-        header: 'Identity Crosswalk',
+        header: 'Identity Mapping',
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5 font-mono text-xs text-brand-ink">
             <ArrowRightLeft className="h-3.5 w-3.5 text-muted-foreground" />
@@ -538,8 +538,8 @@ export function SyncedDataInspectionPanel({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {isCustomerRole
-                    ? 'Restricted View: You can only view Layer 3 Normalized Records, GEM identity crosswalks, and Execution Traces. Raw wire (L1) and replica staging (L2) are strictly hidden.'
-                    : 'Full View: Customer Support has permission to inspect all layers including Raw Wire Inbound (L1), Universal Replica (L2), Normalized (L3), GEM, and Traces.'}
+                    ? 'Restricted View: You can view Business Records, Cross-System Mappings, and Lifecycle History. Raw wire payloads and replicas are hidden.'
+                    : 'Full View: Customer Support has permission to inspect all records including Business Records, Outbound Deliveries, Raw Wire, Replicas, and Mappings.'}
                 </p>
               </div>
             </div>
@@ -553,28 +553,28 @@ export function SyncedDataInspectionPanel({
           <TabsList className={compact ? 'bg-muted/50 p-0.5' : undefined}>
             <TabsTrigger value="l3" className="gap-2">
               <Database className="h-4 w-4" />
-              <span>L3: Normalized Canonical</span>
+              <span>Business Records</span>
             </TabsTrigger>
             <TabsTrigger value="gem" className="gap-2">
               <ArrowRightLeft className="h-4 w-4" />
-              <span>GEM: Identity Map</span>
+              <span>Cross-System Mappings</span>
             </TabsTrigger>
             {!isCustomerRole && (
               <>
                 <TabsTrigger value="l2" className="gap-2">
                   <Layers className="h-4 w-4" />
-                  <span>L2: Staging Replica</span>
+                  <span>Replica Documents</span>
                 </TabsTrigger>
                 <TabsTrigger value="l1" className="gap-2">
                   <Radio className="h-4 w-4" />
-                  <span>L1: Raw Wire Inbound</span>
+                  <span>Inbound Payloads</span>
                 </TabsTrigger>
               </>
             )}
             {!compact && (
               <TabsTrigger value="traces" className="gap-2">
                 <FileCode2 className="h-4 w-4" />
-                <span>Activity & Traces</span>
+                <span>Lifecycle History</span>
               </TabsTrigger>
             )}
           </TabsList>
@@ -590,7 +590,7 @@ export function SyncedDataInspectionPanel({
           </div>
         </div>
 
-        {/* Tab 1: Layer 3 Normalized Records */}
+        {/* Tab 1: Business Records */}
         <TabsContent value="l3" className="pt-4 space-y-4">
           <ApiProblemBanner
             problem={normalizedQuery.problem}
@@ -601,12 +601,12 @@ export function SyncedDataInspectionPanel({
             columnsCount={normalizedColumns.length}
             isLoading={normalizedQuery.isLoading}
             dataLength={normalizedRows.length}
-            loadingMessage="Loading canonical records..."
-            emptyMessage="No normalized canonical records found. Trigger a sync to populate this table."
+            loadingMessage="Loading business records..."
+            emptyMessage="No business records found. Trigger a sync to populate this table."
           />
         </TabsContent>
 
-        {/* Tab 2: GEM Identity Crosswalk */}
+        {/* Tab 2: Cross-System Mappings */}
         <TabsContent value="gem" className="pt-4 space-y-4">
           <ApiProblemBanner problem={gemQuery.problem} onRetry={() => void gemQuery.refetch()} />
           <PermanentRecordTable<GlobalEntityMapEntry>
@@ -614,8 +614,8 @@ export function SyncedDataInspectionPanel({
             columnsCount={gemColumns.length}
             isLoading={gemQuery.isLoading}
             dataLength={gemRows.length}
-            loadingMessage="Loading Global Entity Map links..."
-            emptyMessage="No Global Entity Map links discovered yet."
+            loadingMessage="Loading cross-system mappings..."
+            emptyMessage="No cross-system mappings discovered yet."
           />
         </TabsContent>
 

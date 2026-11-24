@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   CopyableIdPill,
@@ -218,15 +217,11 @@ export function DailyTouBillingRollupsTable({
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <span>Daily Time-of-Use (TOU) Settlement Rollups</span>
+              <span>Time-of-Use Rollups</span>
               {selectedFeederId ? (
                 <Badge variant="secondary">Feeder: {selectedFeederId}</Badge>
               ) : null}
             </CardTitle>
-            <CardDescription>
-              Pre-aggregated Peak, Shoulder, Off-Peak, Net Export, and Max Demand rollups per
-              device. Click any row to open the 96-slot load curve &amp; batch lineage drawer.
-            </CardDescription>
           </div>
           <div className="relative w-full sm:w-64">
             <Search className="pointer-events-none absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />

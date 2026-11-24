@@ -307,9 +307,10 @@ class TraceStageSpec[TOrm: TenantTraceLineageOrmModel](TraceStageSpecPort):
         correlation_id: str,
         limit: int,
     ) -> list[TraceStageAttemptRow]:
-        if not self.correlation_cols:
-            return []
-        corr_predicate = or_(*(col == correlation_id for col in self.correlation_cols))
+        predicates = [self.model_cls.trace_id == correlation_id]
+        if self.correlation_cols:
+            predicates.extend(col == correlation_id for col in self.correlation_cols)
+        corr_predicate = or_(*predicates)
         stmt = (
             select(self.model_cls)
             .where(

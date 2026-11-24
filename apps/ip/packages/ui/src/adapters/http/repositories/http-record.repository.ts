@@ -3,12 +3,14 @@ import type {
   GlobalEntityMapEntry,
   InboundRecord,
   NormalizedRecord,
+  OutboundRecord,
   ReplicaRecord,
 } from '../../../domain/trace';
 import type {
   ListGemRecordsFilter,
   ListInboundRecordsFilter,
   ListNormalizedRecordsFilter,
+  ListOutboundRecordsFilter,
   ListReplicaRecordsFilter,
   RecordRepositoryPort,
 } from '../../../ports/record-repository.port';
@@ -16,6 +18,7 @@ import {
   mapGlobalEntityMapFromWire,
   mapInboundFromWire,
   mapNormalizedFromWire,
+  mapOutboundFromWire,
   mapReplicaFromWire,
 } from '../mappers/trace.mapper';
 import { parseAndMapResult } from '../parse-wire';
@@ -23,6 +26,7 @@ import {
   GlobalEntityMapListWireSchema,
   InboundRecordListWireSchema,
   NormalizedRecordListWireSchema,
+  OutboundRecordListWireSchema,
   ReplicaRecordListWireSchema,
 } from '../schemas/trace.schema';
 
@@ -136,6 +140,35 @@ export class HttpRecordRepository implements RecordRepositoryPort {
       InboundRecordListWireSchema,
       (items) => items.map(mapInboundFromWire),
       'GET /ip/records/inbound',
+      this.logger,
+    );
+  }
+
+  public async listOutboundRecords(
+    tenantId: string,
+    filter?: ListOutboundRecordsFilter,
+    signal?: AbortSignal,
+  ): Promise<Result<readonly OutboundRecord[], ApiProblem>> {
+    const raw = await this.httpClient.get<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/records/outbound`,
+      {
+        params: {
+          connection_id: filter?.connectionId,
+          app_id: filter?.appId,
+          stream_name: filter?.streamName,
+          status: filter?.status,
+          limit: filter?.limit ?? 50,
+          offset: filter?.offset ?? 0,
+          hydrate_payloads: filter?.hydratePayloads ?? false,
+        },
+        signal,
+      },
+    );
+    return parseAndMapResult(
+      raw,
+      OutboundRecordListWireSchema,
+      (items) => items.map(mapOutboundFromWire),
+      'GET /ip/records/outbound',
       this.logger,
     );
   }

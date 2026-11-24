@@ -7,6 +7,8 @@ from ip.engine.application.use_cases.records.list_records_use_cases import (
     ListInboundRecordsUseCase,
     ListNormalizedRecordsQuery,
     ListNormalizedRecordsUseCase,
+    ListOutboundRecordsQuery,
+    ListOutboundRecordsUseCase,
     ListReplicaRecordsQuery,
     ListReplicaRecordsUseCase,
 )
@@ -18,6 +20,8 @@ __all__ = [
     "ListInboundRecordsUseCase",
     "ListNormalizedRecordsQuery",
     "ListNormalizedRecordsUseCase",
+    "ListOutboundRecordsQuery",
+    "ListOutboundRecordsUseCase",
     "ListReplicaRecordsQuery",
     "ListReplicaRecordsUseCase",
 ]

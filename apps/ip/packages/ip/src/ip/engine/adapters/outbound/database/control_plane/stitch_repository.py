@@ -43,6 +43,7 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         )
         idemp_field = str(raw_filters.pop("__idempotency_key_field__", "") or "")
         conc_field = str(raw_filters.pop("__concurrency_key_field__", "") or "")
+        linked_id = str(raw_filters.pop("__linked_stitch_id__", "") or "") or None
         return Stitch(
             id=record.id,
             tenant_id=record.tenant_id,
@@ -55,6 +56,7 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
             is_active=record.is_active,
             idempotency_key_field=idemp_field,
             concurrency_key_field=conc_field,
+            linked_stitch_id=linked_id,
         )
 
     @staticmethod
@@ -64,6 +66,8 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
             raw_filters["__idempotency_key_field__"] = stitch.idempotency_key_field
         if stitch.concurrency_key_field:
             raw_filters["__concurrency_key_field__"] = stitch.concurrency_key_field
+        if stitch.linked_stitch_id:
+            raw_filters["__linked_stitch_id__"] = stitch.linked_stitch_id
         return StitchRecord(
             id=stitch.id,
             tenant_id=stitch.tenant_id,

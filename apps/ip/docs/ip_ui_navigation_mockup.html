@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Soopa Integration Platform - Unified Enterprise UI</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --background: #090d16;
+      --card: #111827;
+      --card-border: #1f2937;
+      --border: #1f2937;
+      --foreground: #f9fafb;
+      --muted-foreground: #9ca3af;
+      --primary: #3b82f6;
+      --primary-foreground: #ffffff;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --accent: #6366f1;
+    }
+  </style>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-0 m-0 font-sans text-xs">
+
+  <div class="rounded-xl border border-[var(--border)] bg-[var(--background)] overflow-hidden shadow-2xl my-2">
+    
+    <!-- Top Header: Persistent Omnisearch -->
+    <header class="border-b border-[var(--border)] bg-[var(--card)] px-4 py-2.5 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1.5 font-bold text-sm tracking-tight">
+          <span class="h-5 w-5 rounded bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">S</span>
+          <span>SOOPA<span class="text-blue-500 font-normal ml-1">IP</span></span>
+        </div>
+        <span class="rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 text-[10px] font-mono">prod-primary</span>
+      </div>
+
+      <!-- Omnisearch (< 2s Lookup across Pipeline A & B) -->
+      <div class="flex-1 max-w-lg relative">
+        <div class="relative flex items-center">
+          <svg class="absolute left-3 h-3.5 w-3.5 text-[var(--muted-foreground)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input 
+            id="searchInput"
+            type="text" 
+            value="MTR-98214" 
+            class="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] pl-9 pr-14 py-1.5 text-xs text-[var(--foreground)] placeholder-[var(--muted-foreground)] focus:border-blue-500 focus:outline-none font-mono"
+            placeholder="Search invoice ID, meter serial, batch ID, or trace..."
+          />
+          <kbd class="absolute right-2.5 rounded bg-[var(--card)] border border-[var(--card-border)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--muted-foreground)]">⌘K</kbd>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <span class="inline-flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)] font-mono">
+          <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+          <span>100M+ Stream Health: 99.99%</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- Unified Capability Navigation Tabs -->
+    <nav class="flex border-b border-[var(--border)] bg-[var(--card)]/60 px-4 gap-1">
+      <button onclick="switchTab('stitches')" id="tab-stitches" class="tab-btn px-3 py-2 border-b-2 border-blue-500 text-blue-400 font-semibold flex items-center gap-1.5">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+        <span>Stitches &amp; DAGs</span>
+      </button>
+      <button onclick="switchTab('traces')" id="tab-traces" class="tab-btn px-3 py-2 border-b-2 border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)] font-semibold flex items-center gap-1.5">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+        <span>Traces &amp; Runs</span>
+      </button>
+      <button onclick="switchTab('search')" id="tab-search" class="tab-btn px-3 py-2 border-b-2 border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)] font-semibold flex items-center gap-1.5">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+        <span>360° Inspection</span>
+      </button>
+      <button onclick="switchTab('intervals')" id="tab-intervals" class="tab-btn px-3 py-2 border-b-2 border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)] font-semibold flex items-center gap-1.5">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7z" /></svg>
+        <span>Batch Explorer (&lt;50ms)</span>
+      </button>
+      <button onclick="openReplayModal()" class="ml-auto my-auto rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold px-2.5 py-1 flex items-center gap-1.5 transition-colors shadow-xs">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+        <span>Replay...</span>
+      </button>
+    </nav>
+
+    <!-- Main Viewport -->
+    <div class="p-4 min-h-[420px]">
+
+      <!-- VIEW 1: UNIFIED STITCHES & DAG CANVAS -->
+      <section id="view-stitches" class="space-y-4">
+        
+        <!-- Stitches Table with Source -> Target Names -->
+        <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">Active Stitches</span>
+            <span class="text-[11px] font-mono text-[var(--muted-foreground)]">4 Active · 0 Paused</span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left font-mono text-[11px]">
+              <thead class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+                <tr>
+                  <th class="py-2 px-3">Stitch Pipeline</th>
+                  <th class="py-2 px-3">Mode</th>
+                  <th class="py-2 px-3">Canonical Event</th>
+                  <th class="py-2 px-3">Target Topology</th>
+                  <th class="py-2 px-3">State</th>
+                  <th class="py-2 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[var(--border)] text-[var(--foreground)]">
+                
+                <!-- Pipeline A Row 1 -->
+                <tr class="hover:bg-[var(--card-border)]/40 cursor-pointer transition-colors" onclick="selectDag('revenova_to_qb_customer', 'Revenova Account ➔ QB Customer', 'EVENT')">
+                  <td class="py-2.5 px-3">
+                    <div class="font-bold text-foreground">Revenova Account ➔ QB Customer</div>
+                    <div class="text-[10px] text-[var(--muted-foreground)]">Revenova TMS ➔ QuickBooks Online</div>
+                  </td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 text-[9px] font-bold">EVENT · P1</span></td>
+                  <td class="py-2.5 px-3 text-blue-400">canonical.account.v1</td>
+                  <td class="py-2.5 px-3 text-[var(--muted-foreground)]">dag_revenova_qb_cust (v2)</td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 text-[9px] font-bold">ACTIVE</span></td>
+                  <td class="py-2.5 px-3 text-right"><span class="text-blue-400 hover:underline">Inspect DAG</span></td>
+                </tr>
+
+                <!-- Pipeline A Row 2 -->
+                <tr class="hover:bg-[var(--card-border)]/40 cursor-pointer transition-colors" onclick="selectDag('revenova_to_qb_invoice', 'Revenova Customer Invoice ➔ QB Invoice', 'EVENT')">
+                  <td class="py-2.5 px-3">
+                    <div class="font-bold text-foreground">Revenova Customer Invoice ➔ QB Invoice</div>
+                    <div class="text-[10px] text-[var(--muted-foreground)]">Revenova TMS ➔ QuickBooks Online</div>
+                  </td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 text-[9px] font-bold">EVENT · P1</span></td>
+                  <td class="py-2.5 px-3 text-blue-400">canonical.invoice.v1</td>
+                  <td class="py-2.5 px-3 text-[var(--muted-foreground)]">dag_revenova_qb_inv (v1)</td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 text-[9px] font-bold">ACTIVE</span></td>
+                  <td class="py-2.5 px-3 text-right"><span class="text-blue-400 hover:underline">Inspect DAG</span></td>
+                </tr>
+
+                <!-- Pipeline B Row 1 -->
+                <tr class="hover:bg-[var(--card-border)]/40 cursor-pointer transition-colors bg-blue-500/5" onclick="selectDag('itron_to_oracle_mdm', 'Itron HES ➔ Oracle MDM', 'BATCH')">
+                  <td class="py-2.5 px-3">
+                    <div class="font-bold text-foreground">Itron HES ➔ Oracle MDM</div>
+                    <div class="text-[10px] text-[var(--muted-foreground)]">Itron OpenWay SFTP ➔ Oracle C2M / MDM</div>
+                  </td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold">BATCH · P2</span></td>
+                  <td class="py-2.5 px-3 text-blue-400">cim.meter_readings.v1</td>
+                  <td class="py-2.5 px-3 text-[var(--muted-foreground)]">hes_continuous_readings (v3)</td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 text-[9px] font-bold">ACTIVE</span></td>
+                  <td class="py-2.5 px-3 text-right"><span class="text-blue-400 font-bold hover:underline">Selected DAG</span></td>
+                </tr>
+
+                <!-- Pipeline B Row 2 -->
+                <tr class="hover:bg-[var(--card-border)]/40 cursor-pointer transition-colors" onclick="selectDag('siemens_to_oracle_mdm', 'Siemens HES ➔ Oracle MDM', 'BATCH')">
+                  <td class="py-2.5 px-3">
+                    <div class="font-bold text-foreground">Siemens HES ➔ Oracle MDM</div>
+                    <div class="text-[10px] text-[var(--muted-foreground)]">Siemens EnergyIP ➔ Oracle C2M / MDM</div>
+                  </td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold">BATCH · P2</span></td>
+                  <td class="py-2.5 px-3 text-blue-400">cim.meter_readings.v1</td>
+                  <td class="py-2.5 px-3 text-[var(--muted-foreground)]">hes_continuous_readings (v3)</td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 text-[9px] font-bold">ACTIVE</span></td>
+                  <td class="py-2.5 px-3 text-right"><span class="text-blue-400 hover:underline">Inspect DAG</span></td>
+                </tr>
+
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Dagster-Style Visual DAG Canvas (Compiled from Python Stitch) -->
+        <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-sm" id="dagTitle">Itron HES ➔ Oracle MDM</span>
+              <span class="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 text-[9px] font-mono font-bold" id="dagModeBadge">BATCH · 50K CHUNK</span>
+            </div>
+            <span class="text-[11px] font-mono text-[var(--muted-foreground)]">Code-First Python DAG · Compiled in 12ms</span>
+          </div>
+
+          <!-- The Canvas with SVG Bezier Curves -->
+          <div class="relative bg-[var(--background)] rounded-xl border border-[var(--border)] p-6 min-h-[170px] flex items-center justify-between overflow-x-auto">
+            
+            <!-- Node 1: Ingress -->
+            <div class="w-44 rounded-lg border border-emerald-500/40 bg-[var(--card)] p-2.5 shadow-md">
+              <div class="flex items-center justify-between text-[10px] font-bold text-emerald-400 border-b border-[var(--border)] pb-1 mb-1.5">
+                <span>L1 · INGRESS</span>
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="font-bold font-mono text-xs truncate" id="node1Name">ingest_claim_check</div>
+              <div class="text-[10px] text-[var(--muted-foreground)] mt-0.5">14ms · S3 / Inbound</div>
+            </div>
+
+            <!-- Bezier Curve 1 -->
+            <div class="flex-1 flex items-center justify-center px-2">
+              <svg class="w-full h-8 overflow-visible" preserveAspectRatio="none">
+                <path d="M 0 16 C 40 16, 60 16, 100 16" fill="none" stroke="#10b981" stroke-width="2" />
+                <polygon points="100,16 94,12 94,20" fill="#10b981" />
+              </svg>
+            </div>
+
+            <!-- Node 2: Canonical Normalizer -->
+            <div class="w-48 rounded-lg border border-emerald-500/40 bg-[var(--card)] p-2.5 shadow-md">
+              <div class="flex items-center justify-between text-[10px] font-bold text-emerald-400 border-b border-[var(--border)] pb-1 mb-1.5">
+                <span>L3 · CANONICAL HUB</span>
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="font-bold font-mono text-xs truncate" id="node2Name">normalize_canonical</div>
+              <div class="text-[10px] text-[var(--muted-foreground)] mt-0.5">18ms · Dedupe &amp; Rosetta</div>
+            </div>
+
+            <!-- Bezier Curve 2 -->
+            <div class="flex-1 flex items-center justify-center px-2">
+              <svg class="w-full h-8 overflow-visible" preserveAspectRatio="none">
+                <path d="M 0 16 C 40 16, 60 16, 100 16" fill="none" stroke="#10b981" stroke-width="2" />
+                <polygon points="100,16 94,12 94,20" fill="#10b981" />
+              </svg>
+            </div>
+
+            <!-- Node 3: Outbound Delivery -->
+            <div class="w-48 rounded-lg border border-emerald-500/40 bg-[var(--card)] p-2.5 shadow-md">
+              <div class="flex items-center justify-between text-[10px] font-bold text-emerald-400 border-b border-[var(--border)] pb-1 mb-1.5">
+                <span>L5 · WIRE EGRESS</span>
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="font-bold font-mono text-xs truncate" id="node3Name">publish_target_api</div>
+              <div class="text-[10px] text-emerald-400 mt-0.5">22ms · Ack 200 OK</div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: UNIFIED TRACES & RUNS (PIPELINE A & B) -->
+      <section id="view-traces" class="hidden space-y-4">
+        <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">Execution Ledger</span>
+            <div class="flex items-center gap-1">
+              <button class="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-semibold">All</button>
+              <button class="px-2 py-0.5 rounded bg-[var(--background)] text-[var(--muted-foreground)] hover:text-white text-[10px]">Events (Pipeline A)</button>
+              <button class="px-2 py-0.5 rounded bg-[var(--background)] text-[var(--muted-foreground)] hover:text-white text-[10px]">Batches (Pipeline B)</button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left font-mono text-[11px]">
+              <thead class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+                <tr>
+                  <th class="py-2 px-3">Trace ID</th>
+                  <th class="py-2 px-3">Mode</th>
+                  <th class="py-2 px-3">Correlation Key</th>
+                  <th class="py-2 px-3">Stitch</th>
+                  <th class="py-2 px-3">Volume</th>
+                  <th class="py-2 px-3">Duration</th>
+                  <th class="py-2 px-3">Status</th>
+                  <th class="py-2 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[var(--border)] text-[var(--foreground)]">
+                <!-- Batch Run -->
+                <tr class="hover:bg-[var(--card-border)]/40 transition-colors">
+                  <td class="py-2.5 px-3 text-blue-400 font-bold">ip_trc_98214</td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-amber-500/10 text-amber-400 px-1.5 py-0.5 text-[9px] font-bold">BATCH</span></td>
+                  <td class="py-2.5 px-3 text-foreground font-bold">MTR-98214</td>
+                  <td class="py-2.5 px-3">Itron HES ➔ Oracle MDM</td>
+                  <td class="py-2.5 px-3">50,000 intervals</td>
+                  <td class="py-2.5 px-3 text-emerald-400">42ms</td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 text-[9px] font-bold">DELIVERED</span></td>
+                  <td class="py-2.5 px-3 text-right"><button onclick="switchTab('search')" class="text-blue-400 hover:underline">Inspect</button></td>
+                </tr>
+                <!-- Transactional Run -->
+                <tr class="hover:bg-[var(--card-border)]/40 transition-colors">
+                  <td class="py-2.5 px-3 text-blue-400 font-bold">ip_trc_1092a</td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-purple-500/10 text-purple-400 px-1.5 py-0.5 text-[9px] font-bold">EVENT</span></td>
+                  <td class="py-2.5 px-3 text-foreground font-bold">INV-1092</td>
+                  <td class="py-2.5 px-3">Revenova Invoice ➔ QB Bill</td>
+                  <td class="py-2.5 px-3">1 invoice</td>
+                  <td class="py-2.5 px-3 text-emerald-400">18ms</td>
+                  <td class="py-2.5 px-3"><span class="rounded bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 text-[9px] font-bold">DELIVERED</span></td>
+                  <td class="py-2.5 px-3 text-right"><button onclick="switchTab('search')" class="text-blue-400 hover:underline">Inspect</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: OMNISEARCH 360° INSPECTION -->
+      <section id="view-search" class="hidden space-y-4">
+        <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="rounded bg-blue-500/10 text-blue-400 font-mono text-sm px-2 py-0.5 font-bold">MTR-98214</span>
+              <span class="text-[var(--muted-foreground)] font-mono text-xs">Service Point: SP-40019</span>
+              <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold">
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> 96/96 DELIVERED
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="openReplayModal()" class="rounded border border-[var(--border)] bg-[var(--background)] px-2.5 py-1 font-semibold hover:border-blue-500 hover:text-blue-400 transition-colors">
+                ↺ Replay
+              </button>
+            </div>
+          </div>
+
+          <!-- 5-Stage Lineage Breadcrumb -->
+          <div class="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+            <div class="flex items-center justify-between text-xs font-mono">
+              <div class="flex items-center gap-2">
+                <span class="h-6 w-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">L1</span>
+                <div>
+                  <div class="font-bold">Wire Ingest</div>
+                  <div class="text-[10px] text-[var(--muted-foreground)]">12ms · S3 Bronze</div>
+                </div>
+              </div>
+              <span class="text-[var(--muted-foreground)]">──►</span>
+              <div class="flex items-center gap-2">
+                <span class="h-6 w-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">L2</span>
+                <div>
+                  <div class="font-bold">Replica</div>
+                  <div class="text-[10px] text-[var(--muted-foreground)]">45ms · Dedupe</div>
+                </div>
+              </div>
+              <span class="text-[var(--muted-foreground)]">──►</span>
+              <div class="flex items-center gap-2">
+                <span class="h-6 w-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">L3</span>
+                <div>
+                  <div class="font-bold">Canonical</div>
+                  <div class="text-[10px] text-[var(--muted-foreground)]">18ms · CIM Part 9</div>
+                </div>
+              </div>
+              <span class="text-[var(--muted-foreground)]">──►</span>
+              <div class="flex items-center gap-2">
+                <span class="h-6 w-6 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">L4</span>
+                <div>
+                  <div class="font-bold">Stitch Wire</div>
+                  <div class="text-[10px] text-[var(--muted-foreground)]">24ms · MDM Kafka</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 24-Hour Load Curve Strip -->
+          <div class="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[10px] font-bold uppercase text-[var(--muted-foreground)]">24h Load Curve</span>
+              <span class="text-[10px] text-blue-400 font-mono">14ms Query</span>
+            </div>
+            <div class="h-14 flex items-end gap-1 border-b border-[var(--border)] pb-1">
+              <div class="flex-1 bg-blue-600/40 rounded-t h-[20%]"></div>
+              <div class="flex-1 bg-blue-600/40 rounded-t h-[15%]"></div>
+              <div class="flex-1 bg-blue-600/40 rounded-t h-[30%]"></div>
+              <div class="flex-1 bg-blue-600/40 rounded-t h-[60%]"></div>
+              <div class="flex-1 bg-blue-600/40 rounded-t h-[45%]"></div>
+              <div class="flex-1 bg-blue-600/40 rounded-t h-[40%]"></div>
+              <div class="flex-1 bg-blue-600/40 rounded-t h-[50%]"></div>
+              <div class="flex-1 bg-blue-600 rounded-t h-[95%] border border-blue-400"></div>
+              <div class="flex-1 bg-blue-600/40 rounded-t h-[75%]"></div>
+              <div class="flex-1 bg-blue-600/40 rounded-t h-[35%]"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-[var(--muted-foreground)] mt-1 font-mono">
+              <span>00:00 UTC</span>
+              <span>12:00</span>
+              <span>18:00 (Peak 3.8 kW)</span>
+              <span>23:45 UTC</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 4: BATCH EXPLORER (< 50MS VIRTUAL TABLE) -->
+      <section id="view-intervals" class="hidden space-y-4">
+        <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">Batch Sample (ip_bat_01jf89kz)</span>
+            <span class="text-[11px] font-mono text-emerald-400">Scan: 18ms</span>
+          </div>
+
+          <div class="rounded-lg border border-[var(--border)] overflow-hidden">
+            <table class="w-full text-left font-mono text-[11px]">
+              <thead class="border-b border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
+                <tr>
+                  <th class="p-2">Meter</th>
+                  <th class="p-2">Timestamp (UTC)</th>
+                  <th class="p-2">Delivered (kWh)</th>
+                  <th class="p-2">Voltage (V)</th>
+                  <th class="p-2">Quality</th>
+                  <th class="p-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-[var(--border)]">
+                <tr class="hover:bg-[var(--card-border)]/40">
+                  <td class="p-2 font-bold text-blue-400">MTR-98214</td>
+                  <td class="p-2">2026-11-21 16:00:00</td>
+                  <td class="p-2 text-emerald-400">0.420</td>
+                  <td class="p-2">240.2</td>
+                  <td class="p-2"><span class="rounded bg-emerald-500/10 text-emerald-400 px-1 py-0.5 text-[9px] font-bold">VALID</span></td>
+                  <td class="p-2 text-right"><button onclick="switchTab('search')" class="text-blue-400 hover:underline">Inspect</button></td>
+                </tr>
+                <tr class="hover:bg-[var(--card-border)]/40">
+                  <td class="p-2 font-bold text-blue-400">MTR-98215</td>
+                  <td class="p-2">2026-11-21 16:00:00</td>
+                  <td class="p-2 text-emerald-400">1.820</td>
+                  <td class="p-2">239.8</td>
+                  <td class="p-2"><span class="rounded bg-emerald-500/10 text-emerald-400 px-1 py-0.5 text-[9px] font-bold">VALID</span></td>
+                  <td class="p-2 text-right"><button onclick="switchTab('search')" class="text-blue-400 hover:underline">Inspect</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Replay Modal (Universal 2-Step) -->
+  <div id="replayModal" class="fixed inset-0 bg-black/80 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+    <div class="rounded-xl border border-[var(--border)] bg-[var(--card)] max-w-lg w-full p-4 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
+        <span class="font-bold text-sm">Deterministic Replay</span>
+        <button onclick="closeReplayModal()" class="text-[var(--muted-foreground)] hover:text-white font-bold">✕</button>
+      </div>
+
+      <div class="space-y-3 font-mono text-xs">
+        <div>
+          <label class="text-[10px] uppercase text-[var(--muted-foreground)] font-bold">Target Entity</label>
+          <div class="rounded border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 mt-1 font-bold text-blue-400">MTR-98214 · Batch ip_bat_01jf89kz</div>
+        </div>
+
+        <div>
+          <label class="text-[10px] uppercase text-[var(--muted-foreground)] font-bold">Replay Injection Stage</label>
+          <select class="w-full rounded border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5 mt-1 text-xs text-[var(--foreground)] focus:outline-none">
+            <option value="L3">L3: Canonical Normalizer</option>
+            <option value="L1">L1: Wire Ingest (Reparse)</option>
+            <option value="L2">L2: Universal Replica (Dedupe)</option>
+            <option value="L4">L4: Stitch DAG (Re-dispatch)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">
+        <button onclick="closeReplayModal()" class="rounded border border-[var(--border)] px-3 py-1 font-semibold text-[var(--muted-foreground)] hover:text-white transition-colors">Cancel</button>
+        <button onclick="executeReplay()" class="rounded bg-blue-600 hover:bg-blue-500 px-3 py-1 font-semibold text-white transition-colors shadow-xs">Execute Replay</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('border-blue-500', 'text-blue-400');
+        btn.classList.add('border-transparent', 'text-[var(--muted-foreground)]');
+      });
+
+      const activeView = document.getElementById('view-' + tabId);
+      const activeBtn = document.getElementById('tab-' + tabId);
+      if (activeView) activeView.classList.remove('hidden');
+      if (activeBtn) {
+        activeBtn.classList.remove('border-transparent', 'text-[var(--muted-foreground)]');
+        activeBtn.classList.add('border-blue-500', 'text-blue-400');
+      }
+    }
+
+    function selectDag(id, title, mode) {
+      document.getElementById('dagTitle').innerText = title;
+      document.getElementById('dagModeBadge').innerText = mode + ' · ACTIVE';
+      if (mode === 'EVENT') {
+        document.getElementById('node1Name').innerText = 'parse_webhook_json';
+        document.getElementById('node2Name').innerText = 'map_canonical_dto';
+        document.getElementById('node3Name').innerText = 'post_quickbooks_api';
+      } else {
+        document.getElementById('node1Name').innerText = 'ingest_claim_check';
+        document.getElementById('node2Name').innerText = 'normalize_iec_cim';
+        document.getElementById('node3Name').innerText = 'publish_mdm_kafka';
+      }
+    }
+
+    function openReplayModal() {
+      document.getElementById('replayModal').classList.remove('hidden');
+      document.getElementById('replayModal').classList.add('flex');
+    }
+
+    function closeReplayModal() {
+      document.getElementById('replayModal').classList.add('hidden');
+      document.getElementById('replayModal').classList.remove('flex');
+    }
+
+    function executeReplay() {
+      closeReplayModal();
+      alert('Replay submitted: New child trace forked at L3 in 18ms.');
+    }
+  </script>
+</body>
+</html>
