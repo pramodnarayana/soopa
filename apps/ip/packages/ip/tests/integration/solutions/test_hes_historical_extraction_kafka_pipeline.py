@@ -112,7 +112,9 @@ from orchestration.adapters.outbound.database.models import (
     WorkflowRunModel,
     WorkflowStepRunModel,
 )
-from orchestration.domain.constants import PayloadType, RunStatus, StepStatus
+from orchestration.domain.constants import EffectPolicy, PayloadType, RunStatus, StepStatus
+from orchestration.domain.failures import StepFailure
+from orchestration.ports.inbound.step_handler_port import StepContext, StepHandlerPort
 from outbox.adapters.inbound.multi_shard_outbox_drain_relay import (
     MultiShardOutboxDrainRelay,
 )
@@ -256,6 +258,26 @@ class _NoopRangeExecutor(IpProcessInboundRangeExecutorPort):
         )
 
 
+class _PassthroughStepHandler(StepHandlerPort[JsonDict, JsonDict]):
+    """Pure passthrough step double for downstream multi-HES fanout and stream nodes."""
+
+    def __init__(self, step_type: str) -> None:
+        self._step_type = step_type
+
+    @property
+    def step_type(self) -> str:
+        return self._step_type
+
+    @property
+    def effect_policy(self) -> EffectPolicy:
+        return EffectPolicy.PURE
+
+    async def execute(
+        self, context: StepContext, step_input: JsonDict
+    ) -> Result[JsonDict, StepFailure]:
+        return Result.ok(dict(step_input))
+
+
 def _configure_test_container(
     transactional_router: TransactionalTestRouter,
     fake_kafka_client: FakeKafkaProducerClient,
@@ -278,9 +300,22 @@ def _configure_test_container(
     )
     container.catalog_registry.override(providers.Object(custom_registry))
 
-    # Ensure SliceRangeStepHandler is registered in step_handler_registry
+    # Ensure SliceRangeStepHandler and downstream passthrough handlers are registered
     step_reg = container.step_handler_registry()
     step_reg.register(SliceRangeStepHandler())
+    for passthrough_type in (
+        "trigger.ingress",
+        "energy.fanout_by_connection",
+        "http.post_extract",
+        "itron.parse_openway_batch",
+        "itron.normalize_intervals",
+        "kafka.publish_intervals",
+        "landis.parse_cim_batch",
+        "landis.normalize_intervals",
+        "siemens.parse_energyip_batch",
+        "siemens.normalize_intervals",
+    ):
+        step_reg.register(_PassthroughStepHandler(passthrough_type))
 
     # Ensure HES historical extraction stitch is active in stitch_catalog
     stitch_catalog = container.stitch_catalog()

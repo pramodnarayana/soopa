@@ -35,6 +35,9 @@ from datetime import UTC, datetime, timedelta
 
 import asyncpg
 import structlog
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import PlatformDatabaseSettings
+from sqlalchemy.engine import make_url
 
 logger = structlog.get_logger(__name__)
 
@@ -42,13 +45,24 @@ ACTIVE_TENANT_ID = "iam_ten_752f7997d2ecf38fd8dfe2dfce9043e5"
 SEED_TENANT_ID = "ten_9f8e7d6c5b4a3f2e1d0c9b8a"
 TARGET_TENANTS = [ACTIVE_TENANT_ID, SEED_TENANT_ID]
 
-GLOBAL_DB_URL = os.environ.get(
-    "DATABASE_URL", "postgresql://ucp_admin:ucp_password@localhost:5432/global_db"
-).replace("postgresql+asyncpg://", "postgresql://")
+_db_settings = load_settings_safely(PlatformDatabaseSettings)
+GLOBAL_DB_URL = os.environ.get("DATABASE_URL") or _db_settings.global_url
+IP_SHARD_URL = (
+    os.environ.get("IP_DATABASE_URL")
+    or _db_settings.shard_overrides.get("ip_shard_1")
+    or _db_settings.global_url
+)
 
-IP_SHARD_URL = os.environ.get(
-    "IP_DATABASE_URL", "postgresql://ip:ip_password@localhost:5434/ip_shard"
-).replace("postgresql+asyncpg://", "postgresql://")
+
+async def _connect_asyncpg(url_str: str) -> asyncpg.Connection:
+    parsed = make_url(url_str)
+    return await asyncpg.connect(
+        user=parsed.username,
+        password=parsed.password,
+        host=parsed.host or "localhost",
+        port=parsed.port or 5432,
+        database=parsed.database,
+    )
 
 
 async def _seed_tenants_and_shards(conn: asyncpg.Connection, naive_now: datetime) -> None:
@@ -89,13 +103,14 @@ async def _seed_tenants_and_shards(conn: asyncpg.Connection, naive_now: datetime
     await conn.execute(
         """
         INSERT INTO ucp.database_shards (id, name, dsn, routing_strategy, status, created_at, updated_at)
-        VALUES ('ip_shard_1', 'IP Shard (ip_shard_1)', 'postgresql+asyncpg://ip:ip_password@localhost:5434/ip_shard', 'tenant_registry', 'active', $1, $1)
+        VALUES ('ip_shard_1', 'IP Shard (ip_shard_1)', $1, 'tenant_registry', 'active', $2, $2)
         ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             dsn = EXCLUDED.dsn,
             status = 'active',
             updated_at = EXCLUDED.updated_at;
         """,
+        IP_SHARD_URL,
         naive_now,
     )
 
@@ -2736,15 +2751,15 @@ async def pump_tenant_data_plane(conn: asyncpg.Connection) -> None:
 
 
 async def main() -> None:
-    logger.info("connecting_global_db", url=GLOBAL_DB_URL)
-    conn_global = await asyncpg.connect(GLOBAL_DB_URL)
+    logger.info("connecting_global_db")
+    conn_global = await _connect_asyncpg(GLOBAL_DB_URL)
     try:
         await pump_global_control_plane(conn_global)
     finally:
         await conn_global.close()
 
-    logger.info("connecting_ip_shard", url=IP_SHARD_URL)
-    conn_ip = await asyncpg.connect(IP_SHARD_URL)
+    logger.info("connecting_ip_shard")
+    conn_ip = await _connect_asyncpg(IP_SHARD_URL)
     try:
         await pump_tenant_data_plane(conn_ip)
     finally:

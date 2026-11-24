@@ -12,6 +12,7 @@ from __future__ import annotations
 from orchestration.domain.constants import EffectPolicy, NodeKind, Priority
 from orchestration.domain.definition import NodeDefinition, WorkflowDefinition
 
+from ip.engine.domain.stitch.enums import StitchStepType
 from ip.engine.domain.stitch.stitch import Stitch
 
 _ENTERPRISE_BOUNDARY = "Enterprise Core (MDM / Kafka)"
@@ -42,7 +43,7 @@ def build_hes_historical_extraction_definition() -> WorkflowDefinition:
             NodeDefinition(
                 node_key="slice_date_range",
                 kind=NodeKind.TASK,
-                step_type="energy.slice_daily_chunks",
+                step_type=StitchStepType.SLICE_RANGE.value,
                 parents=("request_received",),
                 boundary=_ENTERPRISE_BOUNDARY,
                 track=0,
