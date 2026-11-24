@@ -297,7 +297,7 @@ export function DeviceLoadCurveLineageDrawer({
                 />
 
                 <DescriptionList
-                  title="Two-Tier Macro-Batch Lineage (L1 → L3 Provenance)"
+                  title="Two-Tier Macro-Batch Lineage Provenance"
                   columns={1}
                   items={[
                     {
@@ -321,11 +321,15 @@ export function DeviceLoadCurveLineageDrawer({
                       ),
                     },
                     {
-                      label: 'L2 / L3 Parquet URIs',
+                      label: 'Storage Lakehouse URIs',
                       children: (
                         <div className="space-y-1 font-mono text-xs">
-                          <div className="break-all">L2: {selectedPoint.l2ReplicaUri ?? '—'}</div>
-                          <div className="break-all">L3: {selectedPoint.l3CanonicalUri ?? '—'}</div>
+                          <div className="break-all">
+                            L2 Replicated: {selectedPoint.l2ReplicaUri ?? '—'}
+                          </div>
+                          <div className="break-all">
+                            L3 Formatted: {selectedPoint.l3CanonicalUri ?? '—'}
+                          </div>
                         </div>
                       ),
                     },

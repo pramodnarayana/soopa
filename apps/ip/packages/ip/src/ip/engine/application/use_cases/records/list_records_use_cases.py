@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import structlog
 
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
 from ip.engine.domain.replication.inbound_record import InboundRecord
@@ -218,6 +219,64 @@ class ListInboundRecordsUseCase:
         return Result.ok(records)
 
 
+@dataclass(frozen=True, kw_only=True)
+class ListOutboundRecordsQuery:
+    tenant_id: str
+    connection_id: str | None = None
+    app_id: str | None = None
+    stream_name: str | None = None
+    status: str | None = None
+    limit: int = 50
+    offset: int = 0
+    hydrate_payloads: bool = False
+
+
+class ListOutboundRecordsUseCase:
+    """Use case to list Layer 5 Outbound delivery records."""
+
+    def __init__(self, uow_provider: IpDataPlaneUnitOfWorkProviderPort) -> None:
+        self._uow_provider = uow_provider
+
+    async def execute(
+        self, query: ListOutboundRecordsQuery
+    ) -> Result[Sequence[OutboundRecord], IpError]:
+        bound = logger.bind(
+            tenant_id=query.tenant_id,
+            connection_id=query.connection_id,
+            app_id=query.app_id,
+            stream_name=query.stream_name,
+            status=query.status,
+            limit=query.limit,
+            offset=query.offset,
+        )
+        bound.info("ip_list_outbound_records.started")
+        shard_res = await self._uow_provider.resolve_shard_info(query.tenant_id)
+        if shard_res.is_err:
+            err = shard_res.unwrap_err()
+            bound.error(
+                "ip_list_outbound_records.shard_resolution_failed",
+                error_code=str(err.code),
+            )
+            return Result.err(err)
+
+        shard_id, shard_dsn = shard_res.unwrap()
+        async with self._uow_provider.get_data_plane_uow(
+            query.tenant_id, shard_id, shard_dsn
+        ) as uow:
+            records = await uow.outbound_records.list_records(
+                query.tenant_id,
+                connection_id=query.connection_id,
+                app_id=query.app_id,
+                stream_name=query.stream_name,
+                status=query.status,
+                limit=query.limit,
+                offset=query.offset,
+                hydrate_payloads=query.hydrate_payloads,
+            )
+        bound.info("ip_list_outbound_records.completed", record_count=len(records))
+        return Result.ok(records)
+
+
 __all__ = [
     "ListGlobalEntityMapQuery",
     "ListGlobalEntityMapUseCase",
@@ -225,6 +284,8 @@ __all__ = [
     "ListInboundRecordsUseCase",
     "ListNormalizedRecordsQuery",
     "ListNormalizedRecordsUseCase",
+    "ListOutboundRecordsQuery",
+    "ListOutboundRecordsUseCase",
     "ListReplicaRecordsQuery",
     "ListReplicaRecordsUseCase",
 ]

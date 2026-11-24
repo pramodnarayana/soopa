@@ -25,6 +25,15 @@ from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRe
 from ip.engine.domain.trace.trace_event import IpTraceEvent
 
 
+def _to_ingestion_mode(raw: str) -> IngestionMode:
+    try:
+        return IngestionMode(raw)
+    except ValueError:
+        if raw.upper() == "WEBHOOK":
+            return IngestionMode.WEBHOOK
+        return IngestionMode.PUSH_FULL
+
+
 def inbound_record_to_domain(orm: InboundRecordModel) -> InboundRecord:
     """Maps an InboundRecordModel ORM row to an InboundRecord domain aggregate."""
     return InboundRecord(
@@ -41,7 +50,7 @@ def inbound_record_to_domain(orm: InboundRecordModel) -> InboundRecord:
         batch_id=orm.batch_id,
         batch_seq=orm.batch_seq,
         causation_depth=orm.causation_depth,
-        ingestion_mode=IngestionMode(orm.ingestion_mode),
+        ingestion_mode=_to_ingestion_mode(orm.ingestion_mode),
         sync_run_id=orm.sync_run_id,
         generation_id=orm.generation_id,
         external_event_id=orm.external_event_id,

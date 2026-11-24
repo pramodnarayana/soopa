@@ -2,7 +2,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   CopyableIdPill,
@@ -47,29 +46,12 @@ import {
 const PIPELINE_STEPS: ReadonlyArray<{
   readonly code: string;
   readonly name: string;
-  readonly summary: string;
 }> = [
-  { code: 'L1', name: 'Wire Ingest', summary: 'Immutable raw HTTP/Webhook/Pull capture & SHA-256' },
-  {
-    code: 'L2',
-    name: 'Universal Replica',
-    summary: 'Deduplicated per-stream records & generation tracking',
-  },
-  {
-    code: 'L3',
-    name: 'Canonical + GEM',
-    summary: 'Typed entities, extensions & Rosetta cross-references',
-  },
-  {
-    code: 'L4',
-    name: 'Durable Stitch',
-    summary: 'Topological DAG, wait gates & rate-safe retries',
-  },
-  {
-    code: 'L5',
-    name: 'Outbound Wire',
-    summary: 'Idempotent destination writes & Retry-After audit',
-  },
+  { code: 'L1', name: 'Wire Ingest' },
+  { code: 'L2', name: 'Universal Replica' },
+  { code: 'L3', name: 'Business Records' },
+  { code: 'L4', name: 'Durable Stitch' },
+  { code: 'L5', name: 'Outbound Delivery' },
 ];
 
 function computeAttentionConnections(connections: readonly Connection[]): readonly Connection[] {
@@ -122,7 +104,7 @@ function HeroCorrelationBar({
               value={value}
               onChange={(e) => setValue(e.target.value)}
               aria-label="Search business correlation key or trace ID"
-              placeholder="Instant <15ms Support Audit — enter correlation ID, order_id, external record ID, or ip_trc_..."
+              placeholder="Search by correlation ID, external ID, or trace ID..."
               className="pl-9 font-mono text-xs"
             />
           </div>
@@ -190,10 +172,6 @@ function ConnectionAttentionRadar({
           <AlertTriangle className="h-4 w-4" />
           <span>Connection Attention Radar ({items.length})</span>
         </CardTitle>
-        <CardDescription>
-          Credentials or OAuth2 tokens requiring re-linking to restore uninterrupted pull/delivery
-          flows.
-        </CardDescription>
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
         {items.map((conn) => (
@@ -294,10 +272,7 @@ function RecentTracesCard({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
-          <CardTitle>Recent 5-Layer Support Traces</CardTitle>
-          <CardDescription className="mt-1">
-            Click any trace to inspect L1→L5 wire &amp; canonical payloads.
-          </CardDescription>
+          <CardTitle>Recent Traces</CardTitle>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onViewAll}>
           View Timeline
@@ -309,10 +284,10 @@ function RecentTracesCard({
           columnsLength={columns.length}
           isLoading={isLoading}
           dataLength={data.length}
-          ariaLabel="Recent support traces"
+          ariaLabel="Recent traces"
           emptyIcon={<Activity className="h-5 w-5" />}
           emptyTitle="No Traces Recorded Yet"
-          emptyDescription="Ingest a webhook or trigger a pull sync to populate the 5-layer audit ledger."
+          emptyDescription="No traces recorded yet."
           onRowClick={(row) => onOpenTrace(row.original.traceId)}
         />
       </CardContent>
@@ -377,10 +352,7 @@ function RecentStitchRunsCard({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
-          <CardTitle>Recent Durable Stitch Runs</CardTitle>
-          <CardDescription className="mt-1">
-            Live DAG execution runs across L4 orchestration shards.
-          </CardDescription>
+          <CardTitle>Recent Stitch Runs</CardTitle>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onViewAll}>
           Open Stitches
@@ -392,10 +364,10 @@ function RecentStitchRunsCard({
           columnsLength={columns.length}
           isLoading={isLoading}
           dataLength={data.length}
-          ariaLabel="Recent durable stitch runs"
+          ariaLabel="Recent stitch runs"
           emptyIcon={<Workflow className="h-5 w-5" />}
-          emptyTitle="No Durable Stitch Runs Yet"
-          emptyDescription="Register a Stitch and dispatch a canonical L3 event to execute a durable DAG."
+          emptyTitle="No Stitch Runs Yet"
+          emptyDescription="No stitch runs recorded yet."
           onRowClick={(row) => onOpenRun(row.original.runId)}
         />
       </CardContent>
@@ -432,9 +404,7 @@ export function IpCommandCenterPage() {
   return (
     <div className="space-y-6">
       <IpPageHeader
-        eyebrow="Operational Glass Box"
-        title="Integration Platform Command Center"
-        subtitle="Audit every wire payload, canonical entity, GlobalEntityMap cross-reference, and durable Stitch step in under 15ms."
+        title="Integration Platform"
         actions={
           <>
             {navigation.toIntervals ? (
@@ -481,14 +451,13 @@ export function IpCommandCenterPage() {
         className="grid grid-cols-1 gap-3 md:grid-cols-5"
       >
         {PIPELINE_STEPS.map((step) => (
-          <div key={step.code} className="rounded-lg border border-border bg-card p-3.5 shadow-2xs">
+          <div key={step.code} className="rounded-lg border border-border bg-card p-3 shadow-2xs">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-6 w-8 items-center justify-center rounded-md bg-primary font-mono text-xs font-semibold text-primary-foreground">
                 {step.code}
               </span>
               <span className="text-xs font-semibold text-foreground">{step.name}</span>
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{step.summary}</p>
           </div>
         ))}
       </section>

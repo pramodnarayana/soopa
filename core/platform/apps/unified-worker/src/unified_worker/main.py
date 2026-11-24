@@ -6,8 +6,18 @@ import sys
 from typing import Any
 
 import structlog
+from dotenv import find_dotenv, load_dotenv
 from observability import ObservabilityProvider
 from unified_worker.registry import get_worker_instance
+
+# Ensure root .env is loaded before bootstrapping any worker or security cipher
+_dotenv_file = find_dotenv(usecwd=True)
+if not _dotenv_file:
+    _candidate = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
+    if os.path.exists(_candidate):
+        _dotenv_file = _candidate
+if _dotenv_file:
+    load_dotenv(_dotenv_file)
 
 logger = structlog.get_logger(__name__)
 
@@ -18,7 +28,7 @@ async def _start_workers(workers: list[tuple[str, Any]]) -> list[Any]:
     results = await asyncio.gather(*start_tasks, return_exceptions=True)
     for (name, worker), res in zip(workers, results, strict=True):
         if isinstance(res, Exception):
-            logger.error("worker_start_failed", worker=name, exc_info=res)
+            logger.error("worker_start_failed", worker=name, error=str(res), exc_info=True)
             raise res
         started_workers.append(worker)
     return started_workers
@@ -31,7 +41,12 @@ async def _stop_workers(started_workers: list[Any]) -> None:
     results = await asyncio.gather(*stop_tasks, return_exceptions=True)
     for worker, res in zip(started_workers, results, strict=True):
         if isinstance(res, Exception):
-            logger.error("worker_stop_failed", worker=worker.__class__.__name__, exc_info=res)
+            logger.error(
+                "worker_stop_failed",
+                worker=worker.__class__.__name__,
+                error=str(res),
+                exc_info=True,
+            )
 
 
 async def main(stop_event: asyncio.Event | None = None) -> None:

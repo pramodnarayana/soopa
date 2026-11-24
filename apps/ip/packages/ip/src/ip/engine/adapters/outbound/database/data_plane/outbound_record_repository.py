@@ -151,3 +151,46 @@ class SqlAlchemyOutboundRecordRepository(TenantSqlAlchemyRepository, OutboundRec
         if orm is None:
             return None
         return self._to_domain_model(orm)
+
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        app_id: str | None = None,
+        stream_name: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        hydrate_payloads: bool = False,
+    ) -> Sequence[OutboundRecord]:
+        stmt = select(OutboundRecordModel).where(OutboundRecordModel.tenant_id == tenant_id)
+        if connection_id is not None:
+            stmt = stmt.where(OutboundRecordModel.connection_id == connection_id)
+        if app_id is not None:
+            stmt = stmt.where(OutboundRecordModel.app_id == app_id)
+        if stream_name is not None:
+            stmt = stmt.where(OutboundRecordModel.stream_name == stream_name)
+        if status is not None:
+            stmt = stmt.where(OutboundRecordModel.status == status)
+
+        stmt = stmt.order_by(OutboundRecordModel.sent_at.desc()).offset(offset).limit(limit)
+        result = await self._session.execute(stmt)
+        records = [self._to_domain_model(orm) for orm in result.scalars().all()]
+        if hydrate_payloads and self._storage is not None:
+            for rec in records:
+                if rec.request_s3_key:
+                    rec.request_body = await hydrate_s3_json_payload(
+                        self._storage,
+                        s3_key=rec.request_s3_key,
+                        inline_body=rec.request_body,
+                        size_bytes=rec.request_size_bytes,
+                        sha256=rec.request_sha256,
+                    )
+                if rec.response_s3_key:
+                    rec.response_body = await hydrate_s3_json_payload(
+                        self._storage,
+                        s3_key=rec.response_s3_key,
+                        inline_body=rec.response_body,
+                    )
+        return records

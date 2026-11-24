@@ -41,3 +41,18 @@ class OutboundRecordRepositoryPort(Protocol):
     ) -> OutboundRecord | None:
         """Retrieves the most recent outbound record matching (tenant_id, connection_id, idempotency_key)."""
         return None
+
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        app_id: str | None = None,
+        stream_name: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        hydrate_payloads: bool = False,
+    ) -> Sequence[OutboundRecord]:
+        """Lists Layer 5 outbound records filtered by connection, app, stream, or status."""
+        return ()

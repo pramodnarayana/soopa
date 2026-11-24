@@ -25,6 +25,8 @@ class StitchNodeSummaryDTO:
     effect_policy: str
     wait_event_key: str | None
     queue_name: str
+    boundary: str | None = None
+    track: int = 0
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,7 @@ class StitchSummaryDTO:
     mapping_spec_id: str | None = None
     filter_conditions: Mapping[str, JsonPrimitive] = field(default_factory=dict)
     is_active: bool = True
+    linked_stitch_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -102,6 +105,8 @@ def to_node_dto(node: NodeDefinition) -> StitchNodeSummaryDTO:
         effect_policy=node.effect_policy.value,
         wait_event_key=node.wait_event.event_key if node.wait_event is not None else None,
         queue_name=node.queue_name,
+        boundary=node.boundary,
+        track=node.track,
     )
 
 
@@ -126,6 +131,7 @@ def to_stitch_dto(stitch: Stitch) -> StitchSummaryDTO:
         mapping_spec_id=stitch.mapping_spec_id,
         filter_conditions=dict(stitch.filter_conditions),
         is_active=stitch.is_active,
+        linked_stitch_id=stitch.linked_stitch_id,
     )
 
 

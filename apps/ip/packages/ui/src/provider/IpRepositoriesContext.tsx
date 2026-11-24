@@ -37,6 +37,12 @@ export interface StitchMapperParams {
 export type RouteStitchMapperParams = StitchMapperParams;
 export type RouteStitchWorkbenchParams = StitchMapperParams;
 
+export interface StitchDefinitionNavParams {
+  readonly traceId?: string;
+  readonly runId?: string;
+  readonly tab?: 'canvas' | 'executions' | 'data';
+}
+
 export interface IpNavigationPort {
   readonly toCommandCenter: () => void;
   readonly toTraces: (correlationQuery?: string) => void;
@@ -45,8 +51,9 @@ export interface IpNavigationPort {
   readonly toConnectionDetail: (connectionId: string) => void;
   readonly toTransformations: (connectionId?: string) => void;
   readonly toStitches: () => void;
-  readonly toStitchDefinition: (workflowId: string) => void;
+  readonly toStitchDefinition: (workflowId: string, search?: StitchDefinitionNavParams) => void;
   readonly toStitchRun: (runId: string) => void;
+  readonly toTraceStitches?: (traceId: string) => void;
   readonly toIntervals?: (connectionId?: string) => void;
   readonly toStitchMapper?: (params?: StitchMapperParams) => void;
   readonly toRouteStitchMapper?: (params?: RouteStitchMapperParams) => void;

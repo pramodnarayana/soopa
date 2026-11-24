@@ -17,10 +17,12 @@ from ip.engine.adapters.inbound.api.dtos.trace_dtos import (
     GlobalEntityMapHttpResponse,
     InboundRecordHttpResponse,
     NormalizedRecordHttpResponse,
+    OutboundRecordHttpResponse,
     ReplicaRecordHttpResponse,
     map_entity_mapping_to_http,
     map_inbound_record_to_http,
     map_normalized_record_to_http,
+    map_outbound_record_to_http,
     map_replica_record_to_http,
 )
 from ip.engine.application.use_cases.records import (
@@ -30,6 +32,8 @@ from ip.engine.application.use_cases.records import (
     ListInboundRecordsUseCase,
     ListNormalizedRecordsQuery,
     ListNormalizedRecordsUseCase,
+    ListOutboundRecordsQuery,
+    ListOutboundRecordsUseCase,
     ListReplicaRecordsQuery,
     ListReplicaRecordsUseCase,
 )
@@ -277,3 +281,70 @@ async def list_inbound_records(
     records = result.unwrap()
     log.info("ip_list_inbound_records_http.completed", count=len(records))
     return [map_inbound_record_to_http(r) for r in records]
+
+
+@router.get(
+    "/outbound",
+    response_model=list[OutboundRecordHttpResponse],
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+    },
+    status_code=status.HTTP_200_OK,
+)
+async def list_outbound_records(
+    tenant_id: str,
+    request: Request,
+    context: Annotated[IdentityContext, Depends(require_canonical_records_read)],
+    uow_provider: Annotated[
+        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
+    ],
+    connection_id: Annotated[str | None, Query(description="Filter by connection ID")] = None,
+    app_id: Annotated[str | None, Query(description="Filter by destination app ID")] = None,
+    stream_name: Annotated[str | None, Query(description="Filter by stream name")] = None,
+    record_status: Annotated[
+        str | None, Query(alias="status", description="Filter by status")
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    hydrate_payloads: Annotated[bool, Query(description="Hydrate offloaded S3 payloads")] = False,
+) -> list[OutboundRecordHttpResponse] | Response:
+    """Lists Layer 5 Outbound Delivery records. Accessible to Customer Support and Customers."""
+    _ = context
+    try:
+        ucp_tenant_id: str = request.state.ucp_tenant_id
+    except AttributeError:
+        ucp_tenant_id = tenant_id
+
+    log = logger.bind(
+        tenant_id=ucp_tenant_id,
+        path_tenant_id=tenant_id,
+        connection_id=connection_id,
+        app_id=app_id,
+        stream_name=stream_name,
+        record_status=record_status,
+        limit=limit,
+        offset=offset,
+    )
+    log.info("ip_list_outbound_records_http.received")
+
+    use_case = ListOutboundRecordsUseCase(uow_provider=uow_provider)
+    result = await use_case.execute(
+        ListOutboundRecordsQuery(
+            tenant_id=ucp_tenant_id,
+            connection_id=connection_id,
+            app_id=app_id,
+            stream_name=stream_name,
+            status=record_status,
+            limit=limit,
+            offset=offset,
+            hydrate_payloads=hydrate_payloads,
+        )
+    )
+    if result.is_err:
+        err = result.unwrap_err()
+        log.error("ip_list_outbound_records_http.failed", error_code=err.code.value)
+        return from_ip_error(err)
+
+    records = result.unwrap()
+    log.info("ip_list_outbound_records_http.completed", count=len(records))
+    return [map_outbound_record_to_http(r) for r in records]

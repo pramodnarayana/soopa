@@ -9,6 +9,8 @@ export const StitchNodeWireSchema = z.object({
   effect_policy: z.string(),
   wait_event_key: z.string().nullable().optional().default(null),
   queue_name: z.string(),
+  boundary: z.string().nullable().optional().default(null),
+  track: z.number().optional().default(0),
 });
 
 export const StitchDefinitionWireSchema = z.object({
@@ -38,6 +40,7 @@ export const StitchWireSchema = z.object({
   resource_hint_field: z.string().nullable().optional().default(null),
   filter_conditions: z.record(z.string(), z.unknown()).optional().default({}),
   is_active: z.boolean(),
+  linked_stitch_id: z.string().nullable().optional().default(null),
 });
 
 export const StitchListWireSchema = z.array(StitchWireSchema);

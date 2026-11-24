@@ -68,6 +68,7 @@ class StitchShardGatewayPort(Protocol):
         tenant_id: str,
         workflow_id: str | None = None,
         status: RunStatus | None = None,
+        trace_id: str | None = None,
         limit: int = 50,
     ) -> Result[tuple[WorkflowRun, ...], IpError]: ...
 

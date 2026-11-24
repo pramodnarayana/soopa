@@ -52,7 +52,7 @@ def build_load_tender_erp_sync_stitch() -> Stitch:
         tenant_id="*",
         canonical_event_type=TmsEntityType.TMS_LOAD.value,
         target_workflow_id="tms.load_tender_erp_sync_stitch",
-        name="Default TMS Load Sync",
+        name="TMS Load Tender ERP Sync",
         description="Validates carrier replica state for a normalized TMS load and dispatches a freight invoice action to downstream ERP.",
         idempotency_key_field="event_id",
         concurrency_key_field="load_reference_number",

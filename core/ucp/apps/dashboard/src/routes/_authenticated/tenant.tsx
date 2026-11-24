@@ -1,11 +1,8 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
 import {
-  Activity,
   ArrowLeftRight,
-  BarChart3,
   Bell,
-  Compass,
-  GitMerge,
+  Database,
   LayoutDashboard,
   LayoutGrid,
   Settings,
@@ -51,12 +48,9 @@ function TenantSidebar({ subscriptions }: { subscriptions: string[] }) {
           <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
             Integration Platform
           </div>
-          <NavItem icon={Compass} label="Command Center" to="/tenant/ip" exact />
-          <NavItem icon={Activity} label="Support Traces" to="/tenant/ip/traces" />
-          <NavItem icon={BarChart3} label="Interval Streams" to="/tenant/ip/intervals" />
-          <NavItem icon={LayoutGrid} label="Apps" to="/tenant/ip/connections" />
-          <NavItem icon={GitMerge} label="Transformations" to="/tenant/ip/transformations" />
-          <NavItem icon={Workflow} label="Stitches" to="/tenant/ip/stitches" />
+          <NavItem icon={LayoutGrid} label="Connections" to="/tenant/ip/connections" />
+          <NavItem icon={Workflow} label="Stitches / Workflows" to="/tenant/ip/stitches" />
+          <NavItem icon={Database} label="Data Explorer" to="/tenant/ip/data-explorer" />
         </div>
       )}
 

@@ -135,6 +135,7 @@ async def list_stitch_runs(
     shard_gateway: Annotated[StitchShardGatewayPort, Depends(get_stitch_shard_gateway)],
     workflow_id: Annotated[str | None, Query()] = None,
     status_filter: Annotated[RunStatus | None, Query(alias="status")] = None,
+    trace_id: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[StitchRunHttpResponse] | JSONResponse:
     """Lists recent durable Stitch WorkflowRuns on the tenant Data Plane shard."""
@@ -143,6 +144,7 @@ async def list_stitch_runs(
         tenant_id=tenant_id,
         workflow_id=workflow_id,
         status=status_filter.value if status_filter is not None else None,
+        trace_id=trace_id,
         limit=limit,
     )
     use_case = ListStitchRunsUseCase(shard_gateway=shard_gateway)
@@ -151,6 +153,7 @@ async def list_stitch_runs(
             tenant_id=tenant_id,
             workflow_id=workflow_id,
             status=status_filter,
+            trace_id=trace_id,
             limit=limit,
         )
     )

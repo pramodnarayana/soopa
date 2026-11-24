@@ -79,6 +79,7 @@ class InMemoryWorkflowRunRepository(WorkflowRunRepositoryPort):
         *,
         workflow_id: str | None = None,
         status: RunStatus | None = None,
+        trace_id: str | None = None,
         limit: int = 50,
     ) -> Sequence[WorkflowRun]:
         matching = [
@@ -87,6 +88,7 @@ class InMemoryWorkflowRunRepository(WorkflowRunRepositoryPort):
             if tid == tenant_id
             and (workflow_id is None or run.workflow_id == workflow_id)
             and (status is None or run.status == status)
+            and (trace_id is None or run.trace_id == trace_id)
         ]
         matching.sort(key=lambda r: r.created_at, reverse=True)
         return tuple(matching[:limit])

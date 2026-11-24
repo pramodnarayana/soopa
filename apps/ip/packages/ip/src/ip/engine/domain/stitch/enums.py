@@ -16,3 +16,6 @@ class StitchStepType(StrEnum):
     NORMALIZER = "ip.stitch.normalizer"
     UI_FIELD_MAPPER = "ip.stitch.ui_field_mapper"
     EGRESS_PUBLISH = "ip.stitch.egress_publish"
+    VALIDATE_SCHEMA = "ip.stitch.validate_schema"
+    CANONICAL_TRANSFORM = "ip.stitch.canonical_transform"
+    GEM_LOOKUP = "ip.stitch.gem_lookup"

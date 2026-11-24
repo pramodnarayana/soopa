@@ -44,6 +44,7 @@ class IngestionMode(StrEnum):
     FETCH_ON_NOTIFY = "FETCH_ON_NOTIFY"
     STREAM_SUBSCRIBE = "STREAM_SUBSCRIBE"
     RETURN_LEG_CALLBACK = "RETURN_LEG_CALLBACK"
+    WEBHOOK = "WEBHOOK"
 
 
 class SyncRunKind(StrEnum):

@@ -13,7 +13,7 @@ import {
   Skeleton,
   StatusBadge,
 } from '@soopa/ui';
-import { ArrowLeft, Edit3, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Edit3, Network, RotateCcw } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -180,12 +180,33 @@ function TraceWaterfallBody({
           <CopyableIdPill value={trace.originalTraceId} prefixLabel="Root" truncateLength={16} />
         </div>
 
-        <ReplayActionControls
-          trace={trace}
-          onNavigateTrace={(nextId) => navigation.toTraceDetail(nextId)}
-          onOpenModifyStudio={() => setModifyOpen(true)}
-          onProblem={onProblem}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const targetWf =
+                trace.outboundRecords?.[0]?.appId || 'workflow.shopify_orders_to_sap';
+              if (navigation.toStitchDefinition) {
+                navigation.toStitchDefinition(targetWf, { traceId: trace.traceId });
+              } else if (navigation.toTraceStitches) {
+                navigation.toTraceStitches(trace.traceId);
+              }
+            }}
+            className="gap-1.5"
+          >
+            <Network className="h-3.5 w-3.5 text-primary" />
+            <span>Workflow (Stitches) Canvas</span>
+          </Button>
+
+          <ReplayActionControls
+            trace={trace}
+            onNavigateTrace={(nextId) => navigation.toTraceDetail(nextId)}
+            onOpenModifyStudio={() => setModifyOpen(true)}
+            onProblem={onProblem}
+          />
+        </div>
       </div>
 
       <FiveLayerStageStrip
@@ -240,9 +261,7 @@ export function IpTraceWaterfallPage({ traceId }: IpTraceWaterfallPageProps) {
   return (
     <div className="space-y-6">
       <IpPageHeader
-        eyebrow="5-Layer Transaction Waterfall"
         title={`Trace ${traceId}`}
-        subtitle="End-to-end cryptographic wire audit, universal replica state, canonical GEM bindings, and deterministic replay lineage."
         actions={
           <Button
             type="button"

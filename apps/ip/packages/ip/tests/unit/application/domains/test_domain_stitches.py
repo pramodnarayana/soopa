@@ -36,13 +36,17 @@ from orchestration.domain.constants import Priority
 def test_energy_domain_stitch_definitions_with_instances() -> None:
     """Verify Energy domain builds expected DAG definitions and trigger stitches."""
     definitions = build_energy_stitch_definitions()
-    assert len(definitions) == 3
+    assert len(definitions) == 7
 
     workflow_ids = {d.workflow_id for d in definitions}
     assert workflow_ids == {
         "energy.outage_restoration_stitch",
         "energy.meter_reading_erp_sync_stitch",
         "energy.hes_historical_extraction_stitch",
+        "energy.hes_historical_dispatch_stitch",
+        "energy.itron_batch_ingestion_stitch",
+        "energy.landis_batch_ingestion_stitch",
+        "energy.siemens_batch_ingestion_stitch",
     }
 
     outage = build_outage_restoration_definition()
@@ -58,6 +62,7 @@ def test_energy_domain_stitch_definitions_with_instances() -> None:
     reading_stitch = build_meter_reading_erp_sync_stitch()
     assert isinstance(reading_stitch, Stitch)
     assert reading_stitch.workflow_id == "energy.meter_reading_erp_sync_stitch"
+    assert reading_stitch.name == "AMI Energy Meter Reading ERP Sync"
     assert reading_stitch.canonical_event_type == EnergyEntityType.MDM_METER_READING.value
     assert reading_stitch.is_trigger is True
     assert reading_stitch.idempotency_key_field == "event_id"
@@ -67,15 +72,38 @@ def test_energy_domain_stitch_definitions_with_instances() -> None:
     hes_def = build_hes_historical_extraction_definition()
     assert hes_def.workflow_id == "energy.hes_historical_extraction_stitch"
     assert hes_def.default_priority == Priority.BULK
+    assert len(hes_def.nodes) == 18
+    node_keys = [node.node_key for node in hes_def.nodes]
+    assert node_keys == [
+        "request_received",
+        "slice_date_range",
+        "fanout_hes_partitions",
+        "dispatch_itron_hes",
+        "dispatch_landis_gyr_hes",
+        "dispatch_siemens_hes",
+        "itron_batch_received",
+        "decompress_and_parse_itron",
+        "normalize_itron_intervals",
+        "publish_itron_to_kafka",
+        "landis_batch_received",
+        "decompress_and_parse_landis",
+        "normalize_landis_intervals",
+        "publish_landis_to_kafka",
+        "siemens_batch_received",
+        "decompress_and_parse_siemens",
+        "normalize_siemens_intervals",
+        "publish_siemens_to_kafka",
+    ]
 
     hes_stitch = build_hes_historical_extraction_stitch()
     assert hes_stitch.workflow_id == "energy.hes_historical_extraction_stitch"
+    assert hes_stitch.name == "HES Historical Interval Extraction"
     assert hes_stitch.canonical_event_type == "command.historical_extract_requests"
     assert hes_stitch.idempotency_key_field == "source_inbound_record_id"
     assert hes_stitch.is_active is False
 
     energy_stitches = build_energy_stitches()
-    assert len(energy_stitches) == 2
+    assert len(energy_stitches) == 6
 
 
 def test_tms_domain_stitch_definitions_with_instances() -> None:
@@ -91,6 +119,7 @@ def test_tms_domain_stitch_definitions_with_instances() -> None:
     tms_stitch = build_load_tender_erp_sync_stitch()
     assert isinstance(tms_stitch, Stitch)
     assert tms_stitch.workflow_id == "tms.load_tender_erp_sync_stitch"
+    assert tms_stitch.name == "TMS Load Tender ERP Sync"
     assert tms_stitch.canonical_event_type == TmsEntityType.TMS_LOAD.value
     assert tms_stitch.is_trigger is True
     assert tms_stitch.idempotency_key_field == "event_id"
@@ -104,21 +133,33 @@ def test_tms_domain_stitch_definitions_with_instances() -> None:
 def test_central_stitch_registry_loader_aggregates_bounded_contexts() -> None:
     """Verify the IoC registry loader aggregates all domains and registers them properly."""
     all_definitions = build_default_stitch_definitions()
-    assert len(all_definitions) == 4
+    assert len(all_definitions) == 10
     all_ids = {d.workflow_id for d in all_definitions}
     assert all_ids == {
+        "workflow.shopify_orders_to_sap",
+        "workflow.sync_alpha_to_sink",
         "energy.outage_restoration_stitch",
         "energy.meter_reading_erp_sync_stitch",
         "energy.hes_historical_extraction_stitch",
+        "energy.hes_historical_dispatch_stitch",
+        "energy.itron_batch_ingestion_stitch",
+        "energy.landis_batch_ingestion_stitch",
+        "energy.siemens_batch_ingestion_stitch",
         "tms.load_tender_erp_sync_stitch",
     }
 
     all_stitches = build_default_stitches()
-    assert len(all_stitches) == 3
+    assert len(all_stitches) == 9
     stitch_workflows = {s.workflow_id for s in all_stitches}
     assert stitch_workflows == {
+        "workflow.shopify_orders_to_sap",
+        "workflow.sync_alpha_to_sink",
         "energy.meter_reading_erp_sync_stitch",
         "energy.hes_historical_extraction_stitch",
+        "energy.hes_historical_dispatch_stitch",
+        "energy.itron_batch_ingestion_stitch",
+        "energy.landis_batch_ingestion_stitch",
+        "energy.siemens_batch_ingestion_stitch",
         "tms.load_tender_erp_sync_stitch",
     }
 
@@ -130,7 +171,7 @@ def test_central_stitch_registry_loader_aggregates_bounded_contexts() -> None:
     stitch_registry = InMemoryStitchCatalogRegistry()
     register_default_stitches(stitch_registry)
     all_registered = stitch_registry.list_stitches(tenant_id="tenant_alpha")
-    assert len(all_registered) == 3
+    assert len(all_registered) == 9
     for stitch in all_stitches:
         assert any(s.workflow_id == stitch.workflow_id for s in all_registered)
         # Built-in template stitches are inactive by default to avoid unsolicited trigger runs

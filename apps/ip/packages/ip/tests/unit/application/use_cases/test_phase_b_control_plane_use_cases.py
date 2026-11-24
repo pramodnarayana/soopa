@@ -850,12 +850,14 @@ class _InMemoryStitchShardGateway(StitchShardGatewayPort):
         tenant_id: str,
         workflow_id: str | None = None,
         status: RunStatus | None = None,
+        trace_id: str | None = None,
         limit: int = 50,
     ) -> Result[tuple[WorkflowRun, ...], IpError]:
         runs = await self._wf_uow.runs.list_recent(
             tenant_id,
             workflow_id=workflow_id,
             status=status,
+            trace_id=trace_id,
             limit=limit,
         )
         return Result.ok(tuple(runs))

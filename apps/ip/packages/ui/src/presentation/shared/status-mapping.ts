@@ -63,18 +63,18 @@ const STAGE_POSTURE_TONE_MAP: Readonly<Record<StagePostureValue, StatusToneValue
 };
 
 const LAYER_SHORT_LABELS: Readonly<Record<string, string>> = {
-  [PipelineLayer.L1_INGEST]: 'L1 Wire Ingest',
-  [PipelineLayer.L2_REPLICA]: 'L2 Replica',
-  [PipelineLayer.L3_NORMALIZE]: 'L3 Canonical + GEM',
-  [PipelineLayer.L4_STITCH]: 'L4 Stitch DAG',
-  [PipelineLayer.L5_DELIVER]: 'L5 Outbound Wire',
+  [PipelineLayer.L1_INGEST]: 'Inbound',
+  [PipelineLayer.L2_REPLICA]: 'Replica',
+  [PipelineLayer.L3_NORMALIZE]: 'Record',
+  [PipelineLayer.L4_STITCH]: 'Stitch / Workflow',
+  [PipelineLayer.L5_DELIVER]: 'Outbound',
 };
 
 const REPLAY_STAGE_LABELS: Readonly<Record<ReplayStageValue, string>> = {
-  [ReplayStage.RETRY_INGEST]: 'L1 · Re-Ingest Raw Wire',
-  [ReplayStage.RETRY_NORMALIZE]: 'L2→L3 · Re-Run Transformation',
-  [ReplayStage.RETRY_STITCH]: 'L3→L4 · Re-Trigger Stitch DAG',
-  [ReplayStage.RETRY_DELIVER]: 'L5 · Retry Destination Delivery',
+  [ReplayStage.RETRY_INGEST]: 'Re-run Inbound',
+  [ReplayStage.RETRY_NORMALIZE]: 'Re-run Processing',
+  [ReplayStage.RETRY_STITCH]: 'Re-trigger Stitch / Workflow',
+  [ReplayStage.RETRY_DELIVER]: 'Retry Outbound Delivery',
 };
 
 export function mapTraceStatusTone(status: string): StatusToneValue {

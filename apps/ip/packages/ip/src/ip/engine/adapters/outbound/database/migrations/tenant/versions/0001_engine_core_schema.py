@@ -38,6 +38,26 @@ _ENGINE_TABLES: tuple[str, ...] = (
     "ip_replay_ledger",
 )
 
+_ORCHESTRATION_TABLES_RLS: tuple[str, ...] = (
+    "workflow_runs",
+    "workflow_step_runs",
+    "workflow_active_leases",
+    "workflow_step_attempts",
+    "workflow_payloads",
+    "workflow_idempotency_keys",
+    "workflow_matches",
+    "workflow_match_conditions",
+    "workflow_queue_items",
+    "workflow_paused_queue_items",
+    "workflow_concurrency_slots",
+    "workflow_rate_limit_buckets",
+)
+
+_ORCHESTRATION_TABLES: tuple[str, ...] = (
+    *_ORCHESTRATION_TABLES_RLS,
+    "workflow_queue_cursors",
+)
+
 
 def upgrade() -> None:
     """Upgrade Engine Core Data Plane tables in tenant shard."""
@@ -652,12 +672,306 @@ def upgrade() -> None:
         ["tenant_id", "status", "created_at"],
     )
 
+    # 17. Durable Workflow: workflow_runs
+    op.create_table(
+        "workflow_runs",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("workflow_id", sa.String(length=128), nullable=False),
+        sa.Column("workflow_version", sa.Integer(), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column("priority", sa.SmallInteger(), server_default=sa.text("2"), nullable=False),
+        sa.Column("concurrency_key", sa.String(length=255), nullable=True),
+        sa.Column("idempotency_key", sa.String(length=255), nullable=False),
+        sa.Column("parent_run_id", sa.String(length=64), nullable=True),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("parent_trace_id", sa.String(length=64), nullable=True),
+        sa.Column("original_trace_id", sa.String(length=64), nullable=True),
+        sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("failure_code", sa.String(length=64), nullable=True),
+        sa.Column("failure_detail", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("id", "created_at"),
+    )
+    op.create_index(
+        "idx_wf_runs_active_conc",
+        "workflow_runs",
+        ["tenant_id", "workflow_id", "concurrency_key"],
+        postgresql_where=sa.text("status IN ('QUEUED', 'RUNNING', 'WAITING')"),
+    )
+    op.create_index("idx_wf_runs_trace", "workflow_runs", ["tenant_id", "trace_id"])
+    op.create_index("idx_wf_runs_corr", "workflow_runs", ["tenant_id", "correlation_id"])
+    op.create_index("idx_wf_runs_parent", "workflow_runs", ["tenant_id", "parent_run_id"])
+    op.create_index("idx_wf_runs_orig_trace", "workflow_runs", ["tenant_id", "original_trace_id"])
+
+    # 18. Durable Workflow: workflow_step_runs
+    op.create_table(
+        "workflow_step_runs",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("run_id", sa.String(length=64), nullable=False),
+        sa.Column("run_created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("node_key", sa.String(length=128), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column("retry_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("app_retry_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("internal_retry_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("iteration_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("failure_code", sa.String(length=64), nullable=True),
+        sa.Column("failure_detail", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("id", "created_at"),
+        sa.UniqueConstraint("run_id", "node_key", "created_at", name="uq_wf_step_run_node"),
+    )
+    op.create_index("idx_wf_step_runs_run", "workflow_step_runs", ["tenant_id", "run_id"])
+
+    # 19. Durable Workflow: workflow_active_leases
+    op.create_table(
+        "workflow_active_leases",
+        sa.Column("step_run_id", sa.String(length=64), nullable=False),
+        sa.Column("step_created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("retry_count", sa.Integer(), nullable=False),
+        sa.Column("run_id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("worker_id", sa.String(length=128), nullable=False),
+        sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("timeout_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("evicted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("step_run_id", "step_created_at", "retry_count"),
+    )
+    op.create_index("idx_wf_active_leases_expiry", "workflow_active_leases", ["lease_expires_at"])
+    op.create_index("idx_wf_active_leases_timeout", "workflow_active_leases", ["timeout_at"])
+
+    # 20. Durable Workflow: workflow_step_attempts
+    op.create_table(
+        "workflow_step_attempts",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("step_run_id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("retry_count", sa.Integer(), nullable=False),
+        sa.Column("app_retry_count", sa.Integer(), nullable=False),
+        sa.Column("internal_retry_count", sa.Integer(), nullable=False),
+        sa.Column("worker_id", sa.String(length=128), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column("is_app_error", sa.Boolean(), nullable=True),
+        sa.Column("outcome_code", sa.String(length=64), nullable=True),
+        sa.Column("outcome_detail", sa.Text(), nullable=True),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("id", "started_at"),
+    )
+    op.create_index("idx_wf_step_attempts_step", "workflow_step_attempts", ["tenant_id", "step_run_id"])
+
+    # 21. Durable Workflow: workflow_payloads
+    op.create_table(
+        "workflow_payloads",
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("owner_id", sa.String(length=64), nullable=False),
+        sa.Column("owner_created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("payload_type", sa.String(length=32), nullable=False),
+        sa.Column("location", sa.String(length=16), nullable=False),
+        sa.Column("inline_content", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("external_ref", sa.String(length=512), nullable=True),
+        sa.Column("payload_reference_id", sa.String(length=64), nullable=True),
+        sa.Column("payload_reference_created_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("size_bytes", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("tenant_id", "owner_id", "owner_created_at", "payload_type"),
+    )
+
+    # 22. Durable Workflow: workflow_idempotency_keys
+    op.create_table(
+        "workflow_idempotency_keys",
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("workflow_id", sa.String(length=128), nullable=False),
+        sa.Column("key", sa.String(length=255), nullable=False),
+        sa.Column("claimed_by_run_id", sa.String(length=64), nullable=False),
+        sa.Column("eviction_policy", sa.String(length=32), server_default="TTL", nullable=False),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("tenant_id", "workflow_id", "key"),
+    )
+    op.create_index("idx_wf_idempotency_expires", "workflow_idempotency_keys", ["expires_at"])
+
+    # 23. Durable Workflow: workflow_matches
+    op.create_table(
+        "workflow_matches",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("run_id", sa.String(length=64), nullable=False),
+        sa.Column("step_run_id", sa.String(length=64), nullable=False),
+        sa.Column("step_created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("node_key", sa.String(length=128), nullable=False),
+        sa.Column("kind", sa.String(length=32), nullable=False),
+        sa.Column(
+            "existing_data",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column("is_satisfied", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("resolved_action", sa.String(length=32), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("idx_wf_matches_run", "workflow_matches", ["tenant_id", "run_id"])
+
+    # 24. Durable Workflow: workflow_match_conditions
+    op.create_table(
+        "workflow_match_conditions",
+        sa.Column("match_id", sa.String(length=64), nullable=False),
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("or_group_id", sa.String(length=64), nullable=False),
+        sa.Column("condition_kind", sa.String(length=32), nullable=False),
+        sa.Column("event_key", sa.String(length=128), nullable=False),
+        sa.Column("event_resource_hint", sa.String(length=255), nullable=True),
+        sa.Column("predicate_id", sa.String(length=128), nullable=True),
+        sa.Column("readable_data_key", sa.String(length=128), nullable=False),
+        sa.Column("action", sa.String(length=32), nullable=False),
+        sa.Column("is_satisfied", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column("matched_data", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("timeout_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("match_id", "id"),
+    )
+    op.create_index(
+        "idx_wf_match_cond_event",
+        "workflow_match_conditions",
+        ["tenant_id", "condition_kind", "event_key", "event_resource_hint"],
+        postgresql_where=sa.text("NOT is_satisfied"),
+    )
+    op.create_index(
+        "idx_wf_match_cond_timeout",
+        "workflow_match_conditions",
+        ["timeout_at"],
+        postgresql_where=sa.text("NOT is_satisfied AND timeout_at IS NOT NULL"),
+    )
+
+    # 25. Durable Workflow: workflow_queue_items
+    op.create_table(
+        "workflow_queue_items",
+        sa.Column("id", sa.BigInteger(), sa.Identity(start=1, cycle=False), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("run_id", sa.String(length=64), nullable=False),
+        sa.Column("step_run_id", sa.String(length=64), nullable=False),
+        sa.Column("step_created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("retry_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("item_kind", sa.String(length=32), nullable=False),
+        sa.Column("queue_name", sa.String(length=64), nullable=False),
+        sa.Column("priority", sa.SmallInteger(), server_default=sa.text("2"), nullable=False),
+        sa.Column("available_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("enqueued_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("concurrency_key", sa.String(length=255), nullable=True),
+        sa.Column("rate_limit_key", sa.String(length=255), nullable=True),
+        sa.Column("rate_limit_units", sa.Integer(), server_default=sa.text("1"), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "idx_wf_queue_poll",
+        "workflow_queue_items",
+        ["queue_name", "available_at", "tenant_id", "priority", "id"],
+    )
+
+    # 26. Durable Workflow: workflow_paused_queue_items
+    op.create_table(
+        "workflow_paused_queue_items",
+        sa.Column("id", sa.BigInteger(), sa.Identity(start=1, cycle=False), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("rate_limit_key", sa.String(length=255), nullable=False),
+        sa.Column("run_id", sa.String(length=64), nullable=False),
+        sa.Column("step_run_id", sa.String(length=64), nullable=False),
+        sa.Column("step_created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("retry_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("queue_name", sa.String(length=64), nullable=False),
+        sa.Column("priority", sa.SmallInteger(), server_default=sa.text("2"), nullable=False),
+        sa.Column("requeue_after", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("concurrency_key", sa.String(length=255), nullable=True),
+        sa.Column("rate_limit_units", sa.Integer(), server_default=sa.text("1"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "idx_wf_paused_queue_unpause",
+        "workflow_paused_queue_items",
+        ["requeue_after", "tenant_id", "rate_limit_key"],
+    )
+
+    # 27. Durable Workflow: workflow_queue_cursors
+    op.create_table(
+        "workflow_queue_cursors",
+        sa.Column("queue_name", sa.String(length=64), nullable=False),
+        sa.Column("last_serviced_tenant_id", sa.String(length=128), server_default="", nullable=False),
+        sa.Column("min_unprocessed_id", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("queue_name"),
+    )
+
+    # 28. Durable Workflow: workflow_concurrency_slots
+    op.create_table(
+        "workflow_concurrency_slots",
+        sa.Column("sort_id", sa.BigInteger(), sa.Identity(start=1, cycle=False), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("strategy_id", sa.String(length=64), nullable=False),
+        sa.Column("concurrency_key", sa.String(length=255), nullable=False),
+        sa.Column("run_id", sa.String(length=64), nullable=False),
+        sa.Column("step_run_id", sa.String(length=64), nullable=False),
+        sa.Column("step_created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("retry_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("priority", sa.SmallInteger(), server_default=sa.text("2"), nullable=False),
+        sa.Column("is_filled", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column(
+            "next_strategy_ids",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'[]'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column("queue_name", sa.String(length=64), server_default="default", nullable=False),
+        sa.Column("rate_limit_key", sa.String(length=255), nullable=True),
+        sa.Column("rate_limit_units", sa.Integer(), server_default=sa.text("1"), nullable=False),
+        sa.Column("acquired_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint(
+            "sort_id",
+            "tenant_id",
+            "strategy_id",
+            "step_run_id",
+            "step_created_at",
+            "retry_count",
+        ),
+    )
+    op.create_index(
+        "idx_wf_conc_slots_eval",
+        "workflow_concurrency_slots",
+        ["tenant_id", "strategy_id", "concurrency_key", "is_filled", "sort_id"],
+    )
+
+    # 29. Durable Workflow: workflow_rate_limit_buckets
+    op.create_table(
+        "workflow_rate_limit_buckets",
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("rate_limit_key", sa.String(length=255), nullable=False),
+        sa.Column("capacity", sa.Integer(), nullable=False),
+        sa.Column("refill_per_second", sa.Float(), nullable=False),
+        sa.Column("tokens", sa.Float(), nullable=False),
+        sa.Column("refilled_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("paused_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("paused_until", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("tenant_id", "rate_limit_key"),
+    )
+
     # Enable Row-Level Security (RLS) across all tenant-scoped Engine Data Plane tables
-    for table_name in _ENGINE_TABLES:
+    for table_name in (*_ENGINE_TABLES, *_ORCHESTRATION_TABLES_RLS):
         apply_tenant_isolation(op, table_name)
 
 
 def downgrade() -> None:
     """Downgrade Engine Core Data Plane tables in tenant shard."""
+    for table_name in reversed(_ORCHESTRATION_TABLES):
+        op.drop_table(table_name, if_exists=True)
     for table_name in reversed(_ENGINE_TABLES):
         op.drop_table(table_name, if_exists=True)

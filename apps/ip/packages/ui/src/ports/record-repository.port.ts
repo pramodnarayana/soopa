@@ -3,6 +3,7 @@ import type {
   GlobalEntityMapEntry,
   InboundRecord,
   NormalizedRecord,
+  OutboundRecord,
   ReplicaRecord,
 } from '../domain/trace';
 
@@ -35,6 +36,16 @@ export interface ListInboundRecordsFilter {
   readonly hydratePayloads?: boolean;
 }
 
+export interface ListOutboundRecordsFilter {
+  readonly connectionId?: string;
+  readonly appId?: string;
+  readonly streamName?: string;
+  readonly status?: string;
+  readonly limit?: number;
+  readonly offset?: number;
+  readonly hydratePayloads?: boolean;
+}
+
 export interface RecordRepositoryPort {
   listNormalizedRecords(
     tenantId: string,
@@ -59,4 +70,10 @@ export interface RecordRepositoryPort {
     filter?: ListInboundRecordsFilter,
     signal?: AbortSignal,
   ): Promise<Result<readonly InboundRecord[], ApiProblem>>;
+
+  listOutboundRecords(
+    tenantId: string,
+    filter?: ListOutboundRecordsFilter,
+    signal?: AbortSignal,
+  ): Promise<Result<readonly OutboundRecord[], ApiProblem>>;
 }

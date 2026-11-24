@@ -70,6 +70,7 @@ import type {
   IpTraceLineageItem,
   ListRecentTracesFilter,
   NormalizedRecord,
+  OutboundRecord,
   ReplayTransactionResult,
   ReplicaRecord,
 } from '../domain/trace';
@@ -95,6 +96,7 @@ import type {
   ListGemRecordsFilter,
   ListInboundRecordsFilter,
   ListNormalizedRecordsFilter,
+  ListOutboundRecordsFilter,
   ListReplicaRecordsFilter,
   RecordRepositoryPort,
 } from '../ports/record-repository.port';
@@ -1168,7 +1170,8 @@ export class InMemoryStitchRepository implements StitchRepositoryPort {
       (r) =>
         r.tenantId === tenantId &&
         (!filter?.workflowId || r.workflowId === filter.workflowId) &&
-        (!filter?.status || r.status === filter.status),
+        (!filter?.status || r.status === filter.status) &&
+        (!filter?.traceId || r.traceId === filter.traceId),
     );
     return ok(matched.slice(0, limit));
   }
@@ -1302,6 +1305,7 @@ export class InMemoryRecordRepository implements RecordRepositoryPort {
   public gemRecords: GlobalEntityMapEntry[] = [];
   public replicaRecords: ReplicaRecord[] = [];
   public inboundRecords: InboundRecord[] = [];
+  public outboundRecords: OutboundRecord[] = [];
 
   public async listNormalizedRecords(
     tenantId: string,
@@ -1361,6 +1365,32 @@ export class InMemoryRecordRepository implements RecordRepositoryPort {
     }
     if (filter?.streamName) {
       res = res.filter((r) => r.streamName === filter.streamName);
+    }
+    const offset = filter?.offset ?? 0;
+    const limit = filter?.limit ?? 50;
+    const page = res.slice(offset, offset + limit);
+    if (!filter?.hydratePayloads) {
+      return ok(page.map((r) => (r.requestS3Key ? { ...r, requestBody: null } : r)));
+    }
+    return ok(page);
+  }
+
+  public async listOutboundRecords(
+    tenantId: string,
+    filter?: ListOutboundRecordsFilter,
+  ): Promise<Result<readonly OutboundRecord[], ApiProblem>> {
+    let res = this.outboundRecords.filter((r) => r.tenantId === tenantId);
+    if (filter?.connectionId) {
+      res = res.filter((r) => r.connectionId === filter.connectionId);
+    }
+    if (filter?.appId) {
+      res = res.filter((r) => r.appId === filter.appId);
+    }
+    if (filter?.streamName) {
+      res = res.filter((r) => r.streamName === filter.streamName);
+    }
+    if (filter?.status) {
+      res = res.filter((r) => r.status === filter.status);
     }
     const offset = filter?.offset ?? 0;
     const limit = filter?.limit ?? 50;
@@ -1561,12 +1591,24 @@ export class InMemoryNavigationFake implements IpNavigationPort {
     this.visited.push('/tenant/ip/stitches');
   };
 
-  public readonly toStitchDefinition = (workflowId: string): void => {
-    this.visited.push(`/tenant/ip/stitches/definitions/${workflowId}`);
+  public readonly toStitchDefinition = (
+    workflowId: string,
+    search?: { traceId?: string; runId?: string },
+  ): void => {
+    const query = search?.traceId
+      ? `?traceId=${search.traceId}`
+      : search?.runId
+        ? `?runId=${search.runId}`
+        : '';
+    this.visited.push(`/tenant/ip/stitches/definitions/${workflowId}${query}`);
   };
 
   public readonly toStitchRun = (runId: string): void => {
     this.visited.push(`/tenant/ip/stitches/runs/${runId}`);
+  };
+
+  public readonly toTraceStitches = (traceId: string): void => {
+    this.visited.push(`/tenant/ip/traces/${traceId}/stitches`);
   };
 
   public readonly toIntervals = (connectionId?: string): void => {

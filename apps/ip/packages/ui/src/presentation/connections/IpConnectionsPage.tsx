@@ -188,17 +188,17 @@ export function IpConnectionsPage({
 
   return (
     <div className="space-y-6">
-      <IpPageHeader title="Apps" />
+      <IpPageHeader title="Connections" />
 
       <Tabs value={mainTab} onValueChange={setMainTab}>
         <TabsList>
           <TabsTrigger value={MAIN_TAB_DIRECTORY} className="gap-1.5">
             <LayoutGrid className="h-4 w-4" />
-            <span>All Apps ({apps.length})</span>
+            <span>Catalog ({apps.length})</span>
           </TabsTrigger>
           <TabsTrigger value={MAIN_TAB_ACTIVE} className="gap-1.5">
             <Cable className="h-4 w-4" />
-            <span>Active Apps ({connections.length})</span>
+            <span>Active Connections ({connections.length})</span>
           </TabsTrigger>
         </TabsList>
       </Tabs>

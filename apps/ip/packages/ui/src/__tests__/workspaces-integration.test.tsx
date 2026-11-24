@@ -530,7 +530,7 @@ describe('IP Presentation Workspaces Narrow Integration', () => {
       />,
       qc,
     );
-    expect(intervalsHtml).toContain('High-Frequency Interval Streams');
+    expect(intervalsHtml).toContain('Interval Streams');
     expect(intervalsHtml).toContain('ZERO-LOSS BALANCED');
     expect(intervalsHtml).toContain(SEED_FEEDER_ID);
     expect(intervalsHtml).toContain(SEED_DEVICE_ID);

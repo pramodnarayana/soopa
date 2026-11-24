@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "structlog>=24.4.0",
     "pydantic>=2.10.0",
+    "python-dotenv>=1.0.0",
     "identity_worker",
     "identity_jobs_worker",
     "notification_worker",

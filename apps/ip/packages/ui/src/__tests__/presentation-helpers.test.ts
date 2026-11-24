@@ -395,11 +395,9 @@ describe('IP Presentation Helpers: Semantic Status Mappers', () => {
   });
 
   it('formats byte sizes with relative timestamps', () => {
-    expect(formatLayerLabel(PipelineLayer.L3_NORMALIZE)).toBe('L3 Canonical + GEM');
+    expect(formatLayerLabel(PipelineLayer.L3_NORMALIZE)).toBe('Record');
     expect(formatLayerLabel('CUSTOM_LAYER')).toBe('CUSTOM_LAYER');
-    expect(formatReplayStageLabel(ReplayStage.RETRY_DELIVER)).toBe(
-      'L5 · Retry Destination Delivery',
-    );
+    expect(formatReplayStageLabel(ReplayStage.RETRY_DELIVER)).toBe('Retry Outbound Delivery');
     expect(formatRelativeTimestamp(null)).toBe('—');
     expect(formatRelativeTimestamp('not-a-date')).toBe('not-a-date');
     expect(formatRelativeTimestamp('2026-10-29T08:00:00Z')).toBeTruthy();

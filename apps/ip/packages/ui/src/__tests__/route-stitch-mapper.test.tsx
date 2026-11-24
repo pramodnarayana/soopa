@@ -151,7 +151,7 @@ describe('Stitch Field Mapper Page', () => {
     expect(html).not.toContain('Live Preview');
   });
 
-  it('renders Normalization (L3) column with Stitch button in ConnectionEntitiesSyncTab', () => {
+  it('renders Normalization column with Stitch button in ConnectionEntitiesSyncTab', () => {
     const harness = createInMemoryIpWorkspaceSeed();
     const qc = createHydratedQueryClient();
 
@@ -175,7 +175,7 @@ describe('Stitch Field Mapper Page', () => {
       </QueryClientProvider>,
     );
 
-    expect(html).toContain('Normalization (L3)');
+    expect(html).toContain('Normalization');
     expect(html).toContain('Stitch');
   });
 

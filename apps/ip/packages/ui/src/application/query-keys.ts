@@ -11,6 +11,7 @@ import type {
   ListGemRecordsFilter,
   ListInboundRecordsFilter,
   ListNormalizedRecordsFilter,
+  ListOutboundRecordsFilter,
   ListReplicaRecordsFilter,
 } from '../ports/record-repository.port';
 
@@ -93,6 +94,7 @@ export const ipQueryKeys = {
         'runs',
         filter?.workflowId ?? 'ALL',
         filter?.status ?? 'ALL',
+        filter?.traceId ?? 'ALL',
         filter?.limit ?? 50,
       ] as const,
     run: (tenantId: string, runId: string) =>
@@ -179,6 +181,21 @@ export const ipQueryKeys = {
         'inbound',
         filter?.connectionId ?? '__ALL__',
         filter?.streamName ?? '__ALL__',
+        filter?.hydratePayloads ?? false,
+        filter?.limit ?? 50,
+        filter?.offset ?? 0,
+      ] as const,
+    outbound: (tenantId: string, filter?: ListOutboundRecordsFilter) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'records',
+        'outbound',
+        filter?.connectionId ?? '__ALL__',
+        filter?.appId ?? '__ALL__',
+        filter?.streamName ?? '__ALL__',
+        filter?.status ?? '__ALL__',
         filter?.hydratePayloads ?? false,
         filter?.limit ?? 50,
         filter?.offset ?? 0,

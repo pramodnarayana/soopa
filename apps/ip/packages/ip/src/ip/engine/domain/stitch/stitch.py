@@ -41,6 +41,8 @@ class Stitch(AggregateRoot):
     is_trigger: bool = True
     idempotency_key_field: str = ""
     concurrency_key_field: str = ""
+    linked_stitch_id: str | None = None
+    correlation_key_field: str = ""
 
     def __post_init__(self) -> None:
         if not self.target_workflow_id and self.workflow_id:

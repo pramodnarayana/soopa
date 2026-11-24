@@ -135,6 +135,7 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
         *,
         workflow_id: str | None = None,
         status: RunStatus | None = None,
+        trace_id: str | None = None,
         limit: int = 50,
     ) -> Sequence[WorkflowRun]:
         run_stmt = select(WorkflowRunModel).where(WorkflowRunModel.tenant_id == tenant_id)
@@ -142,6 +143,8 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
             run_stmt = run_stmt.where(WorkflowRunModel.workflow_id == workflow_id)
         if status is not None:
             run_stmt = run_stmt.where(WorkflowRunModel.status == status.value)
+        if trace_id is not None:
+            run_stmt = run_stmt.where(WorkflowRunModel.trace_id == trace_id)
         run_stmt = run_stmt.order_by(WorkflowRunModel.created_at.desc()).limit(limit)
 
         run_records = (await self._session.execute(run_stmt)).scalars().all()

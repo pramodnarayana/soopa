@@ -96,8 +96,8 @@ export function buildCommandPaletteWorkspaceItems(
     },
     {
       id: CommandPaletteWorkspaceId.TRACES,
-      value: 'workspace support traces timeline replay',
-      label: 'Support Timeline & 5-Layer Traces',
+      value: 'workspace traces timeline replay',
+      label: 'Traces',
       execute: () => navigation.toTraces(),
     },
     {

@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
   cn,
@@ -67,10 +66,7 @@ export function DailyCompletenessRibbonPanel({
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <div>
-          <CardTitle>96-Slot Daily Completeness Ribbon ({serviceDate})</CardTitle>
-          <CardDescription>
-            Click any feeder tile to filter the Time-of-Use (TOU) settlement rollups table below.
-          </CardDescription>
+          <CardTitle>96-Slot Completeness ({serviceDate})</CardTitle>
         </div>
         <div className="flex items-center gap-2">
           {selectedFeederId ? (

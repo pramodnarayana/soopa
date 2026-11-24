@@ -52,7 +52,7 @@ def build_meter_reading_erp_sync_stitch() -> Stitch:
         tenant_id="*",
         canonical_event_type=EnergyEntityType.MDM_METER_READING.value,
         target_workflow_id="energy.meter_reading_erp_sync_stitch",
-        name="Default Energy Meter Reading ERP Sync",
+        name="AMI Energy Meter Reading ERP Sync",
         description="Synchronizes normalized AMI interval meter readings to downstream utility ERP/CIS.",
         idempotency_key_field="event_id",
         concurrency_key_field="meter_serial_number",

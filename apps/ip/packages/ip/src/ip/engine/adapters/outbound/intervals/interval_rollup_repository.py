@@ -149,6 +149,157 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
         self._mv_completeness: dict[
             tuple[str, str, str, date, str], IntervalWindowCompleteness
         ] = {}
+        self.seed_default_intervals()
+
+    def seed_default_intervals(self, tenant_ids: list[str] | None = None) -> None:
+        """Seeds 96-slot interval readings and Materialized Views for the 3 Gold-Standard Invariants."""
+        target_tenants = (
+            list(tenant_ids)
+            if tenant_ids
+            else [
+                "iam_ten_752f7997d2ecf38fd8dfe2dfce9043e5",
+                "ten_9f8e7d6c5b4a3f2e1d0c9b8a",
+            ]
+        )
+        service_dates = [
+            datetime.now(UTC).date(),
+            date(2026, 10, 29),
+        ]
+        stream_name = "interval_readings"
+        affected_hourly_keys: set[tuple[str, str, datetime, TariffBucket]] = set()
+        affected_tou_keys: set[tuple[str, str, date]] = set()
+        affected_comp_keys: set[tuple[str, str, str, date, str]] = set()
+
+        for t_id in target_tenants:
+            batch_id_01 = f"ip_bch_20261123_001_{t_id[:8]}"
+            batch_id_02 = f"ip_bch_20261123_002_{t_id[:8]}"
+            conn_id = (
+                "conn_oracle_mdm_01"
+                if t_id == "iam_ten_752f7997d2ecf38fd8dfe2dfce9043e5"
+                else f"conn_oracle_mdm_01_{t_id[:8]}"
+            )
+            self._stream_by_batch[(t_id, batch_id_01)] = stream_name
+            self._stream_by_batch[(t_id, batch_id_02)] = stream_name
+            self._stream_by_batch[(t_id, f"ip_bch_99887766554433221100_{t_id[:8]}")] = stream_name
+
+            for s_date in service_dates:
+                # 1. Device DEV-ALPHA-9001 (feeder FDR-ALPHA-01) with intentional missing/quarantined spike at slot 57 (14:15)
+                for slot in range(96):
+                    interval_end = datetime(
+                        s_date.year, s_date.month, s_date.day, 0, 0, tzinfo=UTC
+                    ) + timedelta(minutes=15 * (slot + 1))
+                    hour = (interval_end - timedelta(minutes=1)).hour
+                    if 14 <= hour < 20:
+                        tariff = TariffBucket.PEAK
+                    elif 7 <= hour < 14 or 20 <= hour < 22:
+                        tariff = TariffBucket.SHOULDER
+                    else:
+                        tariff = TariffBucket.OFF_PEAK
+
+                    is_spike = slot == 57  # 14:15 UTC
+                    reading = IntervalReading(
+                        tenant_id=t_id,
+                        connection_id=conn_id,
+                        gem_device_id="gem_dev_9001",
+                        source_meter_id="DEV-ALPHA-9001",
+                        endpoint_location_id="LOC-ALPHA-01",
+                        feeder_id="FDR-ALPHA-01",
+                        substation_id="SUB-NORTH-01",
+                        tariff_bucket=tariff,
+                        quality_status=CimQualityStatus.QUARANTINED_SPIKE
+                        if is_spike
+                        else CimQualityStatus.VALID,
+                        interval_end_utc=interval_end,
+                        scaled_kwh_delivered=Decimal("85.0000")
+                        if is_spike
+                        else (
+                            Decimal("1.2500")
+                            if tariff == TariffBucket.OFF_PEAK
+                            else Decimal("3.4000")
+                        ),
+                        scaled_kwh_received=Decimal("0.0500"),
+                        reactive_kvarh=Decimal("0.1200"),
+                        voltage_v=238.2 if is_spike else 240.1,
+                        source_batch_id=batch_id_01,
+                        parquet_row_offset=slot,
+                        trace_id="trc_inv_99882_err",
+                        updated_at_utc=interval_end,
+                        quarantine_reason="Interval reading exceeds hardware threshold"
+                        if is_spike
+                        else None,
+                        delivery_receipt_id="SETTLE-RCPT-20261123-01",
+                    )
+                    tree_key = (t_id, reading.gem_device_id, reading.interval_end_utc)
+                    self._replacing_tree[tree_key] = reading
+
+                    period_start = reading.interval_end_utc - timedelta(milliseconds=1)
+                    h_start = period_start.replace(minute=0, second=0, microsecond=0)
+                    hourly_key = (t_id, reading.gem_device_id, h_start, reading.tariff_bucket)
+                    affected_hourly_keys.add(hourly_key)
+                    affected_tou_keys.add((t_id, reading.gem_device_id, s_date))
+                    affected_comp_keys.add(
+                        (t_id, reading.connection_id, stream_name, s_date, reading.feeder_id)
+                    )
+                    hourly_bucket = self._hourly_index.setdefault(hourly_key, {})
+                    hourly_bucket[reading.interval_end_utc] = reading
+
+                # 2. Device DEV-BETA-4002 (feeder FDR-BETA-02) - 100% valid
+                for slot in range(96):
+                    interval_end = datetime(
+                        s_date.year, s_date.month, s_date.day, 0, 0, tzinfo=UTC
+                    ) + timedelta(minutes=15 * (slot + 1))
+                    hour = (interval_end - timedelta(minutes=1)).hour
+                    if 14 <= hour < 20:
+                        tariff = TariffBucket.PEAK
+                    elif 7 <= hour < 14 or 20 <= hour < 22:
+                        tariff = TariffBucket.SHOULDER
+                    else:
+                        tariff = TariffBucket.OFF_PEAK
+
+                    reading = IntervalReading(
+                        tenant_id=t_id,
+                        connection_id=conn_id,
+                        gem_device_id="gem_dev_4002",
+                        source_meter_id="DEV-BETA-4002",
+                        endpoint_location_id="LOC-BETA-02",
+                        feeder_id="FDR-BETA-02",
+                        substation_id="SUB-SOUTH-02",
+                        tariff_bucket=tariff,
+                        quality_status=CimQualityStatus.VALID,
+                        interval_end_utc=interval_end,
+                        scaled_kwh_delivered=Decimal("1.1000")
+                        if tariff == TariffBucket.OFF_PEAK
+                        else Decimal("2.8000"),
+                        scaled_kwh_received=Decimal("0.0200"),
+                        reactive_kvarh=Decimal("0.0800"),
+                        voltage_v=240.3,
+                        source_batch_id=batch_id_02,
+                        parquet_row_offset=slot,
+                        trace_id="trc_inv_99881_ok",
+                        updated_at_utc=interval_end,
+                        delivery_receipt_id="SETTLE-RCPT-20261123-02",
+                    )
+                    tree_key = (t_id, reading.gem_device_id, reading.interval_end_utc)
+                    self._replacing_tree[tree_key] = reading
+
+                    period_start = reading.interval_end_utc - timedelta(milliseconds=1)
+                    h_start = period_start.replace(minute=0, second=0, microsecond=0)
+                    hourly_key = (t_id, reading.gem_device_id, h_start, reading.tariff_bucket)
+                    affected_hourly_keys.add(hourly_key)
+                    affected_tou_keys.add((t_id, reading.gem_device_id, s_date))
+                    affected_comp_keys.add(
+                        (t_id, reading.connection_id, stream_name, s_date, reading.feeder_id)
+                    )
+                    hourly_bucket = self._hourly_index.setdefault(hourly_key, {})
+                    hourly_bucket[reading.interval_end_utc] = reading
+
+            self._update_materialized_views_incrementally(
+                tenant_id=t_id,
+                stream_name=stream_name,
+                affected_hourly_keys=affected_hourly_keys,
+                affected_tou_keys=affected_tou_keys,
+                affected_comp_keys=affected_comp_keys,
+            )
 
     async def insert_columnar_batch(
         self,

@@ -20,6 +20,8 @@
     "AS2_*",
     "SFTP_*",
     "ENCRYPTION_*",
+    "SECURITY_*",
+    "DB_ENCRYPTION_KEY",
     "VAULT_*",
     "MASTER_KEY*",
     "OTEL_*"

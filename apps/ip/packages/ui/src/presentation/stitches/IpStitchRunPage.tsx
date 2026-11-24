@@ -14,7 +14,7 @@ import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
 import { formatRelativeTimestamp, mapStitchRunStatusTone } from '../shared/status-mapping';
-import { StitchDagCanvas } from './StitchDagCanvas';
+import { VisualStitchPipeline } from './VisualStitchPipeline';
 
 export interface IpStitchRunPageProps {
   readonly runId: string;
@@ -138,11 +138,12 @@ function StitchRunBody({
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         <div className="xl:col-span-8">
           {definition ? (
-            <StitchDagCanvas
-              nodes={definition.nodes}
+            <VisualStitchPipeline
+              definition={definition}
               stepRuns={run.steps}
               selectedNodeKey={effectiveNodeKey}
               onSelectNode={setSelectedNodeKey}
+              onResetSelection={() => setSelectedNodeKey(null)}
             />
           ) : (
             <Skeleton className="h-72 w-full rounded-2xl" />
@@ -171,9 +172,7 @@ export function IpStitchRunPage({ runId }: IpStitchRunPageProps) {
   return (
     <div className="space-y-6">
       <IpPageHeader
-        eyebrow="Durable Stitch Run Inspector"
         title={`Stitch Run ${runId}`}
-        subtitle="Live topological step state, concurrency slot isolation, and separated user vs. rate-limit retry budgets."
         actions={
           <div className="flex items-center gap-2">
             {run ? (

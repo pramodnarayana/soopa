@@ -14,9 +14,13 @@ from ip.engine.application.use_cases.records.list_records_use_cases import (
     ListInboundRecordsUseCase,
     ListNormalizedRecordsQuery,
     ListNormalizedRecordsUseCase,
+    ListOutboundRecordsQuery,
+    ListOutboundRecordsUseCase,
     ListReplicaRecordsQuery,
     ListReplicaRecordsUseCase,
 )
+from ip.engine.domain.dispatch.enums import OutboundDispatchStatus, OutboundFailureCategory
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
 from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
 from ip.engine.domain.replication.enums import IngestionMode
@@ -122,6 +126,36 @@ class FakeInboundRepo:
         return self._records
 
 
+class FakeOutboundRepo:
+    def __init__(self, records: Sequence[OutboundRecord]) -> None:
+        self._records = records
+        self.last_query: dict[str, str | int | bool | None] = {}
+
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        app_id: str | None = None,
+        stream_name: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        hydrate_payloads: bool = False,
+    ) -> Sequence[OutboundRecord]:
+        self.last_query = {
+            "tenant_id": tenant_id,
+            "connection_id": connection_id,
+            "app_id": app_id,
+            "stream_name": stream_name,
+            "status": status,
+            "limit": limit,
+            "offset": offset,
+            "hydrate_payloads": hydrate_payloads,
+        }
+        return self._records
+
+
 class FakeDataPlaneUoW:
     def __init__(
         self,
@@ -129,11 +163,13 @@ class FakeDataPlaneUoW:
         gem_entries: Sequence[GlobalEntityMap] | None = None,
         replica_records: Sequence[ReplicaRecord] | None = None,
         inbound_records: Sequence[InboundRecord] | None = None,
+        outbound_records: Sequence[OutboundRecord] | None = None,
     ) -> None:
         self.normalized_records = FakeNormalizedRepo(normalized_records or ())
         self.entity_maps = FakeGemRepo(gem_entries or ())
         self.replica_records = FakeReplicaRepo(replica_records or ())
         self.inbound_records = FakeInboundRepo(inbound_records or ())
+        self.outbound_records = FakeOutboundRepo(outbound_records or ())
 
     async def __aenter__(self) -> FakeDataPlaneUoW:
         return self
@@ -323,6 +359,58 @@ async def test_list_inbound_records_use_case_success() -> None:
         "stream_name": "records_alpha",
         "limit": 30,
         "offset": 4,
+        "hydrate_payloads": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_outbound_records_use_case_success() -> None:
+    outbound = OutboundRecord(
+        id="out_01",
+        tenant_id="ten_01",
+        trace_id="trc_01",
+        connection_id="conn_sap",
+        app_id="SAP_S4HANA",
+        stream_name="invoices",
+        target_url="https://sap.internal/api/invoices",
+        http_method="POST",
+        request_size_bytes=256,
+        request_sha256="sha256_dummy",
+        status=OutboundDispatchStatus.FAILED,
+        response_status_code=503,
+        error_message="503 Service Unavailable",
+        failure_category=OutboundFailureCategory.TRANSIENT.value,
+        retry_after_seconds=30,
+        sent_at=datetime.now(UTC),
+    )
+    uow = FakeDataPlaneUoW(outbound_records=[outbound])
+    provider = FakeUoWProvider(uow)
+    use_case = ListOutboundRecordsUseCase(uow_provider=provider)
+
+    res = await use_case.execute(
+        ListOutboundRecordsQuery(
+            tenant_id="ten_01",
+            connection_id="conn_sap",
+            app_id="SAP_S4HANA",
+            stream_name="invoices",
+            status="FAILED",
+            limit=25,
+            offset=0,
+            hydrate_payloads=True,
+        )
+    )
+    assert res.is_ok
+    records = res.unwrap()
+    assert len(records) == 1
+    assert records[0].id == "out_01"
+    assert uow.outbound_records.last_query == {
+        "tenant_id": "ten_01",
+        "connection_id": "conn_sap",
+        "app_id": "SAP_S4HANA",
+        "stream_name": "invoices",
+        "status": "FAILED",
+        "limit": 25,
+        "offset": 0,
         "hydrate_payloads": True,
     }
 

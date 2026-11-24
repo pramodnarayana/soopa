@@ -35,7 +35,7 @@ export function GemRosettaStrip({ mappings }: GemRosettaStripProps) {
 
           <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
 
-          <CopyableIdPill value={gem.canonicalId} prefixLabel="GEM Canonical" />
+          <CopyableIdPill value={gem.canonicalId} prefixLabel="Global Entity ID" />
 
           <ArrowRight aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
 

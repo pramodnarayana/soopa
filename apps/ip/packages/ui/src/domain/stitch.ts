@@ -9,6 +9,8 @@ export interface StitchNode {
   readonly effectPolicy: string;
   readonly waitEventKey: string | null;
   readonly queueName: string;
+  readonly boundary?: string | null;
+  readonly track?: number;
 }
 
 export interface StitchDefinition {
@@ -34,6 +36,7 @@ export interface Stitch {
   readonly concurrencyKeyField: string | null;
   readonly resourceHintField: string | null;
   readonly isActive: boolean;
+  readonly linkedStitchId?: string | null;
 }
 
 export interface StitchStepRun {
@@ -110,5 +113,35 @@ export interface TriggerStitchEventInput {
 export interface ListStitchRunsFilter {
   readonly workflowId?: string;
   readonly status?: string;
+  readonly traceId?: string;
   readonly limit?: number;
+}
+
+/**
+ * Deterministically detects whether a Stitch workflow is transactional
+ * (requiring cross-system entity reconciliation via Global Entity Map)
+ * or a pure time-series streaming pipeline (stream-through directly to Kafka).
+ *
+ * Invariant: GEM is displayed ONLY if the stitch is transactional,
+ * to show which source record is mapped to which destination record.
+ */
+export function isTransactionalStitch(
+  stitch?: Stitch | null,
+  definition?: StitchDefinition | null,
+): boolean {
+  if (!stitch && !definition) {
+    return false;
+  }
+
+  // 1. Explicit entity mapping specification attached (GEM crosswalk enabled)
+  if (stitch?.mappingSpecId) {
+    return true;
+  }
+
+  // 2. Contains any TRANSACTIONAL effect policy node (e.g. state mutation, ledger write)
+  if (definition?.nodes.some((n) => n.effectPolicy === 'TRANSACTIONAL')) {
+    return true;
+  }
+
+  return false;
 }

@@ -508,6 +508,270 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
                     USING (tenant_id = current_setting('platform.current_tenant_id', true));
                 """)
             )
+
+            # Durable Workflow Orchestration Engine (13 tables)
+            for stmt in (
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_runs (
+                    id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    workflow_id VARCHAR(128) NOT NULL,
+                    workflow_version INTEGER NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    priority SMALLINT NOT NULL DEFAULT 2,
+                    concurrency_key VARCHAR(255),
+                    idempotency_key VARCHAR(255) NOT NULL,
+                    parent_run_id VARCHAR(64),
+                    trace_id VARCHAR(64) NOT NULL,
+                    correlation_id VARCHAR(255),
+                    parent_trace_id VARCHAR(64),
+                    original_trace_id VARCHAR(64),
+                    replay_count INTEGER NOT NULL DEFAULT 0,
+                    failure_code VARCHAR(64),
+                    failure_detail TEXT,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    started_at TIMESTAMPTZ,
+                    finished_at TIMESTAMPTZ,
+                    PRIMARY KEY (id, created_at)
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_runs_active_conc ON public.workflow_runs (tenant_id, workflow_id, concurrency_key) WHERE status IN ('QUEUED', 'RUNNING', 'WAITING');",
+                "CREATE INDEX IF NOT EXISTS idx_wf_runs_trace ON public.workflow_runs (tenant_id, trace_id);",
+                "CREATE INDEX IF NOT EXISTS idx_wf_runs_corr ON public.workflow_runs (tenant_id, correlation_id);",
+                "CREATE INDEX IF NOT EXISTS idx_wf_runs_parent ON public.workflow_runs (tenant_id, parent_run_id);",
+                "CREATE INDEX IF NOT EXISTS idx_wf_runs_orig_trace ON public.workflow_runs (tenant_id, original_trace_id);",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_step_runs (
+                    id VARCHAR(64) NOT NULL,
+                    run_id VARCHAR(64) NOT NULL,
+                    run_created_at TIMESTAMPTZ NOT NULL,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    node_key VARCHAR(128) NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    app_retry_count INTEGER NOT NULL DEFAULT 0,
+                    internal_retry_count INTEGER NOT NULL DEFAULT 0,
+                    iteration_count INTEGER NOT NULL DEFAULT 0,
+                    failure_code VARCHAR(64),
+                    failure_detail TEXT,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    finished_at TIMESTAMPTZ,
+                    PRIMARY KEY (id, created_at),
+                    CONSTRAINT uq_wf_step_run_node UNIQUE (run_id, node_key, created_at)
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_step_runs_run ON public.workflow_step_runs (tenant_id, run_id);",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_active_leases (
+                    step_run_id VARCHAR(64) NOT NULL,
+                    step_created_at TIMESTAMPTZ NOT NULL,
+                    retry_count INTEGER NOT NULL,
+                    run_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    worker_id VARCHAR(128) NOT NULL,
+                    lease_expires_at TIMESTAMPTZ NOT NULL,
+                    timeout_at TIMESTAMPTZ NOT NULL,
+                    evicted_at TIMESTAMPTZ,
+                    PRIMARY KEY (step_run_id, step_created_at, retry_count)
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_active_leases_expiry ON public.workflow_active_leases (lease_expires_at);",
+                "CREATE INDEX IF NOT EXISTS idx_wf_active_leases_timeout ON public.workflow_active_leases (timeout_at);",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_step_attempts (
+                    id VARCHAR(64) NOT NULL,
+                    step_run_id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    retry_count INTEGER NOT NULL,
+                    app_retry_count INTEGER NOT NULL,
+                    internal_retry_count INTEGER NOT NULL,
+                    worker_id VARCHAR(128) NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    is_app_error BOOLEAN,
+                    outcome_code VARCHAR(64),
+                    outcome_detail TEXT,
+                    started_at TIMESTAMPTZ NOT NULL,
+                    finished_at TIMESTAMPTZ,
+                    PRIMARY KEY (id, started_at)
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_step_attempts_step ON public.workflow_step_attempts (tenant_id, step_run_id);",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_payloads (
+                    tenant_id VARCHAR(128) NOT NULL,
+                    owner_id VARCHAR(64) NOT NULL,
+                    owner_created_at TIMESTAMPTZ NOT NULL,
+                    payload_type VARCHAR(32) NOT NULL,
+                    location VARCHAR(16) NOT NULL,
+                    inline_content JSONB,
+                    external_ref VARCHAR(512),
+                    payload_reference_id VARCHAR(64),
+                    payload_reference_created_at TIMESTAMPTZ,
+                    size_bytes INTEGER NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMPTZ NOT NULL,
+                    PRIMARY KEY (tenant_id, owner_id, owner_created_at, payload_type)
+                );
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_idempotency_keys (
+                    tenant_id VARCHAR(128) NOT NULL,
+                    workflow_id VARCHAR(128) NOT NULL,
+                    key VARCHAR(255) NOT NULL,
+                    claimed_by_run_id VARCHAR(64) NOT NULL,
+                    eviction_policy VARCHAR(32) NOT NULL DEFAULT 'TTL',
+                    expires_at TIMESTAMPTZ NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL,
+                    PRIMARY KEY (tenant_id, workflow_id, key)
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_idempotency_expires ON public.workflow_idempotency_keys (expires_at);",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_matches (
+                    id VARCHAR(64) PRIMARY KEY,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    run_id VARCHAR(64) NOT NULL,
+                    step_run_id VARCHAR(64) NOT NULL,
+                    step_created_at TIMESTAMPTZ NOT NULL,
+                    node_key VARCHAR(128) NOT NULL,
+                    kind VARCHAR(32) NOT NULL,
+                    existing_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    is_satisfied BOOLEAN NOT NULL DEFAULT FALSE,
+                    resolved_action VARCHAR(32),
+                    created_at TIMESTAMPTZ NOT NULL
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_matches_run ON public.workflow_matches (tenant_id, run_id);",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_match_conditions (
+                    match_id VARCHAR(64) NOT NULL,
+                    id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    or_group_id VARCHAR(64) NOT NULL,
+                    condition_kind VARCHAR(32) NOT NULL,
+                    event_key VARCHAR(128) NOT NULL,
+                    event_resource_hint VARCHAR(255),
+                    predicate_id VARCHAR(128),
+                    readable_data_key VARCHAR(128) NOT NULL,
+                    action VARCHAR(32) NOT NULL,
+                    is_satisfied BOOLEAN NOT NULL DEFAULT FALSE,
+                    matched_data JSONB,
+                    timeout_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    PRIMARY KEY (match_id, id)
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_match_cond_event ON public.workflow_match_conditions (tenant_id, condition_kind, event_key, event_resource_hint) WHERE NOT is_satisfied;",
+                "CREATE INDEX IF NOT EXISTS idx_wf_match_cond_timeout ON public.workflow_match_conditions (timeout_at) WHERE NOT is_satisfied AND timeout_at IS NOT NULL;",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_queue_items (
+                    id BIGSERIAL PRIMARY KEY,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    run_id VARCHAR(64) NOT NULL,
+                    step_run_id VARCHAR(64) NOT NULL,
+                    step_created_at TIMESTAMPTZ NOT NULL,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    item_kind VARCHAR(32) NOT NULL,
+                    queue_name VARCHAR(64) NOT NULL,
+                    priority SMALLINT NOT NULL DEFAULT 2,
+                    available_at TIMESTAMPTZ NOT NULL,
+                    enqueued_at TIMESTAMPTZ NOT NULL,
+                    concurrency_key VARCHAR(255),
+                    rate_limit_key VARCHAR(255),
+                    rate_limit_units INTEGER NOT NULL DEFAULT 1
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_queue_poll ON public.workflow_queue_items (queue_name, available_at, tenant_id, priority, id);",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_paused_queue_items (
+                    id BIGSERIAL PRIMARY KEY,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    rate_limit_key VARCHAR(255) NOT NULL,
+                    run_id VARCHAR(64) NOT NULL,
+                    step_run_id VARCHAR(64) NOT NULL,
+                    step_created_at TIMESTAMPTZ NOT NULL,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    queue_name VARCHAR(64) NOT NULL,
+                    priority SMALLINT NOT NULL DEFAULT 2,
+                    requeue_after TIMESTAMPTZ NOT NULL,
+                    concurrency_key VARCHAR(255),
+                    rate_limit_units INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMPTZ NOT NULL
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_paused_queue_unpause ON public.workflow_paused_queue_items (requeue_after, tenant_id, rate_limit_key);",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_queue_cursors (
+                    queue_name VARCHAR(64) PRIMARY KEY,
+                    last_serviced_tenant_id VARCHAR(128) NOT NULL DEFAULT '',
+                    min_unprocessed_id BIGINT NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMPTZ NOT NULL
+                );
+                """,
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_concurrency_slots (
+                    sort_id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    strategy_id VARCHAR(64) NOT NULL,
+                    concurrency_key VARCHAR(255) NOT NULL,
+                    run_id VARCHAR(64) NOT NULL,
+                    step_run_id VARCHAR(64) NOT NULL,
+                    step_created_at TIMESTAMPTZ NOT NULL,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    priority SMALLINT NOT NULL DEFAULT 2,
+                    is_filled BOOLEAN NOT NULL DEFAULT FALSE,
+                    next_strategy_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    queue_name VARCHAR(64) NOT NULL DEFAULT 'default',
+                    rate_limit_key VARCHAR(255),
+                    rate_limit_units INTEGER NOT NULL DEFAULT 1,
+                    acquired_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    PRIMARY KEY (sort_id, tenant_id, strategy_id, step_run_id, step_created_at, retry_count)
+                );
+                """,
+                "CREATE INDEX IF NOT EXISTS idx_wf_conc_slots_eval ON public.workflow_concurrency_slots (tenant_id, strategy_id, concurrency_key, is_filled, sort_id);",
+                """
+                CREATE TABLE IF NOT EXISTS public.workflow_rate_limit_buckets (
+                    tenant_id VARCHAR(128) NOT NULL,
+                    rate_limit_key VARCHAR(255) NOT NULL,
+                    capacity INTEGER NOT NULL,
+                    refill_per_second FLOAT NOT NULL,
+                    tokens FLOAT NOT NULL,
+                    refilled_at TIMESTAMPTZ NOT NULL,
+                    paused_at TIMESTAMPTZ,
+                    paused_until TIMESTAMPTZ,
+                    PRIMARY KEY (tenant_id, rate_limit_key)
+                );
+                """,
+            ):
+                await shard_session.execute(text(stmt))
+
+            orchestration_rls_tables = (
+                "workflow_runs",
+                "workflow_step_runs",
+                "workflow_active_leases",
+                "workflow_step_attempts",
+                "workflow_payloads",
+                "workflow_idempotency_keys",
+                "workflow_matches",
+                "workflow_match_conditions",
+                "workflow_queue_items",
+                "workflow_paused_queue_items",
+                "workflow_concurrency_slots",
+                "workflow_rate_limit_buckets",
+            )
+            for tbl in orchestration_rls_tables:
+                await shard_session.execute(
+                    text(f"ALTER TABLE public.{tbl} ENABLE ROW LEVEL SECURITY;")
+                )
+                await shard_session.execute(
+                    text(f"DROP POLICY IF EXISTS tenant_isolation_{tbl} ON public.{tbl};")
+                )
+                await shard_session.execute(
+                    text(f"""
+                    CREATE POLICY tenant_isolation_{tbl} ON public.{tbl}
+                        USING (tenant_id = current_setting('platform.current_tenant_id', true));
+                    """)
+                )
             await shard_session.commit()
     finally:
         await shard_provider.close()

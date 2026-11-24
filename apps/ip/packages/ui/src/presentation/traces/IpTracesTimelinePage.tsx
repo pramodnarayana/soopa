@@ -47,12 +47,12 @@ const STATUS_FILTER_ALL = 'ALL';
 
 const STATUS_OPTIONS: ReadonlyArray<{ readonly value: string; readonly label: string }> = [
   { value: STATUS_FILTER_ALL, label: 'All Statuses' },
-  { value: TraceStatus.DELIVERED, label: 'Delivered (L5)' },
+  { value: TraceStatus.DELIVERED, label: 'Delivered' },
   { value: TraceStatus.FAILED, label: 'Failed' },
-  { value: TraceStatus.REJECTED, label: 'Rejected (L2/L3)' },
-  { value: TraceStatus.NORMALIZED, label: 'Normalized (L3)' },
-  { value: TraceStatus.REPLICATED, label: 'Replicated (L2)' },
-  { value: TraceStatus.INGESTED, label: 'Ingested (L1)' },
+  { value: TraceStatus.REJECTED, label: 'Rejected' },
+  { value: TraceStatus.NORMALIZED, label: 'Processed' },
+  { value: TraceStatus.REPLICATED, label: 'Staged' },
+  { value: TraceStatus.INGESTED, label: 'Received' },
 ];
 
 const BULK_STAGE_OPTIONS: readonly ReplayStageValue[] = [
@@ -259,11 +259,7 @@ export function IpTracesTimelinePage({ initialCorrelationQuery = '' }: IpTracesT
 
   return (
     <div className="space-y-6">
-      <IpPageHeader
-        eyebrow="Support Audit Ledger"
-        title="Support Timeline & Deterministic Replay"
-        subtitle="Query business correlation keys in <15ms across L1→L5, inspect replay lineage trees, or execute bulk deterministic recovery."
-      />
+      <IpPageHeader title="Traces" />
 
       <ApiProblemBanner
         problem={mutationProblem ?? activeView.problem}
@@ -327,12 +323,10 @@ export function IpTracesTimelinePage({ initialCorrelationQuery = '' }: IpTracesT
         columnsLength={columns.length}
         isLoading={activeView.isLoading}
         dataLength={rowsData.length}
-        ariaLabel="Integration Platform support traces"
+        ariaLabel="Integration Platform traces"
         emptyIcon={<Activity className="h-6 w-6" />}
-        emptyTitle={
-          isSearchMode ? `No Traces Matched "${trimmedQuery}"` : 'No Support Traces Found'
-        }
-        emptyDescription="Adjust the correlation query or status filter to locate historical integration traces."
+        emptyTitle={isSearchMode ? `No Traces Matched "${trimmedQuery}"` : 'No Traces Found'}
+        emptyDescription="No traces found."
         onRowClick={(row) => navigation.toTraceDetail(row.original.traceId)}
       />
     </div>

@@ -82,19 +82,27 @@ class SliceRangeStepInput:
 
     @classmethod
     def from_payload(cls, data: JsonDict) -> Result[SliceRangeStepInput, IpError]:
-        dates_res = cls._parse_dates(data)
+        effective_data = dict(data)
+        parents = data.get("parents")
+        if isinstance(parents, dict):
+            for parent_output in parents.values():
+                if isinstance(parent_output, dict):
+                    for k, v in parent_output.items():
+                        effective_data.setdefault(k, v)
+
+        dates_res = cls._parse_dates(effective_data)
         if dates_res.is_err or dates_res.value is None:
             return Result.err(dates_res.error or CodecError.with_message("Invalid date range"))
         start_dt, end_dt = dates_res.value
 
-        conns_res = cls._parse_connections(data)
+        conns_res = cls._parse_connections(effective_data)
         if conns_res.is_err or conns_res.value is None:
             return Result.err(
                 conns_res.error or CodecError.with_message("Invalid target connections")
             )
         connections = conns_res.value
 
-        raw_unit = str(data.get("slice_unit", "DAYS")).strip().upper()
+        raw_unit = str(effective_data.get("slice_unit", "DAYS")).strip().upper()
         if raw_unit not in ("DAY", "DAYS", "HOUR", "HOURS"):
             return Result.err(
                 CodecError.with_message(
@@ -102,22 +110,23 @@ class SliceRangeStepInput:
                 )
             )
 
-        raw_size = data.get("slice_size", 1)
+        raw_size = effective_data.get("slice_size", 1)
         slice_size = (
             int(raw_size) if isinstance(raw_size, (int, float, str)) and int(raw_size) > 0 else 1
         )
 
         filter_criteria: JsonDict = (
-            dict(data["filter_criteria"])
-            if "filter_criteria" in data and isinstance(data["filter_criteria"], dict)
+            dict(effective_data["filter_criteria"])
+            if "filter_criteria" in effective_data
+            and isinstance(effective_data["filter_criteria"], dict)
             else {}
         )
-        raw_dest = data.get("destination")
+        raw_dest = effective_data.get("destination")
         destination: JsonDict = dict(raw_dest) if isinstance(raw_dest, dict) else {}
-        if "destination_connection_id" in data and "connection_id" not in destination:
-            destination["connection_id"] = data["destination_connection_id"]
-        if "destination_topic" in data and "topic" not in destination:
-            destination["topic"] = data["destination_topic"]
+        if "destination_connection_id" in effective_data and "connection_id" not in destination:
+            destination["connection_id"] = effective_data["destination_connection_id"]
+        if "destination_topic" in effective_data and "topic" not in destination:
+            destination["topic"] = effective_data["destination_topic"]
 
         return Result.ok(
             cls(
