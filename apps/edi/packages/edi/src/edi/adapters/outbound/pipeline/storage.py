@@ -1,43 +1,45 @@
-import aioboto3
+"""EDI StoragePort adapter delegating to centralized platform PayloadStoragePort."""
+
+from __future__ import annotations
+
+from storage.ports.payload_storage_port import PayloadStoragePort
+from storage.provider import StorageProvider
 
 from edi.ports.outbound.storage_port import StoragePort
 
 
-class S3StorageClient(StoragePort):
-    """
-    Concrete implementation of StoragePort using AWS S3 (via aioboto3).
-    """
+class PlatformStorageAdapter(StoragePort):
+    """Bridges EDI's `StoragePort` to the centralized platform `PayloadStoragePort`."""
 
-    def __init__(
-        self, bucket_name: str, endpoint_url: str | None = None, region: str = "us-east-1"
-    ):
-        self.bucket_name = bucket_name
-        self.endpoint_url = endpoint_url
-        self.region = region
-        self.session = aioboto3.Session()
-
-    async def _get_client_kwargs(self) -> dict[str, str]:
-        kwargs = {"region_name": self.region}
-        if self.endpoint_url:
-            kwargs["endpoint_url"] = self.endpoint_url
-        return kwargs
+    def __init__(self, payload_storage: PayloadStoragePort) -> None:
+        self._payload_storage = payload_storage
 
     async def download(self, uri: str) -> bytes:
-        if not uri.startswith(f"s3://{self.bucket_name}/"):
-            raise ValueError(f"URI must start with s3://{self.bucket_name}/")
-
-        key = uri[len(f"s3://{self.bucket_name}/") :]
-        kwargs = await self._get_client_kwargs()
-
-        async with self.session.client("s3", **kwargs) as s3:
-            response = await s3.get_object(Bucket=self.bucket_name, Key=key)
-            return bytes(await response["Body"].read())
+        data = await self._payload_storage.download(uri, decompress=False)
+        if data is None:
+            raise ValueError(f"Storage object not found or invalid URI: {uri}")
+        return data
 
     async def upload(self, payload: bytes, key_prefix: str, file_name: str) -> str:
         key = f"{key_prefix.strip('/')}/{file_name}"
-        kwargs = await self._get_client_kwargs()
+        return await self._payload_storage.upload_key(key=key, payload=payload)
 
-        async with self.session.client("s3", **kwargs) as s3:
-            await s3.put_object(Bucket=self.bucket_name, Key=key, Body=payload)
 
-        return f"s3://{self.bucket_name}/{key}"
+class S3StorageClient(PlatformStorageAdapter):
+    """Backwards-compatible factory wrapper constructing `PlatformStorageAdapter` via `StorageProvider`."""
+
+    def __init__(
+        self,
+        bucket_name: str,
+        endpoint_url: str | None = None,
+        region: str = "us-east-1",
+    ) -> None:
+        self.bucket_name = bucket_name
+        self.endpoint_url = endpoint_url
+        self.region = region
+        payload_storage = StorageProvider.create_payload_storage(
+            bucket=bucket_name,
+            endpoint_url=endpoint_url,
+            region=region,
+        )
+        super().__init__(payload_storage=payload_storage)

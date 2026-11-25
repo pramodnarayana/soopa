@@ -111,15 +111,28 @@ async def test_mark_completed_and_failed(
     # Mark failed
     await outbox_repo.mark_failed(event_id, worker_id, "Test error")
 
-    # Verify it failed and went back to pending
+    # Verify it failed, went back to pending, and enforces exponential retry backoff
     async with db_session_factory() as session:
         stmt = select(OrmIdentityOutbox).where(OrmIdentityOutbox.id == event_id)
         outbox = (await session.execute(stmt)).scalar_one()
         assert outbox.status == OutboxStatus.PENDING.value
         assert outbox.attempts == 1
         assert outbox.error_reason == "Test error"
+        assert outbox.lease_expires_at is not None
 
-    # Claim again and mark completed
+    # Immediate claim must respect retry backoff cooldown
+    deferred_events = await outbox_repo.claim_next_events(worker_id, 1, 5000)
+    assert len(deferred_events) == 0
+
+    # Simulate retry backoff window expiring, then claim again and mark completed
+    async with db_session_factory() as session:
+        stmt = select(OrmIdentityOutbox).where(OrmIdentityOutbox.id == event_id)
+        outbox = (await session.execute(stmt)).scalar_one()
+        outbox.lease_expires_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(
+            seconds=1
+        )
+        await session.commit()
+
     events = await outbox_repo.claim_next_events(worker_id, 1, 5000)
     assert len(events) == 1
 

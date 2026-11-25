@@ -38,7 +38,7 @@ class FakeAioBoto3Session:
 
 
 @pytest.mark.asyncio
-async def test_sqs_job_dispatcher_missing_target_queue_returns_early() -> None:
+async def test_sqs_job_dispatcher_missing_target_queue_raises_value_error() -> None:
     client = FakeSqsClient()
     session = FakeAioBoto3Session(client)
     dispatcher = SQSJobDispatcher(
@@ -59,7 +59,8 @@ async def test_sqs_job_dispatcher_missing_target_queue_returns_early() -> None:
         next_run_at=datetime.now(UTC),
     )
 
-    await dispatcher.dispatch(job)
+    with pytest.raises(ValueError, match="No target_queue defined for job test_job"):
+        await dispatcher.dispatch(job)
     assert len(client.sent_messages) == 0
 
 

@@ -4,14 +4,22 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from config_sync.domain.checksum import compute_payload_checksum
+from config_sync.domain.enums import ConfigChangeAction, ConfigSyncChannel
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.control_plane import MappingSpecRecord
+from ip.engine.domain.config_payloads import mapping_spec_to_config_payload
+from ip.engine.domain.enums import IP_CONFIG_APP_ID, IpConfigEntityType
 from ip.engine.domain.mapping.enums import MappingRuleType
 from ip.engine.domain.mapping.mapping_spec import MappingRule, MappingSpec
 from ip.engine.ports.outbound.mapping_spec_repository_port import MappingSpecRepositoryPort
 from seedwork.domain.types import JsonDict
+from seedwork.id_registry import SystemIdPrefix
+from seedwork.utils import generate_id
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.config_changelog import record_config_changelog_entry
 
 
 class SqlAlchemyMappingSpecRepository(GlobalSqlAlchemyRepository, MappingSpecRepositoryPort):
@@ -127,6 +135,19 @@ class SqlAlchemyMappingSpecRepository(GlobalSqlAlchemyRepository, MappingSpecRep
             self._update_record_from_domain(record, spec, now)
 
         self._drain_events(spec, default_tenant_id=spec.tenant_id)
+        payload = mapping_spec_to_config_payload(spec)
+        await record_config_changelog_entry(
+            self.session,
+            event_id=generate_id(SystemIdPrefix.GENERIC),
+            app_id=IP_CONFIG_APP_ID,
+            tenant_id=spec.tenant_id,
+            entity_type=IpConfigEntityType.MAPPING_SPEC.value,
+            entity_id=spec.id,
+            action=ConfigChangeAction.UPSERT.value,
+            checksum=compute_payload_checksum(payload),
+            payload=dict(payload),
+            notify_channel=ConfigSyncChannel.CONFIG_CHANGELOG_NOTIFY.value,
+        )
 
     async def get_by_id(
         self,
@@ -188,9 +209,22 @@ class SqlAlchemyMappingSpecRepository(GlobalSqlAlchemyRepository, MappingSpecRep
         tenant_id: str,
         mapping_spec_id: str,
     ) -> None:
-        """Deletes a MappingSpec record for a tenant."""
+        """Deletes a MappingSpec record for a tenant and appends a DELETE changelog delta."""
         stmt = delete(MappingSpecRecord).where(
             MappingSpecRecord.id == mapping_spec_id,
             MappingSpecRecord.tenant_id == tenant_id,
         )
         await self.session.execute(stmt)
+        tombstone: JsonDict = {"id": mapping_spec_id, "tenant_id": tenant_id}
+        await record_config_changelog_entry(
+            self.session,
+            event_id=generate_id(SystemIdPrefix.GENERIC),
+            app_id=IP_CONFIG_APP_ID,
+            tenant_id=tenant_id,
+            entity_type=IpConfigEntityType.MAPPING_SPEC.value,
+            entity_id=mapping_spec_id,
+            action=ConfigChangeAction.DELETE.value,
+            checksum=compute_payload_checksum(tombstone),
+            payload=dict(tombstone),
+            notify_channel=ConfigSyncChannel.CONFIG_CHANGELOG_NOTIFY.value,
+        )

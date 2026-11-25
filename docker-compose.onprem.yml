@@ -1,0 +1,128 @@
+# Cloud-Agnostic PostgreSQL Pub/Sub Docker Compose Blueprint (Zero SQS / Zero SNS / Zero LocalStack)
+# Runs the Shopify-Style Single-Image Modular Monolith using PostgreSQL (`db://` queues & `db://topic/` fan-out),
+# POSIX/MinIO storage, and self-hosted Zitadel IAM on PostgreSQL.
+
+include:
+  - docker-compose.identity.yml
+
+x-sovereign-env: &sovereign-env
+  PUBSUB_TRANSPORT: db
+  DATABASE_URL: ${DATABASE_URL}
+  GLOBAL_DATABASE_URL: ${GLOBAL_DATABASE_URL}
+  EDI_DATABASE_URL: ${EDI_DATABASE_URL}
+  DATABASE__SHARD_OVERRIDES__EDI_SHARD_1: ${DATABASE__SHARD_OVERRIDES__EDI_SHARD_1}
+  DATABASE__SHARD_OVERRIDES__IP_SHARD_1: ${DATABASE__SHARD_OVERRIDES__IP_SHARD_1}
+  STORAGE_BACKEND: ${STORAGE_BACKEND:-file}
+  STORAGE_FILE_PATH: ${STORAGE_FILE_PATH:-/mnt/storage}
+  SECRETS_BACKEND: ${SECRETS_BACKEND:-file}
+  SECRETS_MOUNT_PATH: ${SECRETS_MOUNT_PATH:-/mnt/secrets}
+  # Decoupled PostgreSQL Pub/Sub Topics (`pubsub.platform_topic_subscriptions`)
+  SNS_PLATFORM_EVENTS_TOPIC_ARN: db://topic/platform-events-topic
+  SNS_IP_EVENTS_TOPIC_ARN: db://topic/ip-events-topic
+  # Single-Queue PostgreSQL Engine (`db://` -> `pubsub.platform_queue_messages` & direct shard outbox drain)
+  SQS_IP_ORCHESTRATOR_REALTIME_QUEUE_URL: db://ip-orchestrator-realtime
+  SQS_IP_ORCHESTRATOR_BULK_QUEUE_URL: db://ip-orchestrator-bulk
+  SQS_IP_DELIVERY_REALTIME_QUEUE_URL: db://ip-delivery-realtime
+  SQS_IP_DELIVERY_BULK_QUEUE_URL: db://ip-delivery-bulk
+  SQS_IP_DATA_PLANE_JOBS_QUEUE_URL: db://ip-data-plane-jobs.fifo
+  SQS_IP_CONTROL_PLANE_JOBS_QUEUE_URL: db://ip-control-plane-jobs.fifo
+  # Queue-Free HTTPS Dynamic Watch (`core/platform/packages/config-sync`)
+  CONFIG_WATCH_BASE_URL: http://config-watch-gateway:8081
+  CONFIG_SYNC_INTERNAL_TOKEN: ${CONFIG_SYNC_INTERNAL_TOKEN:-sovereign-internal-config-sync-token}
+  SQS_ORCHESTRATOR_QUEUE_URL: db://edi-orchestrator
+  SQS_COMPUTE_QUEUE_URL: db://edi-compute
+  SQS_DELIVER_QUEUE_URL: db://edi-deliver
+  SQS_DELIVER_DLQ_URL: db://edi-deliver-dlq
+  SQS_DATA_PLANE_JOBS_QUEUE_URL: db://edi-data-plane-jobs.fifo
+  SQS_CONTROL_PLANE_JOBS_QUEUE_URL: db://edi-control-plane-jobs.fifo
+  SQS_NOTIFICATION_QUEUE_URL: db://notifications.fifo
+  SQS_EMAIL_CHANNEL_QUEUE_URL: db://email-channel.fifo
+  SQS_NOTIFICATION_JOBS_QUEUE_URL: db://notification-jobs.fifo
+  SQS_IDENTITY_SYNC_QUEUE_URL: db://identity-events.fifo
+  SQS_IDENTITY_JOBS_QUEUE_URL: db://identity-jobs.fifo
+  SQS_UCP_IDENTITY_SYNC_QUEUE_URL: db://ucp-events.fifo
+  SQS_UCP_JOBS_QUEUE_URL: db://ucp-jobs.fifo
+
+x-sovereign-monolith: &sovereign-monolith
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: platform:sovereign
+  env_file: .env
+  environment:
+    <<: *sovereign-env
+  depends_on:
+    postgres:
+      condition: service_healthy
+  volumes:
+    - sovereign_storage:/mnt/storage
+    - sovereign_secrets:/mnt/secrets
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-global_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-global_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2024-05-10T01-41-38Z
+    profiles: ["minio"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  unified-api:
+    <<: *sovereign-monolith
+    command: ["uvicorn", "unified_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+
+  config-watch-gateway:
+    <<: *sovereign-monolith
+    command: ["uvicorn", "unified_api.watch_gateway:app", "--host", "0.0.0.0", "--port", "8081"]
+    ports:
+      - "8081:8081"
+
+  edi-as2-server:
+    <<: *sovereign-monolith
+    command: ["uvicorn", "as2_server.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+
+  cp-workers:
+    <<: *sovereign-monolith
+    command: ["python", "-m", "unified_worker.main"]
+    environment:
+      <<: *sovereign-env
+      WORKER_MODULES: "identity-worker,identity-jobs-worker,notification-worker,notification-jobs-worker,notification-channel-worker,ucp-worker,ucp-jobs-worker,scheduler-worker,edi-cp-jobs-worker,edi-config-sync-worker,ip-cp-jobs-worker"
+
+  dp-workers:
+    <<: *sovereign-monolith
+    command: ["python", "-m", "unified_worker.main"]
+    environment:
+      <<: *sovereign-env
+      WORKER_MODULES: "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-dp-jobs-worker,ip-orchestrator-worker,ip-delivery-worker,ip-dp-jobs-worker"
+
+volumes:
+  postgres_data:
+  minio_data:
+  sovereign_storage:
+  sovereign_secrets:

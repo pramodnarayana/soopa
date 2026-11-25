@@ -55,12 +55,6 @@
       "env_var": "SQS_NOTIFICATION_QUEUE_URL"
     },
     {
-      "name": "edi-config-sync-queue",
-      "fifo": true,
-      "dlq": true,
-      "env_var": "SQS_PROVISIONING_QUEUE_URL"
-    },
-    {
       "name": "edi-orchestrator",
       "fifo": false,
       "dlq": true,
@@ -163,14 +157,25 @@
     },
     {
       "topic": "platform-events-topic",
-      "queue": "edi-config-sync-queue",
+      "queue": "notifications",
       "filterPolicy": {
         "event_type": [
           {
-            "prefix": "webhook."
+            "prefix": "notification."
+          }
+        ]
+      }
+    },
+    {
+      "topic": "platform-events-topic",
+      "queue": "email-channel",
+      "filterPolicy": {
+        "event_type": [
+          {
+            "prefix": "channel.email."
           },
           {
-            "prefix": "edi."
+            "prefix": "email."
           }
         ]
       }

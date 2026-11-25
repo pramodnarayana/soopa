@@ -23,6 +23,7 @@
     "@soopa/orchestration": "workspace:*",
     "@soopa/identity": "workspace:*",
     "@soopa/sharding": "workspace:*",
-    "@soopa/webhooks": "workspace:*"
+    "@soopa/webhooks": "workspace:*",
+    "@soopa/config-sync": "workspace:*"
   }
 }

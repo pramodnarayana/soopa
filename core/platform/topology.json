@@ -55,6 +55,20 @@
       "filterPolicy": {
         "event_type": [{ "prefix": "tenant." }, { "prefix": "app." }, { "prefix": "user." }]
       }
+    },
+    {
+      "topic": "platform-events-topic",
+      "queue": "notifications",
+      "filterPolicy": {
+        "event_type": [{ "prefix": "notification." }]
+      }
+    },
+    {
+      "topic": "platform-events-topic",
+      "queue": "email-channel",
+      "filterPolicy": {
+        "event_type": [{ "prefix": "channel.email." }, { "prefix": "email." }]
+      }
     }
   ],
   "buckets": [{ "name": "observability-data" }],

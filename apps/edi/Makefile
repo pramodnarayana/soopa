@@ -60,20 +60,13 @@ db-reset:
 	@echo "Re-running migrations and seeding..."
 	$(MAKE) db-init
 
-sqs-purge:
-	@echo "Purging all LocalStack SQS queues..."
-	uv run python scripts/purge_sqs.py
-
-db-sqs-reset: db-reset sqs-purge
-	@echo "Database and SQS queues have been completely reset."
-
 clear-data:
-	@echo "Clearing data plane tables (edi_message, edi_json, api_gateway, outbox) and purging SQS..."
+	@echo "Clearing local EDI data plane tables..."
 	uv run python scripts/clear_data.py --i-am-sure
 
 seed: db-init
 
-# --- Docker Infrastructure (Postgres, LocalStack, OTel) ---
+# --- Docker Infrastructure (Postgres, OTel) ---
 
 infra-up:
 	@echo "Starting local infrastructure (Background DB, S3, OTel)..."

@@ -39,6 +39,10 @@ _PUBLIC_PATHS: frozenset[str] = frozenset(
 )
 
 
+# Route prefixes authenticated by dedicated internal service-to-service guards (e.g. Dynamic Watch).
+_INTERNAL_AUTH_PREFIXES: tuple[str, ...] = ("/api/v1/internal/",)
+
+
 class AuthenticationMiddleware(BaseHTTPMiddleware):
     """
     ASGI middleware: validates the auth token once per request and populates
@@ -72,7 +76,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             path=request.url.path,
         )
 
-        if request.url.path in self.public_paths:
+        if request.url.path in self.public_paths or request.url.path.startswith(
+            _INTERNAL_AUTH_PREFIXES
+        ):
             return await call_next(request)
 
         authorization = request.headers.get("Authorization")

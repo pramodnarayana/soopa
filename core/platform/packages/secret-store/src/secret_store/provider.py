@@ -11,7 +11,9 @@ from secret_store.adapters.aws_secrets_manager import (
     AwsSecretsManagerAdapter,
     SecretsManagerClientProtocol,
 )
+from secret_store.adapters.file_system_secret_store import FileSystemSecretStoreAdapter
 from secret_store.adapters.mounted_path_resolver import MountedSecretPathResolver
+from secret_store.adapters.vault_secret_store import VaultSecretStoreAdapter
 from secret_store.ports.secret_path_resolver_port import MountedSecretPathResolverPort
 from secret_store.ports.secret_store_port import SecretStorePort
 
@@ -23,6 +25,8 @@ class SecretStoreBackend(StrEnum):
 
     AWS = "aws"
     VAULT = "vault"
+    FILE = "file"
+    KUBERNETES = "kubernetes"
     GCP = "gcp"
     AZURE = "azure"
 
@@ -64,6 +68,8 @@ class SecretStoreProvider:
         aws_secret_access_key: str | None = None,
         secrets_prefix: str | None = None,
         aws_settings: PlatformAwsSettings | None = None,
+        vault_url: str | None = None,
+        vault_token: str | None = None,
     ) -> SecretStorePort:
         """Resolves the configured secret store adapter conforming to SecretStorePort.
 
@@ -95,9 +101,25 @@ class SecretStoreProvider:
                 aws_secret_access_key=aws_secret_access_key,
                 secrets_prefix=secrets_prefix,
                 aws_settings=aws_settings,
+                vault_url=vault_url,
+                vault_token=vault_token,
             )
 
         match selected_backend:
+            case SecretStoreBackend.FILE | SecretStoreBackend.KUBERNETES:
+                return FileSystemSecretStoreAdapter(
+                    secrets_mount_path=mount_path,
+                    secrets_prefix=secrets_prefix,
+                    path_resolver=resolver,
+                )
+            case SecretStoreBackend.VAULT:
+                return VaultSecretStoreAdapter(
+                    vault_url=vault_url,
+                    vault_token=vault_token,
+                    secrets_mount_path=mount_path,
+                    secrets_prefix=secrets_prefix,
+                    path_resolver=resolver,
+                )
             case SecretStoreBackend.AWS:
                 return AwsSecretsManagerAdapter(
                     endpoint_url=endpoint_url,
@@ -110,7 +132,7 @@ class SecretStoreProvider:
                     path_resolver=resolver,
                     aws_settings=aws_settings,
                 )
-            case SecretStoreBackend.VAULT | SecretStoreBackend.GCP | SecretStoreBackend.AZURE:
+            case SecretStoreBackend.GCP | SecretStoreBackend.AZURE:
                 raise NotImplementedError(
                     f"Secret store backend '{selected_backend.value}' is architecturally supported "
                     f"via SecretStorePort, but its concrete adapter is not yet implemented. "

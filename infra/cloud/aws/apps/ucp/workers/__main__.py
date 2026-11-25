@@ -4,13 +4,12 @@ Application Layer (Layer 3) - Unified UCP Workers
 Provisions the consolidated UCP/Platform/Identity/Notification/EDI-CP worker
 containers (all non-data-plane workers in the unified runner).
 
-Environment variable injection is driven entirely by the ``queue_env_vars``
-exports from each bounded-context messaging stack. No manual per-queue
-env-var mapping exists here — adding a new queue to topology.json is
-sufficient to make it available in every worker container.
+Environment variable injection is driven directly from ``topology.json`` via
+``build_database_pubsub_env_vars`` (PostgreSQL Pub/Sub ``db://`` and ``db://topic/`` URIs —
+zero AWS SQS/SNS). Adding a new queue or topic to topology.json is sufficient to make it
+available in every worker container.
 
-Depends on: platform, foundation, data, edi/messaging, identity/messaging,
-            notification/messaging, ucp/messaging.
+Depends on: platform, foundation, data, zitadel.
 """
 
 import json
@@ -20,7 +19,8 @@ import pulumi_aws as aws
 from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
 from infra_seedwork.env import queue_env_vars_to_ecs_format
-from infra_seedwork.messaging import merge_messaging_queue_arns
+from infra_seedwork.messaging import build_database_pubsub_env_vars
+from infra_seedwork.topology import load_topology
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-ucp-"
@@ -38,20 +38,12 @@ identity_platform_org_id = zitadel.require_output("platform_org_id")
 identity_ucp_project_id = zitadel.require_output("ucp_project_id")
 identity_oauth_client_id = zitadel.require_output("ucp_web_client_id")
 identity_platform_admin_id = zitadel.require_output("platform_admin_id")
-edi_messaging_stack_ref = config.get("edi_messaging_stack") or f"organization/edi-messaging/{_env}"
-notification_stack_ref = config.get("notification_stack") or f"organization/notification/{_env}"
-identity_stack_ref = config.get("identity_stack") or f"organization/identity/{_env}"
-ucp_stack_ref = config.get("ucp_stack") or f"organization/ucp/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
 aws_zitadel_stack_ref = config.get("aws_zitadel_stack") or f"organization/zitadel/{_env}"
 obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
-edi = pulumi.StackReference(edi_messaging_stack_ref)
-notification = pulumi.StackReference(notification_stack_ref)
-identity = pulumi.StackReference(identity_stack_ref)
-ucp = pulumi.StackReference(ucp_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
 aws_zitadel = pulumi.StackReference(aws_zitadel_stack_ref)
 obs = pulumi.StackReference(obs_stack_ref)
@@ -75,8 +67,7 @@ edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
 global_db_endpoint = data.require_output("global_db_endpoint")
 global_db_secret_arn = data.require_output("global_db_secret_arn")
 
-sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
-all_worker_queue_arns = merge_messaging_queue_arns(ucp, identity, edi, notification)
+all_queue_env_vars = build_database_pubsub_env_vars(load_topology())
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
@@ -213,24 +204,6 @@ extra_task_policy_statements = [
         "Action": ["secretsmanager:ListSecrets"],
         "Resource": "*",
     },
-    {
-        "Sid": "SqsPermissions",
-        "Effect": "Allow",
-        "Action": [
-            "sqs:ReceiveMessage",
-            "sqs:DeleteMessage",
-            "sqs:GetQueueAttributes",
-            "sqs:ChangeMessageVisibility",
-            "sqs:SendMessage",
-        ],
-        "Resource": all_worker_queue_arns,
-    },
-    {
-        "Sid": "SnsPermissions",
-        "Effect": "Allow",
-        "Action": ["sns:Publish"],
-        "Resource": sns_platform_events_topic_arn,
-    },
 ]
 
 app_mount_points = [
@@ -243,33 +216,13 @@ app_mount_points = [
 app_depends_on = [{"containerName": "edi-secrets-sidecar", "condition": "START"}]
 volumes = [aws.ecs.TaskDefinitionVolumeArgs(name="secrets")]
 
-# ── Environment Variables — Topology-Driven ───────────────────────────────────
-# Merge all ``queue_env_vars`` maps from every messaging stack into a single
-# dict, then combine with static platform env vars. The result is the complete
-# set of environment variables for every worker group.
-#
-# This is the enterprise SSOT pattern: adding a queue to topology.json and
-# assigning it an env_var is sufficient — no changes to any compute stack.
-
-all_queue_env_vars: pulumi.Output = pulumi.Output.all(
-    edi=edi.require_output("queue_env_vars"),
-    identity=identity.require_output("queue_env_vars"),
-    notification=notification.require_output("queue_env_vars"),
-    ucp=ucp.require_output("queue_env_vars"),
-    platform_topic_arn=platform.require_output("sns_platform_events_topic_arn"),
-).apply(
-    lambda args: {
-        **args["edi"],
-        **args["identity"],
-        **args["notification"],
-        **args["ucp"],
-        # SNS topic ARN — published by the platform stack, not a messaging stack.
-        "SNS_PLATFORM_EVENTS_TOPIC_ARN": args["platform_topic_arn"],
-    }
-)
+# ── Environment Variables — Topology-Driven (PostgreSQL Pub/Sub) ──────────────
+# Built directly from topology.json via build_database_pubsub_env_vars():
+# { "PUBSUB_TRANSPORT": "db", "SQS_*": "db://...", "SNS_*": "db://topic/..." }.
+# This is the enterprise SSOT pattern: adding a queue or topic to topology.json
+# with an env_var is sufficient — no changes to any compute stack and zero AWS SQS/SNS.
 
 base_env_vars: pulumi.Output = pulumi.Output.all(
-    queue_env_vars=all_queue_env_vars,
     global_db_host=global_db_endpoint,
     edi_db_host=edi_shard_db_endpoint,
     public_base_url=pulumi.Output.concat("https://api.", staging_domain),
@@ -279,13 +232,15 @@ base_env_vars: pulumi.Output = pulumi.Output.all(
     identity_platform_org_id=identity_platform_org_id,
 ).apply(
     lambda args: queue_env_vars_to_ecs_format(
-        queue_env_vars=args["queue_env_vars"],
+        queue_env_vars=all_queue_env_vars,
         static_vars={
+            "ENV": _env,
             "ENVIRONMENT": _env,
             "EDI_ENVIRONMENT": edi_environment,
             "GLOBAL_DB_HOST": args["global_db_host"],
             "EDI_DB_HOST": args["edi_db_host"],
             "PUBLIC_BASE_URL": args["public_base_url"],
+            "CONFIG_WATCH_BASE_URL": args["public_base_url"],
             "IDENTITY_ISSUER": args["identity_issuer"],
             "IDENTITY_API_URL": args["identity_api_url"],
             "IDENTITY_UCP_PROJECT_ID": args["identity_ucp_project_id"],
@@ -349,6 +304,12 @@ for group in worker_groups:
             {
                 "name": "IDENTITY_MACHINE_KEY",
                 "valueFrom": iam_manager_sa_secret.arn,
+            },
+            {
+                "name": "CONFIG_SYNC_INTERNAL_TOKEN",
+                "valueFrom": pulumi.Output.concat(
+                    app_defaults_secret_arn, ":config_sync_internal_token::"
+                ),
             },
         ],
         autoscaling_config=autoscaling_config,

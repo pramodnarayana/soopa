@@ -68,6 +68,9 @@ def run_domain_seeds(
     if domain in ("notification", "platform", "all"):
         script_executor("core/platform/apps/notification-jobs-worker/scripts/seed_jobs.py")
 
+    if domain in ("scheduler", "pubsub", "platform", "all"):
+        script_executor("core/platform/apps/scheduler-worker/scripts/seed_jobs.py")
+
     if domain in ("edi", "all"):
         script_executor("apps/edi/scripts/seed.py")
         script_executor("apps/edi/scripts/seed_jobs.py")

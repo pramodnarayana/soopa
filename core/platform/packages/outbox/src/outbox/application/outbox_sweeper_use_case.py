@@ -1,4 +1,5 @@
 import asyncio
+from typing import Protocol, runtime_checkable
 
 import structlog
 from outbox.domain.constants import OutboxStatus
@@ -10,7 +11,35 @@ from seedwork.utils import generate_id
 logger = structlog.get_logger(__name__)
 
 
-class OutboxSweeperUseCase:
+@runtime_checkable
+class OutboxSweeperPort(Protocol):
+    """Polymorphic sweeper strategy contract (eliminates boolean control coupling in workers)."""
+
+    async def execute(self) -> None: ...
+
+
+class LeaseOnlyOutboxSweeperUseCase(OutboxSweeperPort):
+    """Sweeper strategy for direct single-queue mode: recovers expired PROCESSING leases back to PENDING."""
+
+    def __init__(
+        self,
+        repository: OutboxRepositoryPort,
+        *,
+        lock_lease_ms: int = 30000,
+    ) -> None:
+        self.repository = repository
+        self.lock_lease_ms = lock_lease_ms
+
+    async def execute(self) -> None:
+        swept = await self.repository.sweep_stuck_events(self.lock_lease_ms)
+        logger.info(
+            "lease_only_outbox_sweep_completed",
+            swept_count=swept,
+            lock_lease_ms=self.lock_lease_ms,
+        )
+
+
+class OutboxSweeperUseCase(OutboxSweeperPort):
     """
     Application UseCase to sweep the Outbox.
     It continuously picks up batches of stuck or pending events and publishes them

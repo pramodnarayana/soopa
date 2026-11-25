@@ -1,6 +1,12 @@
+from collections.abc import Sequence
+
 from database.router import DatabaseRouterPort
 from database.types import GlobalSession, TenantSession
 from dependency_injector import containers, providers
+from outbox.adapters.outbound.sqlalchemy_sharded_outbox_repository import (
+    SqlAlchemyShardedOutboxRepository,
+)
+from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
 from secret_store import SecretStoreProvider
 from security.provider import SecurityProvider
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,6 +81,7 @@ from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUni
 from edi.adapters.outbound.database.data_plane.webhook_repository import (
     SqlAlchemyDataPlaneWebhookRepository,
 )
+from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import SqlAlchemyTenantUoWProvider
 from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
@@ -85,6 +92,8 @@ from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoServi
 from edi.adapters.outbound.sftp.paramiko_sftp_tester import ParamikoSftpTesterAdapter
 from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
+from edi.domain.constants import EdiConstants
+from edi.domain.enums import EdiOutboxSource
 from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.tenant_port import TenantPort
 
@@ -148,6 +157,22 @@ def create_edi_dp_uow_factory(
             tenant_session=session,
             storage=storage,
         ),
+    )
+
+
+def create_edi_dp_filtered_outbox_drain_repo(
+    *,
+    db_router: DatabaseRouterPort,
+    event_types: Sequence[str] | None = None,
+) -> ShardOutboxDrainPort:
+    """Composition root factory assembling a stage-filtered SqlAlchemyShardedOutboxRepository for direct Single-Queue EDI worker draining."""
+    return SqlAlchemyShardedOutboxRepository(
+        db_router=db_router,
+        model_cls=DataPlaneOutbox,
+        app_slug=EdiConstants.EDI_APP_SLUG.value,
+        source=EdiOutboxSource.EDI_DATA_PLANE.value,
+        min_pending_age_seconds=0,
+        event_types=event_types,
     )
 
 

@@ -16,7 +16,7 @@ from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryP
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
 from seedwork.events import EventEnvelope, EventProcessingLane
-from sqlalchemy import case, delete, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 
 logger = structlog.get_logger(__name__)
 
@@ -40,6 +40,8 @@ class SqlAlchemyShardedOutboxRepository(
     """
 
     _SWEEP_BATCH_SIZE: int = 5000
+    _BASE_RETRY_BACKOFF_SECONDS: int = 10
+    _MAX_RETRY_BACKOFF_SECONDS: int = 300
 
     def __init__(
         self,
@@ -50,6 +52,11 @@ class SqlAlchemyShardedOutboxRepository(
         source: str,
         max_attempts: int = 5,
         min_pending_age_seconds: int = 0,
+        event_types: Sequence[str] | None = None,
+        exclude_event_types: Sequence[str] | None = None,
+        lanes: Sequence[str] | None = None,
+        base_retry_backoff_seconds: int = _BASE_RETRY_BACKOFF_SECONDS,
+        max_retry_backoff_seconds: int = _MAX_RETRY_BACKOFF_SECONDS,
     ) -> None:
         self._db_router = db_router
         self._model_cls = model_cls
@@ -57,6 +64,15 @@ class SqlAlchemyShardedOutboxRepository(
         self._source = source
         self._max_attempts = max_attempts
         self._min_pending_age_seconds = min_pending_age_seconds
+        self._event_types: tuple[str, ...] | None = (
+            tuple(event_types) if event_types is not None else None
+        )
+        self._exclude_event_types: tuple[str, ...] | None = (
+            tuple(exclude_event_types) if exclude_event_types is not None else None
+        )
+        self._lanes: tuple[str, ...] | None = tuple(lanes) if lanes is not None else None
+        self._base_retry_backoff_seconds = base_retry_backoff_seconds
+        self._max_retry_backoff_seconds = max_retry_backoff_seconds
 
     async def list_shards(self) -> list[tuple[str, str]]:
         shards = await self._db_router.get_all_shards(app_slug=self._app_slug)
@@ -75,30 +91,38 @@ class SqlAlchemyShardedOutboxRepository(
         lease_until = now + timedelta(milliseconds=lock_lease_ms)
         m = self._model_cls
         envelopes: list[EventEnvelope] = []
+        retry_ready = or_(m.lease_expires_at.is_(None), m.lease_expires_at <= now)
         pending_clause = (
             (m.status == OutboxStatus.PENDING.value)
+            & retry_ready
             & (m.created_at <= now - timedelta(seconds=self._min_pending_age_seconds))
             if self._min_pending_age_seconds > 0
-            else (m.status == OutboxStatus.PENDING.value)
+            else (m.status == OutboxStatus.PENDING.value) & retry_ready
         )
 
         async for session in self._db_router.get_shard_session(shard_name, shard_dsn):
-            subq = (
-                select(m.id)
-                .where(
-                    or_(
-                        pending_clause,
-                        (m.status == OutboxStatus.PROCESSING.value) & (m.lease_expires_at < now),
-                    )
+            subq_stmt = select(m.id).where(
+                or_(
+                    pending_clause,
+                    (m.status == OutboxStatus.PROCESSING.value) & (m.lease_expires_at < now),
                 )
-                .order_by(m.lane.desc(), m.created_at.asc())
+            )
+            if self._event_types is not None:
+                subq_stmt = subq_stmt.where(m.event_type.in_(self._event_types))
+            if self._exclude_event_types is not None:
+                subq_stmt = subq_stmt.where(m.event_type.not_in(self._exclude_event_types))
+            if self._lanes is not None:
+                subq_stmt = subq_stmt.where(m.lane.in_(self._lanes))
+
+            claimed_cte = (
+                subq_stmt.order_by(m.lane.desc(), m.created_at.asc())
                 .limit(limit)
                 .with_for_update(skip_locked=True)
-                .scalar_subquery()
+                .cte("claimed_shard_outbox_rows")
             )
             stmt = (
                 update(m)
-                .where(m.id.in_(subq))
+                .where(m.id == claimed_cte.c.id)
                 .values(
                     status=OutboxStatus.PROCESSING.value,
                     updated_at=now,
@@ -160,15 +184,36 @@ class SqlAlchemyShardedOutboxRepository(
         event_ids: Sequence[str],
         worker_id: str,
         error_message: str,
-    ) -> None:
+        retry_delay_seconds: int | None = None,
+    ) -> list[str]:
         if not event_ids:
-            return
+            return []
         now = datetime.now(UTC)
         m = self._model_cls
+        terminal_failed_ids: list[str] = []
         async for session in self._db_router.get_shard_session(shard_name, shard_dsn):
             next_status = case(
                 (m.attempts + 1 >= self._max_attempts, OutboxStatus.FAILED.value),
                 else_=OutboxStatus.PENDING.value,
+            )
+            if retry_delay_seconds is not None:
+                backoff_expr: object = now + timedelta(seconds=max(0, retry_delay_seconds))
+            elif self._base_retry_backoff_seconds <= 0:
+                backoff_expr = None
+            else:
+                capped_secs = func.least(
+                    self._max_retry_backoff_seconds,
+                    self._base_retry_backoff_seconds * func.power(2, m.attempts),
+                )
+                backoff_expr = func.now() + func.make_interval(0, 0, 0, 0, 0, 0, capped_secs)
+
+            next_retry_at: object = (
+                None
+                if backoff_expr is None
+                else case(
+                    (m.attempts + 1 >= self._max_attempts, None),
+                    else_=backoff_expr,
+                )
             )
             stmt = (
                 update(m)
@@ -179,6 +224,44 @@ class SqlAlchemyShardedOutboxRepository(
                 )
                 .values(
                     status=next_status,
+                    attempts=m.attempts + 1,
+                    error_reason=error_message,
+                    updated_at=now,
+                    lease_expires_at=next_retry_at,
+                    owner_token=None,
+                )
+                .returning(m.id, m.status)
+            )
+            res = await session.execute(stmt)
+            for row_id, row_status in res.all():
+                if row_status == OutboxStatus.FAILED.value:
+                    terminal_failed_ids.append(str(row_id))
+            await session.commit()
+        return terminal_failed_ids
+
+    async def mark_shard_dead_letter_batch(
+        self,
+        *,
+        shard_name: str,
+        shard_dsn: str,
+        event_ids: Sequence[str],
+        worker_id: str,
+        error_message: str,
+    ) -> None:
+        if not event_ids:
+            return
+        now = datetime.now(UTC)
+        m = self._model_cls
+        async for session in self._db_router.get_shard_session(shard_name, shard_dsn):
+            stmt = (
+                update(m)
+                .where(
+                    m.id.in_(list(event_ids)),
+                    m.status == OutboxStatus.PROCESSING.value,
+                    m.owner_token == worker_id,
+                )
+                .values(
+                    status=OutboxStatus.FAILED.value,
                     attempts=m.attempts + 1,
                     error_reason=error_message,
                     updated_at=now,
@@ -266,7 +349,7 @@ class SqlAlchemyShardedOutboxRepository(
                 while True:
                     now = datetime.now(UTC)
                     stale_cutoff = now - timedelta(milliseconds=lock_lease_ms)
-                    subq = (
+                    sweep_cte = (
                         select(m.id)
                         .where(
                             m.status == OutboxStatus.PROCESSING.value,
@@ -277,11 +360,11 @@ class SqlAlchemyShardedOutboxRepository(
                         )
                         .limit(self._SWEEP_BATCH_SIZE)
                         .with_for_update(skip_locked=True)
-                        .scalar_subquery()
+                        .cte("swept_shard_outbox_rows")
                     )
                     stmt = (
                         update(m)
-                        .where(m.id.in_(subq))
+                        .where(m.id == sweep_cte.c.id)
                         .values(
                             status=OutboxStatus.PENDING.value,
                             lease_expires_at=None,
@@ -315,7 +398,7 @@ class SqlAlchemyShardedOutboxRepository(
                 shard_deleted = 0
                 async for session in self._db_router.get_shard_session(shard_name, shard_dsn):
                     while True:
-                        subq = (
+                        delete_cte = (
                             select(m.id)
                             .where(
                                 m.status.in_(
@@ -324,9 +407,10 @@ class SqlAlchemyShardedOutboxRepository(
                                 m.created_at < cutoff,
                             )
                             .limit(self._SWEEP_BATCH_SIZE)
-                            .scalar_subquery()
+                            .with_for_update(skip_locked=True)
+                            .cte("deleted_shard_outbox_rows")
                         )
-                        stmt = delete(m).where(m.id.in_(subq)).returning(m.id)
+                        stmt = delete(m).where(m.id == delete_cte.c.id).returning(m.id)
                         res = await session.execute(stmt)
                         deleted = len(res.scalars().all())
                         shard_deleted += deleted

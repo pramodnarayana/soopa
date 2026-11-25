@@ -2,12 +2,6 @@
   "topics": [],
   "queues": [
     {
-      "name": "edi-config-sync-queue",
-      "fifo": true,
-      "dlq": true,
-      "env_var": "SQS_PROVISIONING_QUEUE_URL"
-    },
-    {
       "name": "edi-orchestrator",
       "fifo": false,
       "dlq": true,
@@ -35,15 +29,7 @@
       "max_receive_count": 3
     }
   ],
-  "subscriptions": [
-    {
-      "topic": "platform-events-topic",
-      "queue": "edi-config-sync-queue",
-      "filterPolicy": {
-        "event_type": [{ "prefix": "webhook." }, { "prefix": "edi." }]
-      }
-    }
-  ],
+  "subscriptions": [],
   "buckets": [],
   "secrets": [
     {

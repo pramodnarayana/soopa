@@ -17,18 +17,6 @@ from typing import Generic, Protocol, TypeVar
 TSource = TypeVar("TSource")
 
 
-class ProvisioningError(Exception):
-    """Base exception for provisioning errors."""
-
-
-class PermanentProvisioningError(ProvisioningError):
-    """An error that cannot be resolved by retrying (e.g., bad payload)."""
-
-
-class TransientProvisioningError(ProvisioningError):
-    """An error that might be resolved by retrying (e.g., network failure)."""
-
-
 class EntityDependencyProtocol(Protocol):
     """Read-only structural protocol for a declared FK dependency."""
 

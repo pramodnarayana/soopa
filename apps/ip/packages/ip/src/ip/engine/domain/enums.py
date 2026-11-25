@@ -120,7 +120,19 @@ class PipelineStage(StrEnum):
     DELIVER = "L5_DELIVER"
 
 
+class IpConfigEntityType(StrEnum):
+    """Canonical entity types streamed over IP Dynamic Watch."""
+
+    STITCH = "STITCH"
+    MAPPING_SPEC = "MAPPING_SPEC"
+
+
+IP_CONFIG_APP_ID = "ip"
+
+
 __all__ = [
+    "IP_CONFIG_APP_ID",
+    "IpConfigEntityType",
     "IpEventType",
     "IpIdPrefix",
     "IpJobName",

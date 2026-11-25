@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from collections import defaultdict
+from collections.abc import Sequence
 
 import structlog
-from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from outbox.domain.constants import BatchPublishDisposition
+from outbox.domain.models import BatchPublishOutcome
+from outbox.ports.outbox_publisher_port import (
+    OutboxPublisherPort,
+    StructuredOutboxPublisherPort,
+)
 from outbox.ports.outbox_relay_port import OutboxRelayPort
 from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
+from seedwork.events import EventEnvelope
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
@@ -32,6 +40,7 @@ class MultiShardOutboxDrainRelay(OutboxRelayPort):
         repository: ShardOutboxDrainPort,
         publisher: OutboxPublisherPort,
         *,
+        dlq_publisher: OutboxPublisherPort | None = None,
         batch_size: int = 500,
         shard_concurrency: int = 5,
         lock_lease_ms: int = 30000,
@@ -44,6 +53,7 @@ class MultiShardOutboxDrainRelay(OutboxRelayPort):
             raise ValueError("shard_concurrency must be strictly positive")
         self.repository = repository
         self.publisher = publisher
+        self.dlq_publisher = dlq_publisher
         self.batch_size = batch_size
         self.shard_concurrency = shard_concurrency
         self.lock_lease_ms = lock_lease_ms
@@ -76,6 +86,157 @@ class MultiShardOutboxDrainRelay(OutboxRelayPort):
             self._task = None
             logger.info("multi_shard_outbox_drain_relay_stopped", worker_id=self.worker_id)
 
+    async def _forward_to_dlq(self, shard_name: str, envelopes: list[EventEnvelope]) -> None:
+        if not envelopes or self.dlq_publisher is None:
+            return
+        try:
+            await self.dlq_publisher.publish_batch(envelopes)
+            logger.info(
+                "shard_outbox_events_forwarded_to_dlq",
+                shard_name=shard_name,
+                worker_id=self.worker_id,
+                count=len(envelopes),
+            )
+        except Exception as exc:
+            logger.exception(
+                "shard_outbox_dlq_forward_failed",
+                shard_name=shard_name,
+                worker_id=self.worker_id,
+                count=len(envelopes),
+                error=str(exc),
+            )
+
+    async def _apply_structured_outcomes(
+        self,
+        shard_name: str,
+        shard_dsn: str,
+        events: Sequence[EventEnvelope],
+        outcomes: Sequence[BatchPublishOutcome],
+    ) -> tuple[int, bool]:
+        events_by_id = {e.id: e for e in events}
+        completed_ids: list[str] = []
+        dlq_by_reason: dict[str, list[str]] = defaultdict(list)
+        nack_groups: dict[tuple[int | None, str], list[str]] = defaultdict(list)
+
+        for outcome in outcomes:
+            if outcome.disposition == BatchPublishDisposition.ACK:
+                completed_ids.append(outcome.event_id)
+            elif outcome.disposition == BatchPublishDisposition.DLQ:
+                reason = outcome.error_message or "Dead-lettered by consumer"
+                dlq_by_reason[reason].append(outcome.event_id)
+            else:
+                reason = outcome.error_message or "Event was not acknowledged by batch publisher"
+                nack_groups[(outcome.retry_delay_seconds, reason)].append(outcome.event_id)
+
+        if completed_ids:
+            await self.repository.mark_shard_completed_batch(
+                shard_name=shard_name,
+                shard_dsn=shard_dsn,
+                event_ids=completed_ids,
+                worker_id=self.worker_id,
+            )
+
+        terminal_envelopes: list[EventEnvelope] = []
+        for reason, event_ids in dlq_by_reason.items():
+            await self.repository.mark_shard_dead_letter_batch(
+                shard_name=shard_name,
+                shard_dsn=shard_dsn,
+                event_ids=event_ids,
+                worker_id=self.worker_id,
+                error_message=reason,
+            )
+            logger.error(
+                "shard_outbox_batch_dead_lettered",
+                shard_name=shard_name,
+                worker_id=self.worker_id,
+                dlq_count=len(event_ids),
+                reason=reason,
+            )
+            terminal_envelopes.extend(events_by_id[eid] for eid in event_ids if eid in events_by_id)
+
+        had_nacks = False
+        for (retry_delay, reason), event_ids in nack_groups.items():
+            had_nacks = True
+            exhausted_ids = await self.repository.mark_shard_failed_batch(
+                shard_name=shard_name,
+                shard_dsn=shard_dsn,
+                event_ids=event_ids,
+                worker_id=self.worker_id,
+                error_message=reason,
+                retry_delay_seconds=retry_delay,
+            )
+            logger.error(
+                "shard_outbox_batch_marked_failed",
+                shard_name=shard_name,
+                worker_id=self.worker_id,
+                failed_count=len(event_ids),
+                exhausted_count=len(exhausted_ids),
+                retry_delay_seconds=retry_delay,
+                reason=reason,
+            )
+            terminal_envelopes.extend(
+                events_by_id[eid] for eid in exhausted_ids if eid in events_by_id
+            )
+
+        if terminal_envelopes:
+            await self._forward_to_dlq(shard_name, terminal_envelopes)
+
+        return len(completed_ids), had_nacks
+
+    async def _dispatch_batch(
+        self, shard_name: str, events: list[EventEnvelope]
+    ) -> list[BatchPublishOutcome]:
+        if isinstance(self.publisher, StructuredOutboxPublisherPort):
+            try:
+                return await self.publisher.publish_batch_structured(events)
+            except Exception as exc:
+                logger.exception(
+                    "shard_outbox_batch_publish_failed",
+                    shard_name=shard_name,
+                    worker_id=self.worker_id,
+                    error=str(exc),
+                )
+                reason = str(exc) or type(exc).__name__
+                return [
+                    BatchPublishOutcome(
+                        event_id=e.id,
+                        disposition=BatchPublishDisposition.NACK,
+                        error_message=reason,
+                    )
+                    for e in events
+                ]
+
+        batch_failure_reason: str | None = None
+        try:
+            successful_ids = await self.publisher.publish_batch(events)
+        except Exception as exc:
+            logger.exception(
+                "shard_outbox_batch_publish_failed",
+                shard_name=shard_name,
+                worker_id=self.worker_id,
+                error=str(exc),
+            )
+            successful_ids = []
+            batch_failure_reason = str(exc) or type(exc).__name__
+
+        successful_set = set(successful_ids)
+        return [
+            BatchPublishOutcome(
+                event_id=e.id,
+                disposition=(
+                    BatchPublishDisposition.ACK
+                    if e.id in successful_set
+                    else BatchPublishDisposition.NACK
+                ),
+                error_message=(
+                    None
+                    if e.id in successful_set
+                    else (batch_failure_reason or "Event was not acknowledged by batch publisher")
+                ),
+            )
+            for e in events
+        ]
+
     async def drain_shard_until_empty(self, shard_name: str, shard_dsn: str) -> int:
         """Drains a single shard in a tight 0ms loop until no pending events remain."""
         total_published = 0
@@ -90,56 +251,21 @@ class MultiShardOutboxDrainRelay(OutboxRelayPort):
             if not events:
                 break
 
-            batch_failure_reason: str | None = None
-            try:
-                successful_ids = await self.publisher.publish_batch(events)
-            except Exception as exc:
-                logger.exception(
-                    "shard_outbox_batch_publish_failed",
-                    shard_name=shard_name,
-                    worker_id=self.worker_id,
-                    error=str(exc),
-                )
-                successful_ids = []
-                batch_failure_reason = str(exc) or type(exc).__name__
-
-            successful_set = set(successful_ids)
-            completed_ids = [e.id for e in events if e.id in successful_set]
-            failed_ids = [e.id for e in events if e.id not in successful_set]
-
-            if completed_ids:
-                await self.repository.mark_shard_completed_batch(
-                    shard_name=shard_name,
-                    shard_dsn=shard_dsn,
-                    event_ids=completed_ids,
-                    worker_id=self.worker_id,
-                )
-                total_published += len(completed_ids)
+            outcomes = await self._dispatch_batch(shard_name, events)
+            completed_count, had_nacks = await self._apply_structured_outcomes(
+                shard_name, shard_dsn, events, outcomes
+            )
+            if completed_count:
+                total_published += completed_count
                 logger.info(
                     "shard_outbox_batch_drained",
                     shard_name=shard_name,
                     worker_id=self.worker_id,
-                    completed_count=len(completed_ids),
+                    completed_count=completed_count,
                     total_drained_in_cycle=total_published,
                 )
 
-            if failed_ids:
-                reason = batch_failure_reason or "Event was not acknowledged by batch publisher"
-                await self.repository.mark_shard_failed_batch(
-                    shard_name=shard_name,
-                    shard_dsn=shard_dsn,
-                    event_ids=failed_ids,
-                    worker_id=self.worker_id,
-                    error_message=reason,
-                )
-                logger.error(
-                    "shard_outbox_batch_marked_failed",
-                    shard_name=shard_name,
-                    worker_id=self.worker_id,
-                    failed_count=len(failed_ids),
-                    reason=reason,
-                )
-                # Break tight loop on transport failure so we back off before retrying
+            if had_nacks:
                 break
 
             if not self.is_running and self._task is not None:

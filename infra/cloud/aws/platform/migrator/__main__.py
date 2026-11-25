@@ -10,6 +10,8 @@ import json
 
 import pulumi
 import pulumi_aws as aws
+from infra_seedwork.messaging import build_database_pubsub_env_vars
+from infra_seedwork.topology import load_topology
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-platform-migrator-"
@@ -26,12 +28,12 @@ platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
 zitadel_stack_ref = config.get("zitadel_stack") or f"organization/zitadel-infrastructure/{_env}"
 zitadel = pulumi.StackReference(zitadel_stack_ref)
-identity_stack_ref = config.get("identity_stack") or f"organization/identity/{_env}"
-identity = pulumi.StackReference(identity_stack_ref)
-notification_stack_ref = config.get("notification_stack") or f"organization/notification/{_env}"
-notification = pulumi.StackReference(notification_stack_ref)
-ucp_stack_ref = config.get("ucp_stack") or f"organization/ucp/{_env}"
-ucp = pulumi.StackReference(ucp_stack_ref)
+
+pubsub_env_vars = build_database_pubsub_env_vars(
+    load_topology(),
+    queue_filter={"identity-jobs", "notification-jobs", "ucp-jobs"},
+    topic_filter=set(),
+)
 
 # ── Infrastructure Inputs ─────────────────────────────────────────────────────
 private_subnets = [
@@ -50,9 +52,9 @@ identity_platform_org_id = zitadel.require_output("platform_org_id")
 identity_platform_admin_id = zitadel.require_output("platform_admin_id")
 identity_edi_project_id = zitadel.require_output("edi_project_id")
 
-identity_jobs_queue_url = identity.require_output("identity_jobs_queue_url")
-notification_jobs_queue_url = notification.require_output("notification_jobs_queue_url")
-ucp_jobs_queue_url = ucp.require_output("ucp_jobs_queue_url")
+identity_jobs_queue_url = pubsub_env_vars["SQS_IDENTITY_JOBS_QUEUE_URL"]
+notification_jobs_queue_url = pubsub_env_vars["SQS_NOTIFICATION_JOBS_QUEUE_URL"]
+ucp_jobs_queue_url = pubsub_env_vars["SQS_UCP_JOBS_QUEUE_URL"]
 
 _region = aws.get_region()
 _identity = aws.get_caller_identity()
@@ -98,6 +100,7 @@ migrator_task = aws.ecs.TaskDefinition(
                         "python -m platform_migrator migrate --domain platform && python -m platform_migrator seed --domain all",
                     ],
                     "environment": [
+                        {"name": "PUBSUB_TRANSPORT", "value": pubsub_env_vars["PUBSUB_TRANSPORT"]},
                         {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args[2]},
                         {"name": "IDENTITY_PLATFORM_ADMIN_ID", "value": args[3]},
                         {"name": "IDENTITY_EDI_PROJECT_ID", "value": args[4]},

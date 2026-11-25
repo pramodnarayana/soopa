@@ -11,6 +11,7 @@ import pulumi
 import pytest
 from infra_seedwork.messaging import (
     TopologyConfig,
+    build_database_pubsub_env_vars,
     merge_messaging_queue_arns,
     provision_from_topology,
     resolve_messaging_queue_arns,
@@ -18,6 +19,7 @@ from infra_seedwork.messaging import (
     sqs_arns_from_queue_env_vars,
     sqs_url_to_arn,
 )
+from infra_seedwork.topology import load_topology
 from pulumi.runtime import MockCallArgs, MockResourceArgs, Mocks, set_mocks
 from pulumi.runtime.settings import SETTINGS
 from pulumi.runtime.stack import run_pulumi_func
@@ -267,8 +269,87 @@ def test_resolve_and_merge_messaging_queue_arns_survives_pre_rollout_preview() -
     _run_pulumi_test(_verify)
 
 
-def test_compute_and_messaging_stacks_enforce_ssot_queue_arns_contract() -> None:
-    """Enforce zero hardcoded per-queue *_arn require_output calls across all compute stacks."""
+def test_build_database_pubsub_env_vars_maps_queues_dlqs_and_topics_with_filters() -> None:
+    """Verify cloud-agnostic PostgreSQL Pub/Sub URI builder respects filters and suffixes."""
+    topology: TopologyConfig = {
+        "topics": [
+            {
+                "name": "platform-events-topic",
+                "fifo": True,
+                "env_var": "SNS_PLATFORM_EVENTS_TOPIC_ARN",
+            },
+            {
+                "name": "ip-events-topic",
+                "fifo": True,
+                "env_var": "SNS_IP_EVENTS_TOPIC_ARN",
+            },
+        ],
+        "queues": [
+            {
+                "name": "notifications",
+                "fifo": True,
+                "dlq": True,
+                "env_var": "SQS_NOTIFICATION_QUEUE_URL",
+            },
+            {
+                "name": "edi-deliver",
+                "fifo": False,
+                "dlq": True,
+                "env_var": "SQS_DELIVER_QUEUE_URL",
+                "dlq_env_var": "SQS_DELIVER_DLQ_URL",
+            },
+        ],
+        "subscriptions": [],
+    }
+
+    full_env = build_database_pubsub_env_vars(topology)
+    assert full_env == {
+        "PUBSUB_TRANSPORT": "db",
+        "SQS_NOTIFICATION_QUEUE_URL": "db://notifications.fifo",
+        "SQS_DELIVER_QUEUE_URL": "db://edi-deliver",
+        "SQS_DELIVER_DLQ_URL": "db://edi-deliver-dlq",
+        "SNS_PLATFORM_EVENTS_TOPIC_ARN": "db://topic/platform-events-topic",
+        "SNS_IP_EVENTS_TOPIC_ARN": "db://topic/ip-events-topic",
+    }
+
+    filtered_env = build_database_pubsub_env_vars(
+        topology,
+        queue_filter={"notifications"},
+        topic_filter=set(),
+    )
+    assert filtered_env == {
+        "PUBSUB_TRANSPORT": "db",
+        "SQS_NOTIFICATION_QUEUE_URL": "db://notifications.fifo",
+    }
+
+
+def test_build_database_pubsub_env_vars_rejects_duplicate_env_vars() -> None:
+    """Fail fast when topology declares duplicate env_var keys."""
+    duplicate_topology: TopologyConfig = {
+        "topics": [],
+        "queues": [
+            {"name": "q1", "fifo": False, "env_var": "SQS_DUPLICATE_URL"},
+            {"name": "q2", "fifo": True, "env_var": "SQS_DUPLICATE_URL"},
+        ],
+    }
+    with pytest.raises(ValueError, match="Duplicate env_var 'SQS_DUPLICATE_URL'"):
+        build_database_pubsub_env_vars(duplicate_topology)
+
+
+def test_build_database_pubsub_env_vars_against_canonical_topology() -> None:
+    """Verify real infra/topology.json produces only db:// and db://topic/ URIs."""
+    env_vars = build_database_pubsub_env_vars(load_topology())
+    assert env_vars["PUBSUB_TRANSPORT"] == "db"
+    assert env_vars["SNS_PLATFORM_EVENTS_TOPIC_ARN"] == "db://topic/platform-events-topic"
+    assert env_vars["SQS_NOTIFICATION_QUEUE_URL"] == "db://notifications.fifo"
+    for key, value in env_vars.items():
+        if key == "PUBSUB_TRANSPORT":
+            continue
+        assert value.startswith("db://"), f"{key} must use db:// transport, got {value!r}"
+
+
+def test_compute_and_messaging_stacks_enforce_zero_aws_sqs_sns_contract() -> None:
+    """Enforce zero AWS SQS/SNS provisioning, IAM permissions, or messaging StackReferences."""
     messaging_stacks = [
         AWS_ROOT / "apps" / "ucp" / "messaging" / "__main__.py",
         AWS_ROOT / "apps" / "identity" / "messaging" / "__main__.py",
@@ -277,20 +358,39 @@ def test_compute_and_messaging_stacks_enforce_ssot_queue_arns_contract() -> None
     ]
     for stack_file in messaging_stacks:
         source = stack_file.read_text(encoding="utf-8")
-        assert 'pulumi.export("queue_arns", result.queue_arns)' in source, (
-            f"{stack_file} must export structured 'queue_arns' from TopologyOutput"
+        assert "provision_from_topology" not in source, (
+            f"{stack_file} must not provision AWS SQS/SNS resources via provision_from_topology"
         )
+        assert "aws.sqs." not in source and "aws.sns." not in source, (
+            f"{stack_file} must remain a zero-resource retired teardown stack"
+        )
+        assert "build_database_pubsub_env_vars" in source, (
+            f"{stack_file} must build db:// queue_env_vars from topology.json"
+        )
+        assert 'pulumi.export("queue_env_vars", queue_env_vars)' in source
+        assert 'pulumi.export("queue_arns", [])' in source
+
+    platform_source = (AWS_ROOT / "platform" / "__main__.py").read_text(encoding="utf-8")
+    assert "from event_bus import" not in platform_source
+    assert "provision_event_bus(" not in platform_source
+    assert 'platform_events_topic_uri = "db://topic/platform-events-topic"' in platform_source
 
     compute_stacks = [
         AWS_ROOT / "apps" / "ucp" / "workers" / "__main__.py",
         AWS_ROOT / "apps" / "edi" / "workers" / "__main__.py",
         AWS_ROOT / "apps" / "edi" / "as2" / "__main__.py",
         AWS_ROOT / "apps" / "api" / "__main__.py",
+        AWS_ROOT / "platform" / "migrator" / "__main__.py",
     ]
     for stack_file in compute_stacks:
         source = stack_file.read_text(encoding="utf-8")
-        assert "sqs:GetQueueUrl" not in source, (
-            f"{stack_file} must not grant sqs:GetQueueUrl (violates static QueueUrl injection)"
+        assert "build_database_pubsub_env_vars" in source, (
+            f"{stack_file} must inject PostgreSQL Pub/Sub URIs via build_database_pubsub_env_vars"
+        )
+        assert "sqs:" not in source, f"{stack_file} must not grant any sqs:* IAM permissions"
+        assert "sns:" not in source, f"{stack_file} must not grant any sns:* IAM permissions"
+        assert "-messaging/" not in source, (
+            f"{stack_file} must not depend on retired *-messaging StackReferences"
         )
         tree = ast.parse(source, filename=str(stack_file))
         for node in ast.walk(tree):
@@ -303,7 +403,33 @@ def test_compute_and_messaging_stacks_enforce_ssot_queue_arns_contract() -> None
                 and isinstance(node.args[0].value, str)
             ):
                 output_key = node.args[0].value
-                assert not (output_key.endswith("_queue_arn") or output_key.startswith("sqs_")), (
-                    f"{stack_file} calls require_output({output_key!r}); "
-                    "use resolve_messaging_queue_arns / merge_messaging_queue_arns instead"
-                )
+                assert not (
+                    output_key.endswith("_queue_arn")
+                    or output_key.startswith("sqs_")
+                    or output_key == "queue_env_vars"
+                    or output_key == "sns_platform_events_topic_arn"
+                ), f"{stack_file} must not call require_output({output_key!r}) for legacy SQS/SNS"
+
+
+def test_aws_compute_stacks_wire_dynamic_watch_base_url_and_secret_token() -> None:
+    """Enforce that AWS API & worker stacks inject CONFIG_SYNC_INTERNAL_TOKEN and CONFIG_WATCH_BASE_URL."""
+    platform_source = (AWS_ROOT / "platform" / "__main__.py").read_text(encoding="utf-8")
+    assert '"config_sync_internal_token"' in platform_source
+
+    for rel in (
+        "apps/api/__main__.py",
+        "apps/ucp/workers/__main__.py",
+        "apps/edi/workers/__main__.py",
+    ):
+        source = (AWS_ROOT / rel).read_text(encoding="utf-8")
+        assert '"CONFIG_SYNC_INTERNAL_TOKEN"' in source, (
+            f"{rel} must inject CONFIG_SYNC_INTERNAL_TOKEN"
+        )
+        assert ":config_sync_internal_token::" in source, (
+            f"{rel} must pull CONFIG_SYNC_INTERNAL_TOKEN from Secrets Manager"
+        )
+        assert '"ENV"' in source, f"{rel} must inject ENV alongside ENVIRONMENT"
+
+    for rel in ("apps/ucp/workers/__main__.py", "apps/edi/workers/__main__.py"):
+        source = (AWS_ROOT / rel).read_text(encoding="utf-8")
+        assert '"CONFIG_WATCH_BASE_URL"' in source, f"{rel} must inject CONFIG_WATCH_BASE_URL"

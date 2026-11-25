@@ -13,7 +13,6 @@ from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryP
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_relay_port import OutboxRelayPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from pubsub.adapters.aws.aws_sqs_consumer_manager import AwsSqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.ports.message_consumer_port import MessageConsumerPort
@@ -129,7 +128,7 @@ class IpCpJobsWorkerModule(LaunchableWorker):
         self.job_dispatcher = dispatcher
 
         if self._jobs_consumer is not None:
-            self.cp_jobs_manager = AwsSqsConsumerManager(
+            self.cp_jobs_manager = PubSubProvider.create_consumer_manager_for_consumer(
                 consumer=self._jobs_consumer,
                 handler=dispatcher.dispatch,
                 queue_name="ip-cp-jobs",
@@ -141,6 +140,10 @@ class IpCpJobsWorkerModule(LaunchableWorker):
                 handler=dispatcher.dispatch,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,
+                session_factory=(
+                    self.db_router.global_session_scope if self.db_router is not None else None
+                ),
+                database_url=settings.global_database_url,
             )
             self.cp_jobs_manager.start()
 

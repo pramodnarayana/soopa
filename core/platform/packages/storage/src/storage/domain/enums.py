@@ -30,3 +30,23 @@ class StorageTier(StrEnum):
     WARM = "warm"
     COLD = "cold"
     ARCHIVE = "archive"
+
+
+class StorageBackend(StrEnum):
+    """Supported storage backend drivers for PayloadStoragePort."""
+
+    S3 = "s3"
+    MINIO = "minio"
+    FILE = "file"
+    FILESYSTEM = "filesystem"
+    NFS = "nfs"
+    POSIX = "posix"
+
+    @property
+    def is_filesystem(self) -> bool:
+        return self in {
+            StorageBackend.FILE,
+            StorageBackend.FILESYSTEM,
+            StorageBackend.NFS,
+            StorageBackend.POSIX,
+        }

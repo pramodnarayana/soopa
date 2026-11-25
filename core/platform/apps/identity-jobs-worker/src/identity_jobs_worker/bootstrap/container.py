@@ -56,6 +56,8 @@ class WorkerContainer:
             destination_uri=self.sns_identity_events_topic_arn,
             region_name=self.aws_region,
             endpoint_url=self.aws_endpoint_url,
+            session_factory=self.session_factory,
+            database_url=self.database_url,
         )
         self._wire_scheduled_jobs(outbox_repo, outbox_repo, outbox_pub)
         self._wire_outbox_relay(outbox_repo, outbox_pub)
@@ -107,6 +109,8 @@ class WorkerContainer:
             handler=job_dispatcher.dispatch,
             region_name=self.aws_region,
             endpoint_url=self.aws_endpoint_url,
+            session_factory=self.session_factory,
+            database_url=self.database_url,
         )
 
     async def dispose(self) -> None:

@@ -1,12 +1,14 @@
 import pytest
-
-pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
+from database.models.config_sync import ConfigChangelogEntry
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
 class EventAggregate:
@@ -34,12 +36,33 @@ async def test_drain_events_prefers_explicit_event_idempotency_key(
     )
 
     await repository._drain_events(aggregate)
+    await db_session.flush()
 
-    # The outbox event is added to the session
-    added_objects = list(db_session.new)
-    assert len(added_objects) == 1
-
-    outbox_event = added_objects[0]
+    outbox_rows = list(
+        (
+            await db_session.execute(
+                select(ControlPlaneOutbox).where(ControlPlaneOutbox.idempotency_key == "request-1")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(outbox_rows) == 1
+    outbox_event = outbox_rows[0]
     assert isinstance(outbox_event, ControlPlaneOutbox)
     assert outbox_event.idempotency_key == "request-1"
+
+    changelog_rows = list(
+        (
+            await db_session.execute(
+                select(ConfigChangelogEntry).where(
+                    ConfigChangelogEntry.tenant_id == "tenant-1",
+                    ConfigChangelogEntry.entity_id == "partner-1",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(changelog_rows) == 1
     assert aggregate.domain_events == []

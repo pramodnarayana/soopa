@@ -8,6 +8,7 @@ authors = [
 dependencies = [
     "aioboto3>=13.1.0",
     "seedwork",
+    "structlog>=24.0.0",
 ]
 requires-python = ">=3.12"
 

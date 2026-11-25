@@ -1,0 +1,24 @@
+[project]
+name = "config-sync"
+version = "0.1.0"
+description = "Universal Queue-Free HTTPS Dynamic Watch Engine for Control-to-Data-Plane Config Sync"
+requires-python = ">=3.12"
+dependencies = [
+    "database",
+    "seedwork",
+    "asyncpg>=0.29.0",
+    "fastapi>=0.115.0",
+    "httpx>=0.27.0",
+    "structlog>=24.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/config_sync"]
+
+[tool.uv.sources]
+database = { workspace = true }
+seedwork = { workspace = true }

@@ -40,7 +40,22 @@ class ShardOutboxDrainPort(Protocol):
         event_ids: Sequence[str],
         worker_id: str,
         error_message: str,
-    ) -> None: ...
+        retry_delay_seconds: int | None = None,
+    ) -> list[str]:
+        """Marks claimed events as retryable (with backoff) or terminal FAILED; returns terminal FAILED IDs."""
+        ...
+
+    async def mark_shard_dead_letter_batch(
+        self,
+        *,
+        shard_name: str,
+        shard_dsn: str,
+        event_ids: Sequence[str],
+        worker_id: str,
+        error_message: str,
+    ) -> None:
+        """Immediately transitions claimed events to terminal FAILED status without further retries."""
+        ...
 
 
 __all__ = ["ShardOutboxDrainPort"]

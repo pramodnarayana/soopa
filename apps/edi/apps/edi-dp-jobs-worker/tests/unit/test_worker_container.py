@@ -87,7 +87,41 @@ async def _noop_handler(msg: JsonDict) -> None:
     pass
 
 
-def test_worker_container_wire() -> None:
+def test_worker_container_wire_direct_db_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SQS_ORCHESTRATOR_QUEUE_URL", "db://edi-orchestrator")
+    monkeypatch.setenv("SQS_COMPUTE_QUEUE_URL", "db://edi-compute")
+    monkeypatch.setenv("SQS_DELIVER_QUEUE_URL", "db://edi-deliver")
+    monkeypatch.setenv("SQS_DATA_PLANE_JOBS_QUEUE_URL", "db://edi-data-plane-jobs.fifo")
+    router = FakeDatabaseRouter()
+    settings = WorkerSettings()
+    container = WorkerContainer(settings=settings, db_router=router)
+
+    container.wire()
+
+    assert container.dp_outbox_relay is None
+    assert container.dp_manager is not None
+    assert container.dp_sweeper_job_handler is not None
+    assert container.dp_cleanup_job_handler is not None
+    assert container.retention_cleanup_job_handler is not None
+
+
+def test_worker_container_wire_sqs_relay_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "SQS_ORCHESTRATOR_QUEUE_URL",
+        "https://sqs.us-east-1.amazonaws.com/000000000000/edi-orchestrator.fifo",
+    )
+    monkeypatch.setenv(
+        "SQS_COMPUTE_QUEUE_URL",
+        "https://sqs.us-east-1.amazonaws.com/000000000000/edi-compute.fifo",
+    )
+    monkeypatch.setenv(
+        "SQS_DELIVER_QUEUE_URL",
+        "https://sqs.us-east-1.amazonaws.com/000000000000/edi-deliver.fifo",
+    )
+    monkeypatch.setenv(
+        "SQS_DATA_PLANE_JOBS_QUEUE_URL",
+        "https://sqs.us-east-1.amazonaws.com/000000000000/edi-data-plane-jobs.fifo",
+    )
     router = FakeDatabaseRouter()
     settings = WorkerSettings()
     container = WorkerContainer(settings=settings, db_router=router)

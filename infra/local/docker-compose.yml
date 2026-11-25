@@ -18,6 +18,7 @@ services:
 
   localstack:
     image: localstack/localstack:3.5.0
+    profiles: ["aws-compat"]
     ports:
       - "4566:4566"
     environment:

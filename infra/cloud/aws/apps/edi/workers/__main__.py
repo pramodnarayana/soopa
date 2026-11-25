@@ -7,13 +7,13 @@ Provisions the EDI Data Plane (DP) ECS Fargate workers:
   - edi-delivery-worker
   - edi-dp-jobs-worker
 
-Environment variable injection is driven entirely by the ``queue_env_vars``
-export from the edi/messaging stack. No manual per-queue env-var mapping
-exists here — adding a queue to topology.json is sufficient.
+Environment variable injection is driven directly from ``topology.json`` via
+``build_database_pubsub_env_vars`` (PostgreSQL Pub/Sub ``db://`` URIs — zero AWS SQS/SNS).
+No manual per-queue env-var mapping exists here — adding a queue to topology.json is sufficient.
 
 Tier 6: High-volume data plane processing. Deployed on code push.
 Separate from CP workers to allow independent horizontal scaling.
-Depends on: edi/messaging (queue_env_vars), platform (cluster, ECR), data (DB).
+Depends on: edi/storage (S3 payloads bucket), platform (cluster, ECR), data (DB).
 """
 
 import json
@@ -23,7 +23,8 @@ import pulumi_aws as aws
 from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
 from infra_seedwork.env import queue_env_vars_to_ecs_format
-from infra_seedwork.messaging import resolve_messaging_queue_arns
+from infra_seedwork.messaging import build_database_pubsub_env_vars
+from infra_seedwork.topology import load_topology
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-edi-"
@@ -35,13 +36,11 @@ edi_environment = config.get("edi_environment") or "T"
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
-messaging_stack_ref = config.get("messaging_stack") or f"organization/edi-messaging/{_env}"
 storage_stack_ref = config.get("storage_stack") or f"organization/edi-storage/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
-messaging = pulumi.StackReference(messaging_stack_ref)
 storage = pulumi.StackReference(storage_stack_ref)
 obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
 obs = pulumi.StackReference(obs_stack_ref)
@@ -57,6 +56,7 @@ ecs_cluster_arn = platform.require_output("ecs_cluster_arn")
 ecr_repository_url = platform.require_output("ecr_repository_url")
 staging_domain = platform.require_output("staging_domain")
 namespace_name = platform.require_output("cloud_map_namespace_name")
+app_defaults_secret_arn = platform.require_output("app_defaults_secret_arn")
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
@@ -65,8 +65,11 @@ global_db_secret_arn = data.require_output("global_db_secret_arn")
 
 as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
 as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
-sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
-queue_arns = resolve_messaging_queue_arns(messaging)
+_topology = load_topology()
+_edi_queues = {
+    name for q in _topology.get("queues", []) if (name := q.get("name")) and name.startswith("edi-")
+}
+pubsub_env_vars = build_database_pubsub_env_vars(_topology, queue_filter=_edi_queues)
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
@@ -107,7 +110,11 @@ aws.iam.RolePolicy(
     f"{_prefix}dp-workers-ecs-exec-role-policy",
     role=execution_role.id,
     policy=pulumi.Output.all(
-        edi_shard_db_secret_arn, global_db_secret_arn, obs_user_arn, obs_pass_arn
+        edi_shard_db_secret_arn,
+        global_db_secret_arn,
+        app_defaults_secret_arn,
+        obs_user_arn,
+        obs_pass_arn,
     ).apply(
         lambda args: json.dumps(
             {
@@ -116,7 +123,9 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [arn for arn in [args[0], args[1], args[2], args[3]] if arn],
+                        "Resource": [
+                            arn for arn in [args[0], args[1], args[2], args[3], args[4]] if arn
+                        ],
                     },
                     {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
                 ],
@@ -149,16 +158,12 @@ app_mount_points = [{"sourceVolume": "secrets", "containerPath": "/mnt/secrets",
 app_depends_on = [{"containerName": "edi-secrets-sidecar", "condition": "START"}]
 volumes = [aws.ecs.TaskDefinitionVolumeArgs(name="secrets")]
 
-# ── Environment Variables — Topology-Driven ───────────────────────────────────
-# The edi/messaging stack exports ``queue_env_vars``: a structured map of
-# { "SQS_ORCHESTRATOR_QUEUE_URL": "https://...", ... } for every EDI queue
-# and topic that declares an env_var in topology.json.
-#
-# We merge this with static platform env vars and convert to ECS format.
-# No per-queue manual mapping ever needed here.
+# ── Environment Variables — Topology-Driven (PostgreSQL Pub/Sub) ──────────────
+# Built directly from topology.json via build_database_pubsub_env_vars():
+# { "PUBSUB_TRANSPORT": "db", "SQS_ORCHESTRATOR_QUEUE_URL": "db://...", ... }
+# No AWS SQS/SNS resources or per-queue manual mappings are needed here.
 
 dp_worker_env_vars: pulumi.Output = pulumi.Output.all(
-    queue_env_vars=messaging.require_output("queue_env_vars"),
     global_db_host=global_db_endpoint,
     edi_db_host=edi_shard_db_endpoint,
     public_base_url=pulumi.Output.concat("https://api.", staging_domain),
@@ -169,13 +174,15 @@ dp_worker_env_vars: pulumi.Output = pulumi.Output.all(
     s3_bucket=as2_payloads_bucket_name,
 ).apply(
     lambda args: queue_env_vars_to_ecs_format(
-        queue_env_vars=args["queue_env_vars"],
+        queue_env_vars=pubsub_env_vars,
         static_vars={
+            "ENV": _env,
             "ENVIRONMENT": _env,
             "EDI_ENVIRONMENT": edi_environment,
             "GLOBAL_DB_HOST": args["global_db_host"],
             "EDI_DB_HOST": args["edi_db_host"],
             "PUBLIC_BASE_URL": args["public_base_url"],
+            "CONFIG_WATCH_BASE_URL": args["public_base_url"],
             "IDENTITY_ISSUER": args["identity_issuer"],
             "IDENTITY_API_URL": args["identity_api_url"],
             "S3_BUCKET": args["s3_bucket"],
@@ -216,6 +223,12 @@ provision_fargate_service(
             "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
         },
+        {
+            "name": "CONFIG_SYNC_INTERNAL_TOKEN",
+            "valueFrom": pulumi.Output.concat(
+                app_defaults_secret_arn, ":config_sync_internal_token::"
+            ),
+        },
     ],
     extra_task_policy_statements=[
         {
@@ -226,11 +239,6 @@ provision_fargate_service(
         {"Effect": "Allow", "Action": ["secretsmanager:ListSecrets"], "Resource": "*"},
         {
             "Effect": "Allow",
-            "Action": ["sns:Publish"],
-            "Resource": [sns_platform_events_topic_arn],
-        },
-        {
-            "Effect": "Allow",
             "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
             "Resource": pulumi.Output.concat(as2_payloads_bucket_arn, "/*"),
         },
@@ -238,17 +246,6 @@ provision_fargate_service(
             "Effect": "Allow",
             "Action": ["s3:ListBucket"],
             "Resource": as2_payloads_bucket_arn,
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "sqs:SendMessage",
-                "sqs:ReceiveMessage",
-                "sqs:DeleteMessage",
-                "sqs:GetQueueAttributes",
-                "sqs:ChangeMessageVisibility",
-            ],
-            "Resource": queue_arns,
         },
     ],
     autoscaling_config=autoscaling_config,

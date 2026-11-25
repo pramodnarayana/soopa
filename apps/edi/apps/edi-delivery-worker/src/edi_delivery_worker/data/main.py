@@ -22,8 +22,14 @@ from edi.application.use_cases.pipeline.fail_delivery_use_case import (
     FailDeliveryCommand,
     FailDeliveryUseCase,
 )
-from edi.bootstrap.container import create_edi_tenant_uow_provider
-from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
+from edi.bootstrap.container import (
+    create_edi_dp_filtered_outbox_drain_repo,
+    create_edi_tenant_uow_provider,
+)
+from edi.bootstrap.publisher_factory import (
+    EDI_DELIVERY_EVENT_TYPES,
+    create_edi_pipeline_publisher,
+)
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
@@ -37,6 +43,7 @@ from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from observability import ObservabilityProvider
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from pubsub.domain.enums import is_database_queue_uri
 from pubsub.enums import ConsumerAction
 from pubsub.exceptions import ConsumerTerminalError
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
@@ -81,7 +88,7 @@ def _require_str_field(payload: Mapping[str, object], field_name: str, context: 
 
 
 def _build_delivery_route_registry(
-    publisher: OutboxPublisherPort,
+    publisher: OutboxPublisherPort | None,
     http_delivery: HttpDeliveryPort,
     sftp_delivery: SftpDeliveryPort,
     as2_delivery: AS2DeliveryPort,
@@ -139,7 +146,7 @@ def _build_delivery_route_registry(
 
 
 def _build_dlq_route_registry(
-    publisher: OutboxPublisherPort,
+    publisher: OutboxPublisherPort | None,
 ) -> EdiDataPlaneRouteRegistry:
     registry = EdiDataPlaneRouteRegistry()
 
@@ -182,13 +189,22 @@ def _build_dispatcher_from_registry(
     return EdiDataPlaneEventDispatcher(callback=route_event)
 
 
-def _create_default_publisher(settings: WorkerSettings) -> OutboxPublisherPort:
+def _create_default_publisher(
+    settings: WorkerSettings,
+    *,
+    db_router: DatabaseRouter | None = None,
+) -> OutboxPublisherPort | None:
+    deliver_uri = settings.sqs.deliver_queue_url or "db://edi-deliver"
+    if is_database_queue_uri(deliver_uri):
+        return None
     return create_edi_pipeline_publisher(
         compute_queue_url=settings.sqs.compute_queue_url,
         orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
         deliver_queue_url=settings.sqs.deliver_queue_url,
         region_name=settings.aws.resolved_region,
         endpoint_url=settings.aws.endpoint_url,
+        session_factory=db_router.global_session_scope if db_router is not None else None,
+        database_url=settings.database.global_url,
     )
 
 
@@ -318,11 +334,35 @@ class EdiDeliveryWorkerModule(_BaseEdiDeliveryWorkerModule):
             crypto_service=crypto_service,
         )
 
+        deliver_uri = settings.sqs.deliver_queue_url or "db://edi-deliver"
+        is_db_deliver = is_database_queue_uri(deliver_uri)
+        deliver_shard_repo = (
+            create_edi_dp_filtered_outbox_drain_repo(
+                db_router=self.db_router,
+                event_types=EDI_DELIVERY_EVENT_TYPES,
+            )
+            if is_db_deliver
+            else None
+        )
+        dlq_publisher = (
+            PubSubProvider.create_outbox_publisher(
+                destination_uri=settings.sqs.deliver_dlq_url,
+                region_name=settings.aws.resolved_region,
+                endpoint_url=aws_endpoint,
+                session_factory=self.db_router.global_session_scope,
+                database_url=settings.database.global_url,
+            )
+            if is_db_deliver and settings.sqs.deliver_dlq_url
+            else None
+        )
+
         self.deliver_manager = PubSubProvider.create_consumer_manager(
-            source_uri=settings.sqs.deliver_queue_url,
+            source_uri=deliver_uri,
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
+            shard_drain_repo=deliver_shard_repo,
+            dlq_publisher=dlq_publisher,
         )
         self.deliver_manager.start()
 
@@ -356,6 +396,8 @@ class EdiDeliveryDlqWorkerModule(_BaseEdiDeliveryWorkerModule):
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
+            session_factory=self.db_router.global_session_scope,
+            database_url=settings.database.global_url,
         )
         self.deliver_manager.start()
 

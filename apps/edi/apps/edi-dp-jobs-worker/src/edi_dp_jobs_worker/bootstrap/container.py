@@ -9,11 +9,16 @@ from outbox.adapters.outbound.sqlalchemy_sharded_outbox_repository import (
     SqlAlchemyShardedOutboxRepository,
 )
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
-from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from outbox.application.outbox_sweeper_use_case import (
+    LeaseOnlyOutboxSweeperUseCase,
+    OutboxSweeperPort,
+    OutboxSweeperUseCase,
+)
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_relay_port import OutboxRelayPort
 from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
+from pubsub.domain.enums import is_database_queue_uri
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 from seedwork.domain.types import JsonDict
@@ -75,16 +80,27 @@ class WorkerContainer:
             min_pending_age_seconds=60,
         )
 
-        publisher = create_edi_pipeline_publisher(
-            compute_queue_url=self.settings.sqs.compute_queue_url,
-            orchestrator_queue_url=self.settings.sqs.orchestrator_queue_url,
-            deliver_queue_url=self.settings.sqs.deliver_queue_url,
-            region_name=self.settings.aws.resolved_region,
-            endpoint_url=self.settings.aws.endpoint_url,
-        )
+        if is_database_queue_uri(self.settings.sqs.orchestrator_queue_url):
+            logger.info("edi_dp_outbox_relay_skipped_direct_single_queue_mode")
+            sweeper_strategy: OutboxSweeperPort = LeaseOnlyOutboxSweeperUseCase(
+                repository=sharded_sweeper_repo,
+                lock_lease_ms=30000,
+            )
+        else:
+            publisher = create_edi_pipeline_publisher(
+                compute_queue_url=self.settings.sqs.compute_queue_url,
+                orchestrator_queue_url=self.settings.sqs.orchestrator_queue_url,
+                deliver_queue_url=self.settings.sqs.deliver_queue_url,
+                region_name=self.settings.aws.resolved_region,
+                endpoint_url=self.settings.aws.endpoint_url,
+            )
+            self._wire_outbox_relay(sharded_drain_repo, publisher)
+            sweeper_strategy = OutboxSweeperUseCase(
+                repository=sharded_sweeper_repo,
+                publisher=publisher,
+            )
 
-        self._wire_outbox_relay(sharded_drain_repo, publisher)
-        self._wire_scheduled_jobs(sharded_sweeper_repo, publisher)
+        self._wire_scheduled_jobs(sharded_sweeper_repo, sweeper_strategy)
         self._wire_jobs_consumers()
 
     def _wire_outbox_relay(
@@ -103,7 +119,7 @@ class WorkerContainer:
     def _wire_scheduled_jobs(
         self,
         sharded_outbox_repo: SqlAlchemyShardedOutboxRepository[DataPlaneOutbox],
-        publisher: OutboxPublisherPort,
+        sweeper_strategy: OutboxSweeperPort,
     ) -> None:
         self.dp_cleanup_job_handler = EdiDataPlaneOutboxCleanupJobHandler(
             OutboxCleanerUseCase(sharded_outbox_repo)
@@ -116,9 +132,7 @@ class WorkerContainer:
             EdiDataRetentionCleanupUseCase(retention_cleanup_repo)
         )
 
-        self.dp_sweeper_job_handler = EdiDataPlaneOutboxSweeperJobHandler(
-            OutboxSweeperUseCase(repository=sharded_outbox_repo, publisher=publisher)
-        )
+        self.dp_sweeper_job_handler = EdiDataPlaneOutboxSweeperJobHandler(sweeper_strategy)
 
     def _wire_jobs_consumers(self) -> None:
         dp_dispatcher = MessageDispatcher(dispatch_key=DispatchKey.JOB_NAME.value)
@@ -146,6 +160,8 @@ class WorkerContainer:
             handler=dp_dispatcher.dispatch,
             region_name=self.settings.aws.resolved_region,
             endpoint_url=self.settings.aws.endpoint_url,
+            session_factory=self.db_router.global_session_scope,
+            database_url=self.settings.database.global_url,
         )
 
     async def start(self) -> None:

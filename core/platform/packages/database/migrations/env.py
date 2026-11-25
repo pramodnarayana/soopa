@@ -5,11 +5,11 @@ from pathlib import Path
 
 from alembic import context
 from dotenv import load_dotenv
-from sqlalchemy import pool, text
+from sqlalchemy import Table, pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-import database.models  # noqa: F401
+import database.models  # noqa: F401 - Registers all ORM tables on GlobalRegistry.metadata for Alembic
 from database.models.core import GlobalRegistry
 from database.utils import normalize_to_asyncpg
 
@@ -77,18 +77,22 @@ def do_run_migrations(connection: Connection) -> None:
                 "identity",
                 "notifications",
                 "scheduling",
+                "pubsub",
+                "config_sync",
                 "observability",
             ]
         return True
 
     def include_object(object, name, type_, reflected, compare_to):
         if type_ == "table":
-            return getattr(object, "schema", None) in [
+            return isinstance(object, Table) and object.schema in [
                 None,
                 "ucp",
                 "identity",
                 "notifications",
                 "scheduling",
+                "pubsub",
+                "config_sync",
                 "observability",
             ]
         return True
@@ -124,6 +128,7 @@ async def run_async_migrations() -> None:
         await connection.execute(text("CREATE SCHEMA IF NOT EXISTS identity;"))
         await connection.execute(text("CREATE SCHEMA IF NOT EXISTS notifications;"))
         await connection.execute(text("CREATE SCHEMA IF NOT EXISTS scheduling;"))
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS pubsub;"))
         await connection.execute(text("CREATE SCHEMA IF NOT EXISTS observability;"))
 
         await connection.run_sync(do_run_migrations)

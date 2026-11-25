@@ -86,7 +86,7 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
     ) -> bool:
         before = len(self._stitches)
         self._stitches = [
-            s for s in self._stitches if not (s.id == stitch_id and s.tenant_id in (tenant_id, "*"))
+            s for s in self._stitches if not (s.id == stitch_id and s.tenant_id == tenant_id)
         ]
         return len(self._stitches) < before
 

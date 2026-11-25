@@ -64,7 +64,13 @@ class MessageDispatcher:
 
     def _resolve_routing_key(self, payload_msg: JsonDict | EventEnvelope) -> JsonValue:
         if not isinstance(payload_msg, EventEnvelope):
-            return payload_msg.get(self.dispatch_key, "")
+            direct = payload_msg.get(self.dispatch_key)
+            if direct:
+                return direct
+            nested = payload_msg.get("payload")
+            if isinstance(nested, dict):
+                return nested.get(self.dispatch_key, "")
+            return ""
 
         if self.dispatch_key == DispatchKey.EVENT_TYPE.value:
             return payload_msg.event_type

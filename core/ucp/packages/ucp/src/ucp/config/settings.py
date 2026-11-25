@@ -27,7 +27,6 @@ class SqsSettings(CleanBaseSettings):
 class AppSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
-    use_localstack: bool = Field(validation_alias="USE_LOCALSTACK", default=False)
     outbox_sweeper_batch_limit: int = Field(
         validation_alias="OUTBOX_SWEEPER_BATCH_LIMIT", default=100
     )

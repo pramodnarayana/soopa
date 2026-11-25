@@ -22,6 +22,7 @@ dependencies = [
     "security",
     "outbox",
     "pubsub",
+    "config-sync",
     "shttp",
     "sftp",
     "notification",
@@ -53,6 +54,7 @@ observability = { workspace = true }
 security = { workspace = true }
 outbox = { workspace = true }
 pubsub = { workspace = true }
+config-sync = { workspace = true }
 shttp = { workspace = true }
 sftp = { workspace = true }
 notification = { workspace = true }
@@ -77,8 +79,9 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+timeout = 60
 testpaths = ["tests"]
-pythonpath = ["src", "tests", "../../../../core/platform/packages/orchestration/src", "../../../../core/platform/packages/strace/src", "../../../../core/platform/packages/identity/src", "../../../../core/platform/packages/webhooks/src", "../../../../core/platform/packages/storage/src", "../../../../core/platform/packages/replay/src"]
+pythonpath = ["src", "tests", "../../../../core/platform/packages/orchestration/src", "../../../../core/platform/packages/strace/src", "../../../../core/platform/packages/identity/src", "../../../../core/platform/packages/webhooks/src", "../../../../core/platform/packages/storage/src", "../../../../core/platform/packages/replay/src", "../../../../core/platform/packages/config-sync/src"]
 addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "integration: narrow integration tests against live PostgreSQL, S3, SFTP, and HTTP",

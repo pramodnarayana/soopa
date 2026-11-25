@@ -1,29 +1,22 @@
-import os
+"""Pytest fixtures for EDI Dynamic Watch Config Sync Worker tests."""
 
+from __future__ import annotations
+
+import os
+from collections.abc import AsyncGenerator
+
+import pytest
+from database.provider import get_async_engine
+from database.router import DatabaseRouterPort
+from database.testing import TransactionalTestRouter, get_test_shard_url_async
 from dotenv import load_dotenv
 
 load_dotenv()
 
-import pytest
-
 
 @pytest.fixture
-def sqs_endpoint() -> str:
-
-    return os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
-
-
-from collections.abc import AsyncGenerator
-
-from database.provider import get_async_engine
-from database.router import DatabaseRouterPort
-from database.testing import TransactionalTestRouter, get_test_shard_url_async
-
-
-@pytest.fixture
-async def test_db_router() -> "AsyncGenerator[DatabaseRouterPort, None]":
+async def test_db_router() -> AsyncGenerator[DatabaseRouterPort]:
     global_url = os.environ["DATABASE_URL"]
-
     shard_url = await get_test_shard_url_async(global_url, app_slug="edi")
 
     global_engine = get_async_engine(global_url)

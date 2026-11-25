@@ -5,6 +5,8 @@ import structlog
 from database.provider import DatabaseProvider
 from database.utils import normalize_to_asyncpg
 from identity.adapters.outbound.zitadel.machine_key_auth import ZitadelMachineTokenProvider
+from pubsub.domain.dtos import TopicSubscriptionSpec
+from pubsub.domain.enums import PlatformTopicName
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 from shttp import HttpClient
@@ -108,6 +110,14 @@ class WorkerContainer:
             handler=self.events_dispatcher.dispatch_raw,
             region_name=self.settings.aws_region,
             endpoint_url=self.settings.aws_endpoint_url,
+            session_factory=self.db_provider.session,
+            database_url=self.database_url,
+            subscribe_topics=(
+                TopicSubscriptionSpec(
+                    topic_name=PlatformTopicName.PLATFORM_EVENTS.value,
+                    event_types=("tenant.", "app.", "user."),
+                ),
+            ),
         )
 
     async def dispose(self) -> None:

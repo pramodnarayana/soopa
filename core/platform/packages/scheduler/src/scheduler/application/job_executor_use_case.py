@@ -48,9 +48,6 @@ class JobExecutorUseCase:
 
     async def _execute_job(self, job: ScheduledJob, worker_id: str) -> None:
         try:
-            if not job.target_queue:
-                raise ValueError(f"No target_queue defined for job {job.name}")
-
             logger.info(
                 "scheduler_job_dispatching",
                 job_name=job.name,

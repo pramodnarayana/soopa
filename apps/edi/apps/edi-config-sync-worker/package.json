@@ -13,8 +13,7 @@
   },
   "devDependencies": {
     "@soopa/api": "workspace:*",
-    "@soopa/outbox": "workspace:*",
-    "@soopa/pubsub": "workspace:*",
-    "@soopa/seedwork": "workspace:*"
+    "@soopa/seedwork": "workspace:*",
+    "@soopa/config-sync": "workspace:*"
   }
 }

@@ -9,6 +9,8 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonDict
 
+from pubsub.enums import ConsumerAction
+
 
 class NackCallbackPort(Protocol):
     """Protocol for broker negative-acknowledgment with optional redelivery delay."""
@@ -30,6 +32,24 @@ class PublishResultDTO:
     partition: int | None = None
     offset: int | None = None
     timestamp_utc: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+
+@dataclass(frozen=True, slots=True)
+class TopicSubscriptionSpec:
+    """Declarative consumer-side subscription to a logical pub/sub topic."""
+
+    topic_name: str
+    event_types: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EventDispatchOutcome:
+    """First-class per-event consumer disposition returned by DirectBatchDispatcherPort."""
+
+    event_id: str
+    action: ConsumerAction
+    error_message: str | None = None
+    retry_delay_seconds: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

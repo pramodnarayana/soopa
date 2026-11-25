@@ -1,47 +1,23 @@
 """
-Application Layer (Layer 3) - Identity Bounded Context: Messaging
-=================================================================
-Provisions all Identity-specific messaging infrastructure:
-- Identity SQS Queues (identity-events, identity-jobs)
+Application Layer (Layer 3) - Identity Bounded Context: Messaging (Retired)
+===========================================================================
+AWS SQS/SNS resources for Identity have been retired in favor of PostgreSQL Pub/Sub
+(`pubsub.platform_queue_messages` & `pubsub.platform_topic_subscriptions`).
 
-Driven entirely by topology.json. Exports a single structured ``queue_env_vars``
-map so compute stacks can do zero-touch environment variable injection.
+Retaining this zero-resource stack ensures the next `pulumi up` cleanly destroys
+any legacy SQS queues, DLQs, and SNS subscriptions in AWS state without orphaning them.
 """
 
 import pulumi
-from infra_seedwork.messaging import provision_from_topology
+from infra_seedwork.messaging import build_database_pubsub_env_vars
 from infra_seedwork.topology import load_topology
 
-_env = pulumi.get_stack()
-_prefix = f"{_env}-identity-"
-_TAGS = {"ManagedBy": "pulumi", "Component": "identity", "Environment": _env}
-
-# ── Stack References ──────────────────────────────────────────────────────────
-config = pulumi.Config()
-platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
-platform = pulumi.StackReference(platform_stack_ref)
-
-# ── Topology ──────────────────────────────────────────────────────────────────
 topology = load_topology()
-
-platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
-
-result = provision_from_topology(
+queue_env_vars = build_database_pubsub_env_vars(
     topology=topology,
-    prefix=_prefix,
-    tags=_TAGS,
     queue_filter={"identity-events", "identity-jobs"},
-    topic_filter=set(),  # Identity owns no topics
-    external_topic_arns={"platform-events-topic": platform_events_topic_arn},
+    topic_filter=set(),
 )
 
-# ── Exports ───────────────────────────────────────────────────────────────────
-pulumi.export("queue_env_vars", result.queue_env_vars)
-pulumi.export("queue_arns", result.queue_arns)
-
-# Granular exports retained for migrator compatibility.
-pulumi.export("identity_events_topic_arn", platform_events_topic_arn)
-pulumi.export("identity_events_queue_url", result.queues["identity-events"].url)
-pulumi.export("identity_events_queue_arn", result.queues["identity-events"].arn)
-pulumi.export("identity_jobs_queue_url", result.queues["identity-jobs"].url)
-pulumi.export("identity_jobs_queue_arn", result.queues["identity-jobs"].arn)
+pulumi.export("queue_env_vars", queue_env_vars)
+pulumi.export("queue_arns", [])

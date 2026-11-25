@@ -7,14 +7,18 @@ import asyncio
 import structlog
 from database.router import DatabaseRouter, DatabaseRouterPort
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
-from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from outbox.application.outbox_sweeper_use_case import (
+    LeaseOnlyOutboxSweeperUseCase,
+    OutboxSweeperPort,
+    OutboxSweeperUseCase,
+)
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_relay_port import OutboxRelayPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
-from pubsub.adapters.aws.aws_sqs_consumer_manager import AwsSqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
+from pubsub.domain.enums import is_database_queue_uri
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from pubsub.provider import PubSubProvider
@@ -27,8 +31,13 @@ from strace.application.clean_trace_retention_use_case import (
 from strace.ports.retention_repository_port import TraceRetentionRepositoryPort
 
 from ip.engine.bootstrap.container import (
+    create_ip_dp_filtered_outbox_drain_repo,
     create_ip_dp_outbox_components,
     create_ip_dp_outbox_relay,
+)
+from ip.engine.bootstrap.publisher_factory import (
+    IP_DELIVERY_DP_EVENT_TYPES,
+    IP_ORCHESTRATOR_DP_EVENT_TYPES,
 )
 from ip.engine.domain.enums import IpJobName
 from ip.engine.settings import IpEngineSettings, get_ip_engine_settings
@@ -60,7 +69,7 @@ class IpDpJobsWorkerModule(LaunchableWorker):
         self.trace_retention_repo: TraceRetentionRepositoryPort | None = None
         self.dp_publisher: OutboxPublisherPort | None = publisher
         self.dp_outbox_relay: OutboxRelayPort | None = None
-        self.dp_sweeper: OutboxSweeperUseCase | None = None
+        self.dp_sweeper: OutboxSweeperPort | None = None
         self.dp_cleaner: OutboxCleanerUseCase | None = None
         self.trace_retention_use_case: CleanTraceRetentionUseCase | None = None
         self.job_dispatcher: MessageDispatcher | None = None
@@ -90,17 +99,35 @@ class IpDpJobsWorkerModule(LaunchableWorker):
             publisher=self._injected_publisher,
         )
 
+        if is_database_queue_uri(self.settings.ip_orchestrator_realtime_queue_url):
+            # Internal DP pipeline events are drained directly by orchestrator & delivery workers.
+            # Bridge only cross-boundary shard events (e.g. `notification.requested`, `ip-events-topic`).
+            relay_repo = create_ip_dp_filtered_outbox_drain_repo(
+                db_router=self.db_router,
+                exclude_event_types=(
+                    *IP_ORCHESTRATOR_DP_EVENT_TYPES,
+                    *IP_DELIVERY_DP_EVENT_TYPES,
+                ),
+            )
+            self.dp_sweeper = LeaseOnlyOutboxSweeperUseCase(
+                repository=self.dp_outbox_repo,
+                lock_lease_ms=self.settings.outbox_lock_lease_ms,
+            )
+            logger.info("ip_dp_outbox_relay_cross_boundary_bridge_mode")
+        else:
+            relay_repo = self.dp_drain_repo
+            self.dp_sweeper = OutboxSweeperUseCase(
+                repository=self.dp_outbox_repo,
+                publisher=self.dp_publisher,
+                lock_lease_ms=self.settings.outbox_lock_lease_ms,
+                max_concurrent_events=self.settings.outbox_batch_size,
+            )
+
         self.dp_outbox_relay = create_ip_dp_outbox_relay(
-            repository=self.dp_drain_repo,
+            repository=relay_repo,
             publisher=self.dp_publisher,
             batch_size=self.settings.outbox_batch_size,
             lock_lease_ms=self.settings.outbox_lock_lease_ms,
-        )
-        self.dp_sweeper = OutboxSweeperUseCase(
-            repository=self.dp_outbox_repo,
-            publisher=self.dp_publisher,
-            lock_lease_ms=self.settings.outbox_lock_lease_ms,
-            max_concurrent_events=self.settings.outbox_batch_size,
         )
         retention_days = max(1, self.settings.outbox_retention_hours // 24)
         self.dp_cleaner = OutboxCleanerUseCase(
@@ -146,7 +173,7 @@ class IpDpJobsWorkerModule(LaunchableWorker):
         self.job_dispatcher = dispatcher
 
         if self._jobs_consumer is not None:
-            self.dp_jobs_manager = AwsSqsConsumerManager(
+            self.dp_jobs_manager = PubSubProvider.create_consumer_manager_for_consumer(
                 consumer=self._jobs_consumer,
                 handler=dispatcher.dispatch,
                 queue_name="ip-dp-jobs",
@@ -158,6 +185,10 @@ class IpDpJobsWorkerModule(LaunchableWorker):
                 handler=dispatcher.dispatch,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,
+                session_factory=(
+                    self.db_router.global_session_scope if self.db_router is not None else None
+                ),
+                database_url=settings.global_database_url,
             )
             self.dp_jobs_manager.start()
 

@@ -8,7 +8,6 @@ import hashlib
 import json
 
 import structlog
-from botocore.exceptions import BotoCoreError, ClientError
 from ip.engine.domain.constants import (
     DEFAULT_INLINE_THRESHOLD_BYTES,
     RESERVED_RAW_BYTES_KEY,
@@ -20,6 +19,7 @@ from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStorageResultDTO,
 )
 from seedwork.domain.types import JsonValue
+from storage.domain.exceptions import StorageError
 from storage.ports.payload_storage_port import PayloadStoragePort
 from storage.provider import StorageProvider
 
@@ -159,9 +159,9 @@ class TieredStorageAdapter(TieredStoragePort):
                 data = await self._storage_client.download(result.s3_key)
                 if data is not None:
                     return Result.ok(data)
-            except (ClientError, BotoCoreError, OSError) as exc:
+            except (StorageError, OSError) as exc:
                 logger.error(
-                    "tiered_storage_s3_download_failed",
+                    "tiered_storage_offload_download_failed",
                     s3_key=result.s3_key,
                     error=str(exc),
                 )

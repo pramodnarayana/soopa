@@ -523,6 +523,7 @@ async def test_ip_worker_modules_manage_background_task_lifecycles(
         ip_delivery_bulk_queue_url="",
         ip_control_plane_jobs_queue_url="",
         ip_data_plane_jobs_queue_url="",
+        config_watch_base_url="http://localhost:8081",
         stitch_tick_interval_sec=0.2,
     )
     rt_bus = InMemoryEventBus()
@@ -535,8 +536,23 @@ async def test_ip_worker_modules_manage_background_task_lifecycles(
         bulk_consumer=bulk_bus,
     )
     await orch_module.start()
-    assert len(orch_module.get_background_tasks()) == 3
-    await orch_module.stop()
+    try:
+        assert len(orch_module.get_background_tasks()) == 4
+    finally:
+        await orch_module.stop()
+
+    settings_without_watch = settings.model_copy(update={"config_watch_base_url": ""})
+    orch_module_without_watch = IpOrchestratorWorkerModule(
+        settings=settings_without_watch,
+        db_router=transactional_router,
+        realtime_consumer=rt_bus,
+        bulk_consumer=bulk_bus,
+    )
+    await orch_module_without_watch.start()
+    try:
+        assert len(orch_module_without_watch.get_background_tasks()) == 3
+    finally:
+        await orch_module_without_watch.stop()
 
     deliv_module = IpDeliveryWorkerModule(
         settings=settings,
@@ -545,8 +561,10 @@ async def test_ip_worker_modules_manage_background_task_lifecycles(
         bulk_consumer=bulk_bus,
     )
     await deliv_module.start()
-    assert len(deliv_module.get_background_tasks()) == 2
-    await deliv_module.stop()
+    try:
+        assert len(deliv_module.get_background_tasks()) == 2
+    finally:
+        await deliv_module.stop()
 
     dp_jobs_module = IpDpJobsWorkerModule(
         settings=settings,
@@ -555,8 +573,10 @@ async def test_ip_worker_modules_manage_background_task_lifecycles(
         jobs_consumer=rt_bus,
     )
     await dp_jobs_module.start()
-    assert len(dp_jobs_module.get_background_tasks()) == 2
-    await dp_jobs_module.stop()
+    try:
+        assert len(dp_jobs_module.get_background_tasks()) == 2
+    finally:
+        await dp_jobs_module.stop()
 
     cp_jobs_module = IpCpJobsWorkerModule(
         settings=settings,
@@ -565,5 +585,170 @@ async def test_ip_worker_modules_manage_background_task_lifecycles(
         jobs_consumer=rt_bus,
     )
     await cp_jobs_module.start()
-    assert len(cp_jobs_module.get_background_tasks()) == 2
-    await cp_jobs_module.stop()
+    try:
+        assert len(cp_jobs_module.get_background_tasks()) == 2
+    finally:
+        await cp_jobs_module.stop()
+
+
+@pytest.mark.asyncio
+async def test_sharded_outbox_exclude_filter_skips_excluded_events(
+    seeded_ip_tenant: str,
+    tenant_session: TenantSession,
+    transactional_router: TransactionalTestRouter,
+) -> None:
+    """Verify cross-boundary exclude_event_types skips excluded internal pipeline events."""
+    now = datetime.now(UTC)
+    internal_evt = IpDataPlaneOutboxRecord(
+        id="dp_internal_1",
+        tenant_id=seeded_ip_tenant,
+        idempotency_key="idem_dp_internal_1",
+        event_type=IpEventType.INBOUND_RECORD_CREATED.value,
+        lane=EventProcessingLane.REALTIME.value,
+        payload={"record_ids": ["r1"]},
+        status=OutboxStatus.PENDING.value,
+        created_at=now,
+        updated_at=now,
+    )
+    notif_evt = IpDataPlaneOutboxRecord(
+        id="dp_notif_bridge_1",
+        tenant_id=seeded_ip_tenant,
+        idempotency_key="idem_dp_notif_bridge_1",
+        event_type="notification.requested",
+        lane=EventProcessingLane.REALTIME.value,
+        payload={"template_id": "alert"},
+        status=OutboxStatus.PENDING.value,
+        created_at=now,
+        updated_at=now,
+    )
+    tenant_session.add_all([internal_evt, notif_evt])
+    await tenant_session.flush()
+
+    bridge_repo = SqlAlchemyShardedOutboxRepository(
+        transactional_router,
+        app_slug="ip",
+        model_cls=IpDataPlaneOutboxRecord,
+        source=IpOutboxSource.DATA_PLANE.value,
+        exclude_event_types=(IpEventType.INBOUND_RECORD_CREATED.value,),
+    )
+    shard_name, shard_dsn = (await bridge_repo.list_shards())[0]
+
+    claimed = await bridge_repo.claim_shard_events(
+        shard_name=shard_name,
+        shard_dsn=shard_dsn,
+        worker_id="w_bridge",
+        limit=10,
+        lock_lease_ms=30000,
+    )
+    claimed_ids = {e.id for e in claimed}
+    assert "dp_notif_bridge_1" in claimed_ids
+    assert "dp_internal_1" not in claimed_ids
+
+
+@pytest.mark.asyncio
+async def test_sharded_outbox_retry_backoff_defers_reclaim(
+    seeded_ip_tenant: str,
+    tenant_session: TenantSession,
+    transactional_router: TransactionalTestRouter,
+) -> None:
+    """Verify failed sharded outbox events honor retry backoff before re-claim."""
+    now = datetime.now(UTC)
+    notif_evt = IpDataPlaneOutboxRecord(
+        id="dp_notif_backoff_1",
+        tenant_id=seeded_ip_tenant,
+        idempotency_key="idem_dp_notif_backoff_1",
+        event_type="notification.requested",
+        lane=EventProcessingLane.REALTIME.value,
+        payload={"template_id": "alert"},
+        status=OutboxStatus.PENDING.value,
+        created_at=now,
+        updated_at=now,
+    )
+    tenant_session.add(notif_evt)
+    await tenant_session.flush()
+
+    bridge_repo = SqlAlchemyShardedOutboxRepository(
+        transactional_router,
+        app_slug="ip",
+        model_cls=IpDataPlaneOutboxRecord,
+        source=IpOutboxSource.DATA_PLANE.value,
+        max_attempts=2,
+        base_retry_backoff_seconds=30,
+    )
+    shard_name, shard_dsn = (await bridge_repo.list_shards())[0]
+
+    claimed = await bridge_repo.claim_shard_events(
+        shard_name=shard_name,
+        shard_dsn=shard_dsn,
+        worker_id="w_bridge",
+        limit=10,
+        lock_lease_ms=30000,
+    )
+    assert "dp_notif_backoff_1" in {e.id for e in claimed}
+
+    exhausted = await bridge_repo.mark_shard_failed_batch(
+        shard_name=shard_name,
+        shard_dsn=shard_dsn,
+        event_ids=["dp_notif_backoff_1"],
+        worker_id="w_bridge",
+        error_message="Transient error",
+        retry_delay_seconds=60,
+    )
+    assert exhausted == []
+    reclaimed_during_backoff = await bridge_repo.claim_shard_events(
+        shard_name=shard_name,
+        shard_dsn=shard_dsn,
+        worker_id="w_bridge",
+        limit=10,
+        lock_lease_ms=30000,
+    )
+    assert "dp_notif_backoff_1" not in {e.id for e in reclaimed_during_backoff}
+
+
+@pytest.mark.asyncio
+async def test_sharded_outbox_dead_letter_marks_failed(
+    seeded_ip_tenant: str,
+    tenant_session: TenantSession,
+    transactional_router: TransactionalTestRouter,
+) -> None:
+    """Verify terminal dead-lettering marks the sharded outbox row FAILED with error_reason."""
+    now = datetime.now(UTC)
+    dlq_evt = IpDataPlaneOutboxRecord(
+        id="dp_dlq_1",
+        tenant_id=seeded_ip_tenant,
+        idempotency_key="idem_dp_dlq_1",
+        event_type="notification.requested",
+        lane=EventProcessingLane.REALTIME.value,
+        payload={"template_id": "bad"},
+        status=OutboxStatus.PENDING.value,
+        created_at=now,
+        updated_at=now,
+    )
+    tenant_session.add(dlq_evt)
+    await tenant_session.flush()
+
+    bridge_repo = SqlAlchemyShardedOutboxRepository(
+        transactional_router,
+        app_slug="ip",
+        model_cls=IpDataPlaneOutboxRecord,
+        source=IpOutboxSource.DATA_PLANE.value,
+    )
+    shard_name, shard_dsn = (await bridge_repo.list_shards())[0]
+
+    await bridge_repo.claim_shard_events(
+        shard_name=shard_name,
+        shard_dsn=shard_dsn,
+        worker_id="w_bridge",
+        limit=10,
+        lock_lease_ms=30000,
+    )
+    await bridge_repo.mark_shard_dead_letter_batch(
+        shard_name=shard_name,
+        shard_dsn=shard_dsn,
+        event_ids=["dp_dlq_1"],
+        worker_id="w_bridge",
+        error_message="Poison payload",
+    )
+    await tenant_session.refresh(dlq_evt)
+    assert dlq_evt.status == OutboxStatus.FAILED.value
+    assert dlq_evt.error_reason == "Poison payload"
