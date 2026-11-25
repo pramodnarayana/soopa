@@ -24,7 +24,7 @@ from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase, IpTenantBase
 from orchestration.adapters.outbound.database.models import WorkflowBase
-from secret_store import AwsSecretsManagerAdapter
+from secret_store import SecretStoreBackend, SecretStorePort, SecretStoreProvider
 from seedwork import generate_id
 from sharding.domain.constants import DatabaseShardStatus
 from sqlalchemy import text
@@ -205,9 +205,13 @@ async def app(db_session_factory):
     Returns the real Unified API shell with the patched database sessions.
     """
     with tempfile.TemporaryDirectory() as temp_secrets_dir:
+        secret_store = SecretStoreProvider.get_secret_store(
+            secrets_mount_path=temp_secrets_dir,
+            backend=SecretStoreBackend.FILE,
+        )
 
-        async def override_get_secret_store():
-            return AwsSecretsManagerAdapter(secrets_mount_path=temp_secrets_dir)
+        async def override_get_secret_store() -> SecretStorePort:
+            return secret_store
 
         prev_provider = getattr(_app.state, "db_provider", None)
         prev_router = getattr(_app.state, "db_router", None)

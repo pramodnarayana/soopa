@@ -52,12 +52,13 @@ async def test_shell_lifespan_awaits_identity_drift_guard_on_startup(
         await session.commit()
 
     with tempfile.TemporaryDirectory() as temp_secrets_dir:
+        secret_store = SecretStoreProvider.get_secret_store(
+            secrets_mount_path=temp_secrets_dir,
+            backend=SecretStoreBackend.FILE,
+        )
 
         async def override_get_secret_store() -> SecretStorePort:
-            return SecretStoreProvider.get_secret_store(
-                secrets_mount_path=temp_secrets_dir,
-                backend=SecretStoreBackend.FILE,
-            )
+            return secret_store
 
         prev_provider = _app.state.db_provider
         prev_router = _app.state.db_router
