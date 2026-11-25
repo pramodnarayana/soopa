@@ -6,6 +6,7 @@ and TieredStorageAdapter backed by real FileSystemPayloadStorage on local disk.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ from ip.engine.application.use_cases.ingress.ingest_record_use_case import (
 )
 from ip.engine.bootstrap.container import create_ip_data_plane_uow
 from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.ports.outbound.tiered_storage_port import TieredStorageResultDTO
 from seedwork import generate_id
 from seedwork.domain.types import JsonDict
 from storage.adapters.file_system_storage_adapter import FileSystemPayloadStorage
@@ -99,3 +101,15 @@ async def test_ingest_record_storage_offload(
     assert saved.request_body is None
     assert saved.request_s3_key is not None
     assert saved.request_s3_key.startswith("file://")
+
+    retrieved = await tiered_storage.retrieve(
+        TieredStorageResultDTO(
+            is_inlined=False,
+            raw_payload=None,
+            s3_key=saved.request_s3_key,
+            payload_size_bytes=result.payload_size_bytes,
+            payload_sha256=saved.request_sha256,
+        )
+    )
+    assert retrieved.is_ok is True
+    assert json.loads(retrieved.value.decode("utf-8")) == large_dict

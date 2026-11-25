@@ -1,12 +1,16 @@
 import asyncio
-import json
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
+from database.models.pubsub import PlatformQueueMessage
+from database.models.scheduling import ScheduledJob
 from database.provider import get_async_engine
+from outbox.domain.constants import OutboxStatus
+from scheduler.domain.constants import JobStatus
 from seedwork import generate_random_hex
-from sqlalchemy import text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, async_sessionmaker
 
 from scheduler_worker.bootstrap.container import Container
@@ -52,66 +56,66 @@ async def db_session_factory(
     yield factory
 
 
-@pytest_asyncio.fixture(autouse=True, scope="function")
-async def clear_jobs_table(db_connection: AsyncConnection) -> None:
-    """Ensure each test starts with an empty jobs table, avoiding conflicts with seed data."""
-    await db_connection.execute(text("DELETE FROM scheduling.scheduled_jobs"))
-
-
 async def test_scheduler_worker_claims_and_dispatches_job(
-    db_connection: AsyncConnection,
     db_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    # 1. Setup DB Data (A pending job targeting a sovereign PostgreSQL queue)
-    job_id = f"job_{generate_random_hex(6)}"
-    queue_name = f"edi-data-plane-jobs-{generate_random_hex(6)}.fifo"
+    # 1. Seed an isolated namespace-scoped pending job via SQLAlchemy ORM (zero raw SQL / DELETE)
+    suffix = generate_random_hex(6)
+    job_id = f"job_{suffix}"
+    test_namespace = f"scheduler_integration_{suffix}"
+    queue_name = f"edi-data-plane-jobs-{suffix}.fifo"
     queue_uri = f"db://{queue_name}"
 
-    await db_connection.execute(
-        text("""
-            INSERT INTO scheduling.scheduled_jobs
-            (id, name, payload, status, next_run_at, target_queue, retry_count, max_retries, created_at, updated_at)
-            VALUES (:id, :name, :payload, 'PENDING', NOW(), :queue, 0, 3, NOW(), NOW())
-        """),
-        {
-            "id": job_id,
-            "name": "Integration_Test_Job",
-            "payload": json.dumps({"test_key": "test_value"}),
-            "queue": queue_name,
-        },
-    )
-    await db_connection.execute(text("SAVEPOINT seed_complete"))
+    async with db_session_factory() as session:
+        session.add(
+            ScheduledJob(
+                id=job_id,
+                name="Integration_Test_Job",
+                payload={"test_key": "test_value"},
+                status=JobStatus.PENDING.value,
+                next_run_at=datetime.now(UTC),
+                target_queue=queue_name,
+                app_namespace=test_namespace,
+                retry_count=0,
+                max_retries=3,
+            )
+        )
+        await session.commit()
 
-    # 2. Setup Container with real PostgreSQL DatabaseJobDispatcher
+    # 2. Wire Container with real PostgreSQL DatabaseJobDispatcher scoped to test_namespace
     container = Container()
+    container.config.active_namespaces.from_value([test_namespace])
     container.session_factory.override(db_session_factory)
     container.job_dispatcher.add_kwargs(queue_url_map={queue_name: queue_uri})
     container.wire()
 
-    # 3. Execute the Claim Use Case (mimics what the Poller does)
+    # 3. Execute the Claim Use Case (mimics what the SchedulerPoller does)
     claim_use_case = container.claim_use_case()
     await claim_use_case.execute(worker_id="test_worker_1", limit=1, lock_lease_ms=1000)
 
-    # 4. Verify Job Status & Sovereign PostgreSQL Queue Row
+    # 4. Verify Job Status & Sovereign PostgreSQL Queue Row via SQLAlchemy ORM
     async with db_session_factory() as session:
-        res = await session.execute(
-            text("SELECT status FROM scheduling.scheduled_jobs WHERE id = :id"), {"id": job_id}
-        )
-        status = res.scalar_one_or_none()
-        assert status == "COMPLETED", f"Expected job status COMPLETED, got {status}"
+        job_row = (
+            await session.execute(select(ScheduledJob).where(ScheduledJob.id == job_id))
+        ).scalar_one_or_none()
+        assert job_row is not None
+        assert job_row.status == JobStatus.COMPLETED.value
 
-        queue_res = await session.execute(
-            text("""
-                SELECT payload, status
-                FROM pubsub.platform_queue_messages
-                WHERE queue_name = :queue_name
-            """),
-            {"queue_name": queue_name},
+        queue_rows = list(
+            (
+                await session.execute(
+                    select(PlatformQueueMessage).where(
+                        PlatformQueueMessage.queue_name == queue_name
+                    )
+                )
+            )
+            .scalars()
+            .all()
         )
-        rows = queue_res.fetchall()
 
-    assert len(rows) == 1, "No message was dispatched to pubsub.platform_queue_messages"
-    body, msg_status = rows[0]
-    assert msg_status == "PENDING"
-    assert body["job_id"] == job_id
-    assert body["payload"]["test_key"] == "test_value"
+    assert len(queue_rows) == 1, "No message was dispatched to pubsub.platform_queue_messages"
+    msg = queue_rows[0]
+    assert msg.status == OutboxStatus.PENDING.value
+    assert msg.payload["job_id"] == job_id
+    assert isinstance(msg.payload["payload"], dict)
+    assert msg.payload["payload"]["test_key"] == "test_value"

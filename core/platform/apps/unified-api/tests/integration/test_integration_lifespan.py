@@ -11,7 +11,7 @@ from database.models.identity import Role as RoleORM
 from database.models.identity import Tenant as TenantORM
 from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from secret_store import AwsSecretsManagerAdapter
+from secret_store import SecretStoreBackend, SecretStorePort, SecretStoreProvider
 from seedwork import generate_id
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -53,8 +53,11 @@ async def test_shell_lifespan_awaits_identity_drift_guard_on_startup(
 
     with tempfile.TemporaryDirectory() as temp_secrets_dir:
 
-        async def override_get_secret_store() -> AwsSecretsManagerAdapter:
-            return AwsSecretsManagerAdapter(secrets_mount_path=temp_secrets_dir)
+        async def override_get_secret_store() -> SecretStorePort:
+            return SecretStoreProvider.get_secret_store(
+                secrets_mount_path=temp_secrets_dir,
+                backend=SecretStoreBackend.FILE,
+            )
 
         prev_provider = _app.state.db_provider
         prev_router = _app.state.db_router

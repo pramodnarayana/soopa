@@ -1,6 +1,6 @@
 import asyncio
 import os
-from typing import Any
+from collections.abc import AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
@@ -8,7 +8,7 @@ from database.provider import get_async_engine
 from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from unified_api.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
 from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
 from unified_api.main import app
@@ -52,17 +52,15 @@ async def _fake_tenant_member_guard(request: Request) -> IdentityContext:
 
 
 @pytest.fixture(scope="session")
-def event_loop() -> "Any":
+def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_engine() -> "Any":
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/global_db"
-    )
+async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
+    db_url = os.environ["DATABASE_URL"]
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
 
@@ -72,7 +70,7 @@ async def db_engine() -> "Any":
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session(db_engine) -> "Any":
+async def db_session(db_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     connection = await db_engine.connect()
     transaction = await connection.begin()
 
@@ -91,8 +89,11 @@ async def db_session(db_engine) -> "Any":
 
 
 @pytest_asyncio.fixture(scope="function")
-async def client(db_session, monkeypatch) -> "Any":
-    async def override_get_db_session(request: Request) -> "Any":
+async def client(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncGenerator[AsyncClient, None]:
+    async def override_get_db_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
     old_overrides = dict(app.dependency_overrides)
