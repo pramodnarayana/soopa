@@ -92,7 +92,6 @@ async def _drain_and_find_tenant_event(
 async def test_app_subscription_flow(
     db_session: AsyncSession,
     uow: SqlAlchemyUcpUnitOfWork,
-    localstack_container: dict[str, str],
 ) -> None:
     @asynccontextmanager
     async def session_scope() -> AsyncIterator[AsyncSession]:

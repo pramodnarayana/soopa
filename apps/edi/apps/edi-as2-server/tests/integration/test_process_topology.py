@@ -2,11 +2,12 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import requests
 
 
-def test_as2_server_starts_and_serves_health_without_sqs_vars():
+def test_as2_server_starts_and_serves_health_without_sqs_vars(tmp_path: Path):
     """
     [Local Dev Parity] Process Topology Smoke Test
 
@@ -26,12 +27,9 @@ def test_as2_server_starts_and_serves_health_without_sqs_vars():
     # 2. Inject ONLY the strict subset required by the AS2 Server process
     env["DATABASE_URL"] = "postgresql+asyncpg://postgres:password@localhost/test"
 
-    # S3 Vars required by Aioboto3PayloadStorage
-    env["S3_BUCKET"] = "dummy-bucket"
-    env["S3_REGION"] = "us-east-1"
-    env["S3_ENDPOINT_URL"] = "http://localhost:4566"
-    env["S3_ACCESS_KEY_ID"] = "dummy"
-    env["S3_SECRET_ACCESS_KEY"] = "dummy"
+    # Sovereign FileSystem payload storage (zero AWS/LocalStack required)
+    env["STORAGE_BACKEND"] = "file"
+    env["STORAGE_FILE_PATH"] = str(tmp_path)
 
     # Optional OTel suppression to keep logs clean during test
     env["OTEL_ENABLED"] = "false"

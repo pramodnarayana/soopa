@@ -1,16 +1,13 @@
 import asyncio
 import json
-import os
-from collections.abc import AsyncGenerator, Generator
-from typing import Any
+from collections.abc import AsyncGenerator
 
-import boto3
 import pytest
 import pytest_asyncio
 from database.provider import get_async_engine
 from seedwork import generate_random_hex
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession, async_sessionmaker
 
 from scheduler_worker.bootstrap.container import Container
 from scheduler_worker.config.settings import get_settings
@@ -25,37 +22,8 @@ def event_loop() -> AsyncGenerator[asyncio.AbstractEventLoop]:
     loop.close()
 
 
-@pytest.fixture(scope="session")
-def localstack_container() -> Generator[dict[str, str]]:
-    endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
-
-    sqs_client = boto3.client(
-        "sqs",
-        endpoint_url=endpoint_url,
-        region_name="us-east-1",
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-    )
-
-    unique_suffix = generate_random_hex(6)
-    queue_name = f"edi-data-plane-jobs-{unique_suffix}.fifo"
-
-    queue = sqs_client.create_queue(
-        QueueName=queue_name,
-        Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
-    )
-
-    yield {
-        "endpoint_url": endpoint_url,
-        "sqs_queue_url": queue["QueueUrl"],
-        "sqs_queue_name": queue_name,
-    }
-
-    sqs_client.delete_queue(QueueUrl=queue["QueueUrl"])
-
-
 @pytest_asyncio.fixture(scope="function")
-async def db_engine() -> AsyncGenerator[Any]:
+async def db_engine() -> AsyncGenerator[AsyncEngine]:
     db_url = get_settings().database_url
     engine = get_async_engine(db_url)
     yield engine
@@ -63,7 +31,7 @@ async def db_engine() -> AsyncGenerator[Any]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_connection(db_engine) -> AsyncGenerator[Any]:
+async def db_connection(db_engine: AsyncEngine) -> AsyncGenerator[AsyncConnection]:
     connection = await db_engine.connect()
     transaction = await connection.begin()
     yield connection
@@ -72,7 +40,9 @@ async def db_connection(db_engine) -> AsyncGenerator[Any]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session_factory(db_connection) -> AsyncGenerator[async_sessionmaker]:
+async def db_session_factory(
+    db_connection: AsyncConnection,
+) -> AsyncGenerator[async_sessionmaker[AsyncSession]]:
     factory = async_sessionmaker(
         bind=db_connection,
         expire_on_commit=False,
@@ -83,20 +53,19 @@ async def db_session_factory(db_connection) -> AsyncGenerator[async_sessionmaker
 
 
 @pytest_asyncio.fixture(autouse=True, scope="function")
-async def clear_jobs_table(db_connection: Any) -> None:
+async def clear_jobs_table(db_connection: AsyncConnection) -> None:
     """Ensure each test starts with an empty jobs table, avoiding conflicts with seed data."""
     await db_connection.execute(text("DELETE FROM scheduling.scheduled_jobs"))
 
 
 async def test_scheduler_worker_claims_and_dispatches_job(
-    db_connection: Any,
-    db_session_factory: async_sessionmaker,
-    localstack_container: dict[str, str],
-    monkeypatch: pytest.MonkeyPatch,
+    db_connection: AsyncConnection,
+    db_session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    # 1. Setup DB Data (A pending job)
+    # 1. Setup DB Data (A pending job targeting a sovereign PostgreSQL queue)
     job_id = f"job_{generate_random_hex(6)}"
-    queue_name = localstack_container["sqs_queue_name"]
+    queue_name = f"edi-data-plane-jobs-{generate_random_hex(6)}.fifo"
+    queue_uri = f"db://{queue_name}"
 
     await db_connection.execute(
         text("""
@@ -113,47 +82,36 @@ async def test_scheduler_worker_claims_and_dispatches_job(
     )
     await db_connection.execute(text("SAVEPOINT seed_complete"))
 
-    # 2. Setup Container
-
+    # 2. Setup Container with real PostgreSQL DatabaseJobDispatcher
     container = Container()
     container.session_factory.override(db_session_factory)
-
-    # We dynamically fake the JobDispatcher map inside the provider because SQSJobDispatcher is strict about queue urls
-    container.job_dispatcher.add_kwargs(
-        queue_url_map={queue_name: localstack_container["sqs_queue_url"]}
-    )
-
+    container.job_dispatcher.add_kwargs(queue_url_map={queue_name: queue_uri})
     container.wire()
 
     # 3. Execute the Claim Use Case (mimics what the Poller does)
     claim_use_case = container.claim_use_case()
     await claim_use_case.execute(worker_id="test_worker_1", limit=1, lock_lease_ms=1000)
 
-    # 4. Verify DB Status
+    # 4. Verify Job Status & Sovereign PostgreSQL Queue Row
     async with db_session_factory() as session:
         res = await session.execute(
             text("SELECT status FROM scheduling.scheduled_jobs WHERE id = :id"), {"id": job_id}
         )
         status = res.scalar_one_or_none()
+        assert status == "COMPLETED", f"Expected job status COMPLETED, got {status}"
 
-    assert status == "COMPLETED", f"Expected job status COMPLETED, got {status}"
+        queue_res = await session.execute(
+            text("""
+                SELECT payload, status
+                FROM pubsub.platform_queue_messages
+                WHERE queue_name = :queue_name
+            """),
+            {"queue_name": queue_name},
+        )
+        rows = queue_res.fetchall()
 
-    # 5. Verify SQS Queue Received Message
-    sqs_client = boto3.client(
-        "sqs",
-        endpoint_url=localstack_container["endpoint_url"],
-        region_name="us-east-1",
-        aws_access_key_id="test",
-        aws_secret_access_key="test",
-    )
-
-    response = sqs_client.receive_message(
-        QueueUrl=localstack_container["sqs_queue_url"], MaxNumberOfMessages=1, WaitTimeSeconds=2
-    )
-
-    messages = response.get("Messages", [])
-    assert len(messages) == 1, "No message was dispatched to the SQS queue"
-
-    body = json.loads(messages[0]["Body"])
+    assert len(rows) == 1, "No message was dispatched to pubsub.platform_queue_messages"
+    body, msg_status = rows[0]
+    assert msg_status == "PENDING"
     assert body["job_id"] == job_id
     assert body["payload"]["test_key"] == "test_value"
