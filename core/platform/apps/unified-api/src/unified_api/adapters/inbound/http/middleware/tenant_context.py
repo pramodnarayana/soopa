@@ -29,6 +29,7 @@ _TENANT_EXEMPT_PREFIXES: tuple[str, ...] = (
     "/api/v1/edi-tools/",
     "/api/v1/edi_json",
     "/api/v1/endpoints",
+    "/api/v1/internal/",
 )
 
 

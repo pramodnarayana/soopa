@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 
 import structlog
 from database.provider import DatabaseProvider
+from pubsub.domain.dtos import TopicSubscriptionSpec
+from pubsub.domain.enums import PlatformTopicName
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
@@ -75,6 +77,14 @@ class WorkerContainer:
             handler=self.events_dispatcher.dispatch,
             region_name=self.settings.aws_region,
             endpoint_url=self.settings.aws_endpoint_url,
+            session_factory=self.session_factory,
+            database_url=self.database_url,
+            subscribe_topics=(
+                TopicSubscriptionSpec(
+                    topic_name=PlatformTopicName.PLATFORM_EVENTS.value,
+                    event_types=("app.", "tenant."),
+                ),
+            ),
         )
 
     async def dispose(self) -> None:

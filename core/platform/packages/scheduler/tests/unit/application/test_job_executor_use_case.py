@@ -205,3 +205,33 @@ def test_claim_and_execute_job_filters_by_active_namespaces():
     assert repo.jobs["job-edi-1"].status == JobStatus.COMPLETED
     # IP job remains untouched in PENDING state
     assert repo.jobs["job-ip-1"].status == JobStatus.PENDING
+
+
+def test_claim_and_execute_in_process_cron_job_without_target_queue():
+    repo = FakeJobRepository()
+    job = ScheduledJob(
+        id="job-inproc-1",
+        name="platform_queue_cleanup",
+        target_queue=None,
+        app_namespace="platform",
+        payload={"retention_days": 7},
+        status=JobStatus.PENDING,
+        cron_expression="0 * * * *",
+        interval_seconds=None,
+        retry_count=0,
+        max_retries=3,
+        next_run_at=datetime.now(UTC),
+    )
+    repo.jobs[job.id] = job
+
+    dispatcher = FakeJobDispatcher()
+    use_case = JobExecutorUseCase(uow_factory=lambda: FakeSchedulerUow(repo), dispatcher=dispatcher)
+
+    asyncio.run(use_case.execute(worker_id="worker-1", limit=10, lock_lease_ms=5000))
+
+    assert len(dispatcher.dispatched_jobs) == 1
+    assert dispatcher.dispatched_jobs[0].name == "platform_queue_cleanup"
+    updated = repo.jobs["job-inproc-1"]
+    assert updated.status == JobStatus.PENDING
+    assert updated.retry_count == 0
+    assert updated.next_run_at > datetime.now(UTC)

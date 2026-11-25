@@ -8,6 +8,7 @@ import os
 import re
 import sys
 from collections.abc import Sequence
+from enum import StrEnum
 from pathlib import Path
 
 import structlog
@@ -16,6 +17,15 @@ logger = structlog.get_logger(__name__)
 
 LOCALSTACK_SQS_URL = "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/"
 LOCALSTACK_SNS_ARN = "arn:aws:sns:us-east-1:000000000000:"
+DB_QUEUE_PREFIX = "db://"
+DB_TOPIC_PREFIX = "db://topic/"
+
+
+class PubSubTransportMode(StrEnum):
+    """Canonical transport scheme emitted when synchronizing topology.json into .env."""
+
+    DB = "db"
+    AWS = "aws"
 
 
 def resolve_topology_paths(root_dir: Path, domains_arg: str) -> list[Path]:
@@ -87,9 +97,14 @@ def compose_topology_manifests(
     return composed
 
 
-def build_env_mappings(topology: dict[str, list[dict[str, object]]]) -> dict[str, str]:
+def build_env_mappings(
+    topology: dict[str, list[dict[str, object]]],
+    *,
+    transport: PubSubTransportMode = PubSubTransportMode.DB,
+) -> dict[str, str]:
     """Builds .env variable mappings for all queues (including DLQs) and topics in topology."""
     mappings: dict[str, str] = {}
+    queue_prefix = DB_QUEUE_PREFIX if transport == PubSubTransportMode.DB else LOCALSTACK_SQS_URL
 
     for queue in topology.get("queues", []):
         name = str(queue["name"])
@@ -97,18 +112,18 @@ def build_env_mappings(topology: dict[str, list[dict[str, object]]]) -> dict[str
         physical_name = f"{name}.fifo" if is_fifo else name
         default_env_var = f"SQS_{name.upper().replace('-', '_')}_QUEUE_URL"
         env_var_name = str(queue.get("env_var") or default_env_var)
-        mappings[env_var_name] = f"{LOCALSTACK_SQS_URL}{physical_name}"
+        mappings[env_var_name] = f"{queue_prefix}{physical_name}"
 
         aliases = queue.get("aliases")
         if isinstance(aliases, list):
             for alias in aliases:
                 if isinstance(alias, str) and alias:
-                    mappings[alias] = f"{LOCALSTACK_SQS_URL}{physical_name}"
+                    mappings[alias] = f"{queue_prefix}{physical_name}"
 
         dlq_env_var = queue.get("dlq_env_var")
         if isinstance(dlq_env_var, str) and dlq_env_var:
             dlq_physical_name = f"{name}-dlq.fifo" if is_fifo else f"{name}-dlq"
-            mappings[dlq_env_var] = f"{LOCALSTACK_SQS_URL}{dlq_physical_name}"
+            mappings[dlq_env_var] = f"{queue_prefix}{dlq_physical_name}"
 
     for topic in topology.get("topics", []):
         name = str(topic["name"])
@@ -116,7 +131,10 @@ def build_env_mappings(topology: dict[str, list[dict[str, object]]]) -> dict[str
         physical_name = f"{name}.fifo" if is_fifo else name
         default_env_var = f"SNS_{name.upper().replace('-', '_')}_TOPIC_ARN"
         env_var_name = str(topic.get("env_var") or default_env_var)
-        mappings[env_var_name] = f"{LOCALSTACK_SNS_ARN}{physical_name}"
+        if transport == PubSubTransportMode.DB:
+            mappings[env_var_name] = f"{DB_TOPIC_PREFIX}{name}"
+        else:
+            mappings[env_var_name] = f"{LOCALSTACK_SNS_ARN}{physical_name}"
 
     return mappings
 
@@ -124,16 +142,20 @@ def build_env_mappings(topology: dict[str, list[dict[str, object]]]) -> dict[str
 def compose_topology_env_mappings(
     root_dir: Path,
     domains: str = "all",
+    *,
+    transport: PubSubTransportMode = PubSubTransportMode.DB,
 ) -> dict[str, str]:
     """Compose per-domain topology manifests strictly in memory without mutating disk files."""
     manifest_paths = resolve_topology_paths(root_dir, domains)
     topology = compose_topology_manifests(manifest_paths)
-    return build_env_mappings(topology)
+    return build_env_mappings(topology, transport=transport)
 
 
 def sync_topology(
     root_dir: Path,
     domains: str = "all",
+    *,
+    transport: PubSubTransportMode = PubSubTransportMode.DB,
 ) -> dict[str, str]:
     """Composes per-domain topology manifests, writes infra/topology.json, and syncs .env."""
     env_path = root_dir / ".env"
@@ -152,7 +174,7 @@ def sync_topology(
         manifests=[str(p.relative_to(root_dir)) for p in manifest_paths],
     )
 
-    mappings = build_env_mappings(topology)
+    mappings = build_env_mappings(topology, transport=transport)
     env_content = env_path.read_text(encoding="utf-8")
 
     for key, value in mappings.items():
@@ -168,6 +190,7 @@ def sync_topology(
     logger.info(
         "topology_synced_to_env",
         domains=domains,
+        transport=transport.value,
         synced_key_count=len(mappings),
     )
     return mappings
@@ -183,12 +206,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=os.environ.get("ENABLED_APPS", "all"),
         help="Comma-separated domains to compose (e.g. 'platform,ip', 'platform,edi', or 'all')",
     )
+    parser.add_argument(
+        "--transport",
+        type=str,
+        choices=[m.value for m in PubSubTransportMode],
+        default=os.environ.get("PUBSUB_TRANSPORT", PubSubTransportMode.DB.value),
+        help="Pub/Sub URI transport scheme to write into .env: 'db' (default) or 'aws'",
+    )
     parsed = parser.parse_args(argv)
 
     script_dir = Path(__file__).parent.resolve()
     root_dir = script_dir.parents[2]
     try:
-        sync_topology(root_dir=root_dir, domains=parsed.domains)
+        sync_topology(
+            root_dir=root_dir,
+            domains=parsed.domains,
+            transport=PubSubTransportMode(parsed.transport),
+        )
         return 0
     except Exception as exc:
         logger.exception("topology_sync_failed", error=str(exc))

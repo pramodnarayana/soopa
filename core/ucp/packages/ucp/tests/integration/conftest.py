@@ -1,36 +1,31 @@
-import json
-
-import boto3
-import pytest
-from seedwork import generate_random_hex
-from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
-
-pytestmark = pytest.mark.integration
-import os
-from typing import Any
-
-os.environ.setdefault(
-    "IDENTITY_MACHINE_KEY",
-    '{"keyId":"fake-key","key":"fake-private-key","userId":"fake-user"}',
-)
 import asyncio
 import os
+from collections.abc import AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
 from database.provider import get_async_engine
+from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from unified_api.adapters.inbound.http.guards import platform_auth_guard, tenant_auth_guard
+from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
 from unified_api.main import app
 
 from ucp.bootstrap.dependencies import (
     get_db_session,
 )
 
+pytestmark = pytest.mark.integration
+
+os.environ.setdefault(
+    "IDENTITY_MACHINE_KEY",
+    '{"keyId":"fake-key","key":"fake-private-key","userId":"fake-user"}',
+)
+
 # ---------------------------------------------------------------------------
-# Shared fake identity \u2014 a Platform Admin used across all integration tests.
+# Shared fake identity — a Platform Admin used across all integration tests.
 # We inject this directly so we never need a real Zitadel instance during tests.
 # ---------------------------------------------------------------------------
 FAKE_PLATFORM_ADMIN = IdentityContext(
@@ -40,8 +35,6 @@ FAKE_PLATFORM_ADMIN = IdentityContext(
     tenant_roles={PLATFORM_TENANT_ID: ["admin"]},
     claims={},
 )
-
-from fastapi import Request
 
 
 async def _fake_platform_admin_guard(request: Request) -> IdentityContext:
@@ -59,96 +52,15 @@ async def _fake_tenant_member_guard(request: Request) -> IdentityContext:
 
 
 @pytest.fixture(scope="session")
-def event_loop() -> "Any":
+def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
 
-@pytest.fixture(scope="session")
-def localstack_container(request) -> "Any":
-    endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
-
-    unique_suffix = generate_random_hex(6)
-
-    sns_client = boto3.client(
-        "sns",
-        endpoint_url=endpoint_url,
-        region_name="us-east-1",
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-    )
-    sqs_client = boto3.client(
-        "sqs",
-        endpoint_url=endpoint_url,
-        region_name="us-east-1",
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-    )
-
-    tenant_topic_name = f"ucp-tenant-events-{unique_suffix}.fifo"
-    user_topic_name = f"ucp-user-events-{unique_suffix}.fifo"
-    queue_name = f"ucp-identity-sync-{unique_suffix}.fifo"
-
-    # 1. Create SNS Topics
-    tenant_topic = sns_client.create_topic(
-        Name=tenant_topic_name,
-        Attributes={"FifoTopic": "true", "ContentBasedDeduplication": "true"},
-    )
-    user_topic = sns_client.create_topic(
-        Name=user_topic_name,
-        Attributes={"FifoTopic": "true", "ContentBasedDeduplication": "true"},
-    )
-
-    # 2. Create SQS Queue
-    queue = sqs_client.create_queue(
-        QueueName=queue_name,
-        Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
-    )
-
-    attrs = sqs_client.get_queue_attributes(QueueUrl=queue["QueueUrl"], AttributeNames=["QueueArn"])
-    queue_arn = attrs["Attributes"]["QueueArn"]
-
-    policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {"Service": "sns.amazonaws.com"},
-                "Action": "sqs:SendMessage",
-                "Resource": queue_arn,
-                "Condition": {"ArnEquals": {"aws:SourceArn": tenant_topic["TopicArn"]}},
-            },
-            {
-                "Effect": "Allow",
-                "Principal": {"Service": "sns.amazonaws.com"},
-                "Action": "sqs:SendMessage",
-                "Resource": queue_arn,
-                "Condition": {"ArnEquals": {"aws:SourceArn": user_topic["TopicArn"]}},
-            },
-        ],
-    }
-    sqs_client.set_queue_attributes(
-        QueueUrl=queue["QueueUrl"], Attributes={"Policy": json.dumps(policy)}
-    )
-
-    # 3. Subscribe Queue to Topics
-    sns_client.subscribe(TopicArn=tenant_topic["TopicArn"], Protocol="sqs", Endpoint=queue_arn)
-    sns_client.subscribe(TopicArn=user_topic["TopicArn"], Protocol="sqs", Endpoint=queue_arn)
-
-    return {
-        "endpoint_url": endpoint_url,
-        "sns_topic_arn": tenant_topic["TopicArn"],
-        "sqs_queue_url": queue["QueueUrl"],
-        "sqs_queue_name": queue_name,
-    }
-
-
 @pytest_asyncio.fixture(scope="function")
-async def db_engine() -> "Any":
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/global_db"
-    )
+async def db_engine() -> AsyncGenerator[AsyncEngine, None]:
+    db_url = os.environ["DATABASE_URL"]
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
 
@@ -158,7 +70,7 @@ async def db_engine() -> "Any":
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session(db_engine) -> "Any":
+async def db_session(db_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     connection = await db_engine.connect()
     transaction = await connection.begin()
 
@@ -177,8 +89,11 @@ async def db_session(db_engine) -> "Any":
 
 
 @pytest_asyncio.fixture(scope="function")
-async def client(db_session, monkeypatch) -> "Any":
-    async def override_get_db_session(request: Request) -> "Any":
+async def client(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncGenerator[AsyncClient, None]:
+    async def override_get_db_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
     old_overrides = dict(app.dependency_overrides)

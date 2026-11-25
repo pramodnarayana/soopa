@@ -64,7 +64,7 @@ def provision_fifo_queue_pair(
 ) -> tuple[aws.sqs.Queue, aws.sqs.Queue]:
     """
     Provisions a FIFO SQS queue and its paired dead-letter queue.
-    Accepts purely logical names (e.g. 'edi-config-sync-queue') and enforces
+    Accepts purely logical names (e.g. 'notifications') and enforces
     Enterprise Fail-Fast architectural boundaries by rejecting AWS-specific suffixes.
     Enforces SQS long polling (20 seconds) to minimize empty poll API charges.
     """
@@ -521,3 +521,83 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
         topics=topics,
         dlqs=dlqs,
     )
+
+
+# ---------------------------------------------------------------------------
+# Cloud-agnostic PostgreSQL Pub/Sub URI Builder (Zero SQS / Zero SNS)
+# ---------------------------------------------------------------------------
+
+DB_QUEUE_URI_PREFIX = "db://"
+DB_TOPIC_URI_PREFIX = "db://topic/"
+
+
+def _assign_unique_env_var(
+    env_vars: dict[str, str],
+    already_assigned: dict[str, str],
+    env_var: str | None,
+    value: str,
+    owner: str,
+) -> None:
+    """Assigns a topology env var while failing fast on duplicate declarations."""
+    if not env_var:
+        return
+    if env_var in env_vars:
+        raise ValueError(
+            f"Duplicate env_var '{env_var}' declared in topology.json for "
+            f"'{owner}'. Already assigned to '{already_assigned[env_var]}'."
+        )
+    env_vars[env_var] = value
+    already_assigned[env_var] = owner
+
+
+def build_database_pubsub_env_vars(
+    topology: TopologyConfig,
+    *,
+    queue_filter: set[str] | None = None,
+    topic_filter: set[str] | None = None,
+) -> dict[str, str]:
+    """Builds container environment variables pointing all queues & topics at PostgreSQL Pub/Sub.
+
+    Pure, domain-agnostic helper driven strictly by ``topology.json``:
+    - Queues map to ``db://<physical_name>`` (preserving ``.fifo`` suffix where declared).
+    - Topics map to ``db://topic/<logical_name>``.
+    - Always injects ``PUBSUB_TRANSPORT=db``.
+    """
+    env_vars: dict[str, str] = {"PUBSUB_TRANSPORT": "db"}
+    already_assigned: dict[str, str] = {}
+
+    for queue_conf in topology.get("queues", []):
+        name = queue_conf.get("name", "")
+        if not name or (queue_filter is not None and name not in queue_filter):
+            continue
+        is_fifo = bool(queue_conf.get("fifo", False))
+        physical_name = f"{name}.fifo" if is_fifo else name
+        _assign_unique_env_var(
+            env_vars,
+            already_assigned,
+            queue_conf.get("env_var"),
+            f"{DB_QUEUE_URI_PREFIX}{physical_name}",
+            f"queue {name}",
+        )
+        dlq_physical_name = f"{name}-dlq.fifo" if is_fifo else f"{name}-dlq"
+        _assign_unique_env_var(
+            env_vars,
+            already_assigned,
+            queue_conf.get("dlq_env_var"),
+            f"{DB_QUEUE_URI_PREFIX}{dlq_physical_name}",
+            f"queue dlq {name}",
+        )
+
+    for topic_conf in topology.get("topics", []):
+        name = topic_conf.get("name", "")
+        if not name or (topic_filter is not None and name not in topic_filter):
+            continue
+        _assign_unique_env_var(
+            env_vars,
+            already_assigned,
+            topic_conf.get("env_var"),
+            f"{DB_TOPIC_URI_PREFIX}{name}",
+            f"topic {name}",
+        )
+
+    return env_vars

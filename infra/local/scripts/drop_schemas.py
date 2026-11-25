@@ -31,6 +31,8 @@ DOMAIN_GLOBAL_SCHEMAS: Final[dict[str, tuple[str, ...]]] = {
         "identity",
         "ucp",
         "scheduling",
+        "pubsub",
+        "config_sync",
         "notifications",
         "observability",
         "public",

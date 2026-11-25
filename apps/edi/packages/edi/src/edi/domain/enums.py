@@ -2,6 +2,8 @@
 
 from enum import StrEnum
 
+EDI_CONFIG_APP_ID = "edi"
+
 
 class EdiEventType(StrEnum):
     """Event types for EDI provisioning and lifecycle events across all subdomains."""
@@ -73,6 +75,7 @@ class EdiTraceEventType(StrEnum):
 
 
 __all__ = [
+    "EDI_CONFIG_APP_ID",
     "EdiEventType",
     "EdiJobName",
     "EdiOutboxSource",

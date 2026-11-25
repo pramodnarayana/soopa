@@ -1,56 +1,31 @@
 """
-Application Layer (Layer 3) - EDI Bounded Context: Messaging
-=============================================================
-Provisions EDI-specific messaging infrastructure only:
-- EDI SQS Queues
-- EDI SNS Topics
-- SNS Subscriptions
+Application Layer (Layer 3) - EDI Bounded Context: Messaging (Retired)
+======================================================================
+AWS SQS/SNS resources for EDI have been retired in favor of PostgreSQL Pub/Sub
+(`db://` direct shard outbox draining + `pubsub.platform_queue_messages` &
+`pubsub.platform_topic_subscriptions`).
 
-Driven entirely by topology.json. Exports a single structured ``queue_env_vars``
-map so compute stacks can do zero-touch environment variable injection.
+Retaining this zero-resource stack ensures the next `pulumi up` cleanly destroys
+any legacy SQS queues, DLQs, and SNS subscriptions in AWS state without orphaning them.
 """
 
 import pulumi
-from infra_seedwork.messaging import provision_from_topology
+from infra_seedwork.messaging import build_database_pubsub_env_vars
 from infra_seedwork.topology import load_topology
 
-_env = pulumi.get_stack()
-_prefix = f"{_env}-edi-"
-_TAGS = {"ManagedBy": "pulumi", "Component": "edi-messaging", "Environment": _env}
-
-# ── Stack References ──────────────────────────────────────────────────────────
-config = pulumi.Config()
-platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
-platform = pulumi.StackReference(platform_stack_ref)
-
-# ── Topology ──────────────────────────────────────────────────────────────────
 topology = load_topology()
+edi_queues = {
+    name for q in topology.get("queues", []) if (name := q.get("name")) and name.startswith("edi-")
+}
+edi_topics = {
+    name for t in topology.get("topics", []) if (name := t.get("name")) and name.startswith("edi-")
+}
 
-# EDI owns all queues/topics prefixed with "edi-".
-edi_queues = {q["name"] for q in topology["queues"] if q["name"].startswith("edi-")}
-edi_topics = {t["name"] for t in topology["topics"] if t["name"].startswith("edi-")}
-
-# The platform-events-topic is owned by the platform stack; we reference it for
-# subscriptions but do not re-provision it here.
-platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
-
-result = provision_from_topology(
+queue_env_vars = build_database_pubsub_env_vars(
     topology=topology,
-    prefix=_prefix,
-    tags=_TAGS,
     queue_filter=edi_queues,
     topic_filter=edi_topics,
-    external_topic_arns={"platform-events-topic": platform_events_topic_arn},
 )
 
-# ── Exports ───────────────────────────────────────────────────────────────────
-# Structured SSOT exports: compute stacks consume queue_env_vars (for container
-# env injection) and queue_arns (for least-privilege SQS IAM permissions).
-pulumi.export("queue_env_vars", result.queue_env_vars)
-pulumi.export("queue_arns", result.queue_arns)
-
-for queue_name, queue in result.queues.items():
-    pulumi.export(f"sqs_{queue_name.replace('-', '_')}_url", queue.url)
-    pulumi.export(f"sqs_{queue_name.replace('-', '_')}_arn", queue.arn)
-for topic_name, topic in result.topics.items():
-    pulumi.export(f"sns_{topic_name.replace('-', '_')}_arn", topic.arn)
+pulumi.export("queue_env_vars", queue_env_vars)
+pulumi.export("queue_arns", [])

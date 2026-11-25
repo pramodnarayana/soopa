@@ -11,9 +11,12 @@ the path resolution without any compile-time or runtime warning.
 
 import json
 from pathlib import Path
+from typing import cast
+
+from infra_seedwork.messaging import TopologyConfig
 
 
-def load_topology() -> dict[str, list[dict[str, object]]]:
+def load_topology() -> TopologyConfig:
     """
     Walks up the directory tree from the infra_seedwork package location to
     find ``topology.json`` at the repository root.
@@ -31,8 +34,8 @@ def load_topology() -> dict[str, list[dict[str, object]]]:
     for _ in range(12):
         candidate = current / "topology.json"
         if candidate.is_file():
-            with open(candidate) as f:
-                return json.load(f)  # type: ignore[return-value]
+            with open(candidate, encoding="utf-8") as f:
+                return cast(TopologyConfig, json.load(f))
         current = current.parent
     raise FileNotFoundError(
         "topology.json not found within 12 parent directories of infra_seedwork. "

@@ -314,8 +314,8 @@ def test_secret_store_provider_unsupported_backend() -> None:
 
 
 def test_secret_store_provider_unimplemented_backend() -> None:
-    with pytest.raises(NotImplementedError, match="backend 'vault' is architecturally supported"):
-        SecretStoreProvider.get_secret_store(backend=SecretStoreBackend.VAULT)
+    with pytest.raises(NotImplementedError, match="backend 'gcp' is architecturally supported"):
+        SecretStoreProvider.get_secret_store(backend=SecretStoreBackend.GCP)
 
 
 def test_register_secret_store_backend(tmp_path: Path) -> None:

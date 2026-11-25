@@ -12,6 +12,7 @@ members = [
     "as2-server",
     "cache",
     "compute-worker",
+    "config-sync",
     "config-sync-worker",
     "database",
     "edi",
@@ -797,18 +798,38 @@ requires-dist = [
 ]
 
 [[package]]
+name = "config-sync"
+version = "0.1.0"
+source = { editable = "core/platform/packages/config-sync" }
+dependencies = [
+    { name = "asyncpg" },
+    { name = "database" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "seedwork" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asyncpg", specifier = ">=0.29.0" },
+    { name = "database", editable = "core/platform/packages/database" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "structlog", specifier = ">=24.0.0" },
+]
+
+[[package]]
 name = "config-sync-worker"
 version = "0.1.0"
 source = { editable = "apps/edi/apps/edi-config-sync-worker" }
 dependencies = [
-    { name = "aioboto3" },
     { name = "asyncpg" },
-    { name = "boto3" },
-    { name = "botocore" },
+    { name = "config-sync" },
     { name = "database" },
     { name = "edi" },
     { name = "identity" },
-    { name = "outbox" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "seedwork" },
@@ -827,14 +848,11 @@ integration-test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aioboto3", specifier = ">=13.1.1" },
     { name = "asyncpg", specifier = ">=0.29.0" },
-    { name = "boto3" },
-    { name = "botocore" },
+    { name = "config-sync", editable = "core/platform/packages/config-sync" },
     { name = "database", editable = "core/platform/packages/database" },
     { name = "edi", editable = "apps/edi/packages/edi" },
     { name = "identity", editable = "core/platform/packages/identity" },
-    { name = "outbox", editable = "core/platform/packages/outbox" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
@@ -1141,6 +1159,7 @@ dependencies = [
     { name = "asn1crypto" },
     { name = "boto3" },
     { name = "botocore" },
+    { name = "config-sync" },
     { name = "cryptography" },
     { name = "database" },
     { name = "dependency-injector" },
@@ -1164,6 +1183,7 @@ dependencies = [
     { name = "sharding" },
     { name = "shttp" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "storage" },
     { name = "strace" },
     { name = "structlog" },
     { name = "ucp" },
@@ -1185,6 +1205,7 @@ requires-dist = [
     { name = "asn1crypto" },
     { name = "boto3" },
     { name = "botocore" },
+    { name = "config-sync", editable = "core/platform/packages/config-sync" },
     { name = "cryptography", specifier = ">=44.0.0" },
     { name = "database", editable = "core/platform/packages/database" },
     { name = "dependency-injector", specifier = ">=4.41.0" },
@@ -1208,6 +1229,7 @@ requires-dist = [
     { name = "sharding", editable = "core/platform/packages/sharding" },
     { name = "shttp", editable = "core/platform/packages/shttp" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "storage", editable = "core/platform/packages/storage" },
     { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog", specifier = ">=24.1.0" },
     { name = "ucp", editable = "core/ucp/packages/ucp" },
@@ -1906,6 +1928,7 @@ dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
     { name = "botocore" },
+    { name = "config-sync" },
     { name = "confluent-kafka" },
     { name = "croniter" },
     { name = "cryptography" },
@@ -1954,6 +1977,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.13.0" },
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "botocore" },
+    { name = "config-sync", editable = "core/platform/packages/config-sync" },
     { name = "confluent-kafka", specifier = ">=2.4.0" },
     { name = "croniter", specifier = ">=6.2.4" },
     { name = "cryptography", specifier = ">=44.0.0" },
@@ -3969,6 +3993,7 @@ dependencies = [
     { name = "croniter" },
     { name = "database" },
     { name = "dependency-injector" },
+    { name = "pubsub" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "sqlalchemy" },
@@ -3982,6 +4007,7 @@ requires-dist = [
     { name = "croniter", specifier = ">=6.2.4" },
     { name = "database", editable = "core/platform/packages/database" },
     { name = "dependency-injector", specifier = ">=4.44.0" },
+    { name = "pubsub", editable = "core/platform/packages/pubsub" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.51" },
@@ -3995,7 +4021,9 @@ version = "0.1.0"
 source = { editable = "core/platform/apps/scheduler-worker" }
 dependencies = [
     { name = "aioboto3" },
+    { name = "config-sync" },
     { name = "dependency-injector" },
+    { name = "pubsub" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "scheduler" },
@@ -4005,7 +4033,9 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aioboto3", specifier = ">=13.1.1" },
+    { name = "config-sync", editable = "core/platform/packages/config-sync" },
     { name = "dependency-injector", specifier = ">=4.44.0" },
+    { name = "pubsub", editable = "core/platform/packages/pubsub" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "scheduler", editable = "core/platform/packages/scheduler" },
@@ -4018,6 +4048,7 @@ version = "0.1.0"
 source = { editable = "core/platform/packages/secret-store" }
 dependencies = [
     { name = "boto3" },
+    { name = "httpx" },
     { name = "seedwork" },
     { name = "structlog" },
 ]
@@ -4031,6 +4062,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.34.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "structlog", specifier = ">=24.1.0" },
 ]
@@ -4282,12 +4314,14 @@ source = { editable = "core/platform/packages/storage" }
 dependencies = [
     { name = "aioboto3" },
     { name = "seedwork" },
+    { name = "structlog" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "aioboto3", specifier = ">=13.1.0" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "structlog", specifier = ">=24.0.0" },
 ]
 
 [[package]]
@@ -4618,6 +4652,7 @@ name = "unified-api"
 version = "0.1.0"
 source = { editable = "core/platform/apps/unified-api" }
 dependencies = [
+    { name = "config-sync" },
     { name = "edi" },
     { name = "fastapi" },
     { name = "ip" },
@@ -4646,6 +4681,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "config-sync", editable = "core/platform/packages/config-sync" },
     { name = "edi", editable = "apps/edi/packages/edi" },
     { name = "fastapi", specifier = "==0.136.0" },
     { name = "ip", editable = "apps/ip/packages/ip" },

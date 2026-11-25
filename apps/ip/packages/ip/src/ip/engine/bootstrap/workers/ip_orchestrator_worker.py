@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from pathlib import Path
 
 import structlog
+from config_sync.application.multi_tenant_watch_manager import MultiTenantConfigWatchManager
+from config_sync.ports.config_apply_sink_port import ConfigApplySinkPort
+from config_sync.provider import ConfigSyncProvider
 from database.router import DatabaseRouter, DatabaseRouterPort
 from dependency_injector import providers
-from pubsub.adapters.aws.aws_sqs_consumer_manager import AwsSqsConsumerManager
+from pubsub.domain.enums import is_database_queue_uri
 from pubsub.envelope_dispatcher import EventEnvelopeDispatcher
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from pubsub.provider import PubSubProvider
+from seedwork.events import EventProcessingLane
 from seedwork.infra.worker import LaunchableWorker
 
 from ip.engine.adapters.inbound.workers.ip_orchestrator_route_registry import (
@@ -21,6 +26,7 @@ from ip.engine.adapters.inbound.workers.ip_orchestrator_route_registry import (
 from ip.engine.adapters.inbound.workers.ip_stitch_tick_loop import (
     IpMultiShardStitchTickLoop,
 )
+from ip.engine.adapters.outbound.config_sync.ip_stitch_catalog_sink import IpStitchCatalogSink
 from ip.engine.application.use_cases.normalization.auto_bind_default_transformation_use_case import (
     AutoBindDefaultTransformationCommand,
     AutoBindDefaultTransformationOnEntitySubscribedUseCase,
@@ -49,10 +55,13 @@ from ip.engine.application.worker_ports import (
 from ip.engine.bootstrap.container import (
     Container,
     create_ip_control_plane_uow,
+    create_ip_dp_filtered_outbox_drain_repo,
     create_ip_stitch_dispatcher,
     create_ip_stitch_worker_tick,
     create_ip_tenant_resolver,
 )
+from ip.engine.bootstrap.publisher_factory import IP_ORCHESTRATOR_DP_EVENT_TYPES
+from ip.engine.domain.enums import IP_CONFIG_APP_ID
 from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.settings import IpEngineSettings, get_ip_engine_settings
 
@@ -179,7 +188,10 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         self.route_registry: IpOrchestratorRouteRegistry | None = None
         self.realtime_manager: ConsumerManagerPort | None = None
         self.bulk_manager: ConsumerManagerPort | None = None
+        self.cp_queue_manager: ConsumerManagerPort | None = None
+        self.cp_bulk_queue_manager: ConsumerManagerPort | None = None
         self.stitch_tick_loop: IpMultiShardStitchTickLoop | None = None
+        self.config_watch_manager: MultiTenantConfigWatchManager | None = None
 
     async def start(self) -> None:
         logger.info("ip_orchestrator_worker_starting")
@@ -244,6 +256,43 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
             interval_seconds=self.settings.stitch_tick_interval_sec,
         )
         self.stitch_tick_loop.start()
+
+        watch_base_url = self.settings.config_watch_base_url.strip()
+        if watch_base_url:
+            watch_token = self.settings.config_sync_internal_token.strip() or None
+            lkg_dir = self.settings.config_watch_lkg_dir.strip()
+            watch_client = ConfigSyncProvider.create_sse_watch_client(
+                base_url=watch_base_url,
+                bearer_token=watch_token,
+            )
+            stitch_catalog = container.stitch_catalog()
+
+            def _create_ip_sink(tenant_id: str) -> ConfigApplySinkPort:
+                lkg_path = Path(lkg_dir) / f"ip_config_{tenant_id}.json" if lkg_dir else None
+                backing_sink = ConfigSyncProvider.create_in_memory_sink(
+                    app_id=IP_CONFIG_APP_ID,
+                    tenant_id=tenant_id,
+                    lkg_file_path=lkg_path,
+                )
+                return IpStitchCatalogSink(
+                    stitch_catalog=stitch_catalog,
+                    backing_sink=backing_sink,
+                    tenant_id=tenant_id,
+                )
+
+            self.config_watch_manager = ConfigSyncProvider.create_multi_tenant_watch_manager(
+                app_id=IP_CONFIG_APP_ID,
+                watch_client=watch_client,
+                tenant_ids_provider=resolver.get_all_tenant_ids,
+                sink_factory=_create_ip_sink,
+                discovery_interval_seconds=self.settings.config_watch_tenant_discovery_sec,
+            )
+            self.config_watch_manager.start()
+            logger.info(
+                "ip_orchestrator_config_watch_started",
+                watch_base_url=watch_base_url,
+            )
+
         logger.info("ip_orchestrator_worker_started")
 
     def _start_queue_managers(
@@ -252,51 +301,118 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         dispatcher: EventEnvelopeDispatcher,
     ) -> None:
         if self._realtime_consumer is not None:
-            self.realtime_manager = AwsSqsConsumerManager(
+            self.realtime_manager = PubSubProvider.create_consumer_manager_for_consumer(
                 consumer=self._realtime_consumer,
                 handler=dispatcher.handle,
                 queue_name="ip-orchestrator-realtime",
             )
             self.realtime_manager.start()
         elif settings.ip_orchestrator_realtime_queue_url:
+            rt_uri = settings.ip_orchestrator_realtime_queue_url
+            is_db_uri = is_database_queue_uri(rt_uri)
+            rt_shard_repo = (
+                create_ip_dp_filtered_outbox_drain_repo(
+                    db_router=self.db_router,
+                    event_types=IP_ORCHESTRATOR_DP_EVENT_TYPES,
+                    lanes=(EventProcessingLane.REALTIME.value,),
+                )
+                if self.db_router is not None and is_db_uri
+                else None
+            )
             self.realtime_manager = PubSubProvider.create_consumer_manager(
-                source_uri=settings.ip_orchestrator_realtime_queue_url,
+                source_uri=rt_uri,
                 handler=dispatcher.handle,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,
+                shard_drain_repo=rt_shard_repo,
+                batch_size=settings.outbox_batch_size,
+                lock_lease_ms=settings.outbox_lock_lease_ms,
             )
             self.realtime_manager.start()
 
+            if is_db_uri:
+                self.cp_queue_manager = PubSubProvider.create_consumer_manager(
+                    source_uri=rt_uri,
+                    handler=dispatcher.handle,
+                    session_factory=(
+                        self.db_router.global_session_scope if self.db_router is not None else None
+                    ),
+                    database_url=settings.global_database_url,
+                    batch_size=settings.outbox_batch_size,
+                    lock_lease_ms=settings.outbox_lock_lease_ms,
+                )
+                self.cp_queue_manager.start()
+
         if self._bulk_consumer is not None:
-            self.bulk_manager = AwsSqsConsumerManager(
+            self.bulk_manager = PubSubProvider.create_consumer_manager_for_consumer(
                 consumer=self._bulk_consumer,
                 handler=dispatcher.handle,
                 queue_name="ip-orchestrator-bulk",
             )
             self.bulk_manager.start()
         elif settings.ip_orchestrator_bulk_queue_url:
+            bulk_uri = settings.ip_orchestrator_bulk_queue_url
+            is_bulk_db_uri = is_database_queue_uri(bulk_uri)
+            bulk_shard_repo = (
+                create_ip_dp_filtered_outbox_drain_repo(
+                    db_router=self.db_router,
+                    event_types=IP_ORCHESTRATOR_DP_EVENT_TYPES,
+                    lanes=(EventProcessingLane.BULK.value,),
+                )
+                if self.db_router is not None and is_bulk_db_uri
+                else None
+            )
             self.bulk_manager = PubSubProvider.create_consumer_manager(
-                source_uri=settings.ip_orchestrator_bulk_queue_url,
+                source_uri=bulk_uri,
                 handler=dispatcher.handle,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,
+                shard_drain_repo=bulk_shard_repo,
+                batch_size=settings.outbox_batch_size,
+                lock_lease_ms=settings.outbox_lock_lease_ms,
             )
             self.bulk_manager.start()
+
+            if is_bulk_db_uri:
+                self.cp_bulk_queue_manager = PubSubProvider.create_consumer_manager(
+                    source_uri=bulk_uri,
+                    handler=dispatcher.handle,
+                    session_factory=(
+                        self.db_router.global_session_scope if self.db_router is not None else None
+                    ),
+                    database_url=settings.global_database_url,
+                    batch_size=settings.outbox_batch_size,
+                    lock_lease_ms=settings.outbox_lock_lease_ms,
+                )
+                self.cp_bulk_queue_manager.start()
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:
         tasks: list[asyncio.Task[object]] = []
         if self.realtime_manager is not None:
             tasks.extend(self.realtime_manager.background_tasks())
+        if self.cp_queue_manager is not None:
+            tasks.extend(self.cp_queue_manager.background_tasks())
         if self.bulk_manager is not None:
             tasks.extend(self.bulk_manager.background_tasks())
+        if self.cp_bulk_queue_manager is not None:
+            tasks.extend(self.cp_bulk_queue_manager.background_tasks())
         if self.stitch_tick_loop is not None:
             tasks.extend(self.stitch_tick_loop.background_tasks())
+        if self.config_watch_manager is not None:
+            tasks.extend(self.config_watch_manager.background_tasks())
         return tasks
 
     async def stop(self) -> None:
         logger.info("ip_orchestrator_worker_stopping")
+        if self.config_watch_manager is not None:
+            await self.config_watch_manager.stop()
+            self.config_watch_manager = None
         if self.stitch_tick_loop is not None:
             await self.stitch_tick_loop.stop()
+        if self.cp_bulk_queue_manager is not None:
+            await self.cp_bulk_queue_manager.stop()
+        if self.cp_queue_manager is not None:
+            await self.cp_queue_manager.stop()
         if self.realtime_manager is not None:
             await self.realtime_manager.stop()
         if self.bulk_manager is not None:

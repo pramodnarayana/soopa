@@ -16,6 +16,13 @@ class PayloadStoragePort(ABC):
         """Uploads a payload under standard inbound key and returns universal storage URI."""
         ...
 
+    async def upload_key(self, key: str, payload: bytes) -> str:
+        """Uploads a payload at an exact key path and returns universal storage URI."""
+        parts = key.strip("/").split("/", 1)
+        prefix = parts[0] if len(parts) > 1 else "default"
+        leaf = parts[1] if len(parts) > 1 else parts[0]
+        return await self.upload(tenant_id=prefix, message_id=leaf, payload=payload)
+
     @abstractmethod
     async def upload_partitioned(
         self,

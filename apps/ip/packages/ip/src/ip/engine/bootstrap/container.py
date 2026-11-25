@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 
 from database.provider import DatabaseProvider
@@ -594,7 +594,9 @@ def create_ip_cp_outbox_components(
         model_cls=IpOutboxRecord,
         source=IpOutboxSource.CONTROL_PLANE.value,
     )
-    resolved_publisher = publisher or create_ip_cp_outbox_publisher(settings)
+    resolved_publisher = publisher or create_ip_cp_outbox_publisher(
+        settings, session_factory=db_router.global_session_scope
+    )
     return repo, repo, resolved_publisher
 
 
@@ -640,8 +642,29 @@ def create_ip_dp_outbox_components(
         trace_event_model_cls=IpTraceEventModel,
         processed_event_model_cls=IpProcessedEventModel,
     )
-    resolved_publisher = publisher or create_ip_dp_outbox_publisher(settings)
+    resolved_publisher = publisher or create_ip_dp_outbox_publisher(
+        settings, session_factory=db_router.global_session_scope
+    )
     return dp_repo, dp_repo, dp_repo, retention_repo, resolved_publisher
+
+
+def create_ip_dp_filtered_outbox_drain_repo(
+    *,
+    db_router: DatabaseRouterPort,
+    event_types: Sequence[str] | None = None,
+    exclude_event_types: Sequence[str] | None = None,
+    lanes: Sequence[str] | None = None,
+) -> ShardOutboxDrainPort:
+    """Composition root factory assembling a stage-filtered SqlAlchemyShardedOutboxRepository for direct Single-Queue worker draining."""
+    return SqlAlchemyShardedOutboxRepository(
+        db_router,
+        model_cls=IpDataPlaneOutboxRecord,
+        app_slug="ip",
+        source=IpOutboxSource.DATA_PLANE.value,
+        event_types=event_types,
+        exclude_event_types=exclude_event_types,
+        lanes=lanes,
+    )
 
 
 def create_ip_dp_outbox_relay(
@@ -1105,6 +1128,7 @@ __all__ = [
     "create_ip_cp_outbox_components",
     "create_ip_cp_outbox_relay",
     "create_ip_data_plane_uow",
+    "create_ip_dp_filtered_outbox_drain_repo",
     "create_ip_dp_outbox_components",
     "create_ip_dp_outbox_relay",
     "create_ip_inbound_ack",

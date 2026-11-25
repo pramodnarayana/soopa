@@ -18,11 +18,14 @@ pytestmark = pytest.mark.integration
 
 def _build_global_outbox_repo(
     db_session_factory,
+    *,
+    base_retry_backoff_seconds: int = 0,
 ) -> SqlAlchemyGlobalOutboxRepository[NotificationOutbox]:
     return SqlAlchemyGlobalOutboxRepository(
         session_factory=db_session_factory,
         model_cls=NotificationOutbox,
         source=NotificationOutboxSource.NOTIFICATION.value,
+        base_retry_backoff_seconds=base_retry_backoff_seconds,
     )
 
 

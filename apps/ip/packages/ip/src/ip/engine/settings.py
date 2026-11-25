@@ -183,6 +183,24 @@ class IpEngineSettings(CleanBaseSettings):
         ),
     )
 
+    # Queue-Free Control Plane -> Data Plane Dynamic Watch
+    config_watch_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("IP_CONFIG_WATCH_BASE_URL", "CONFIG_WATCH_BASE_URL"),
+    )
+    config_sync_internal_token: str = Field(
+        default="",
+        validation_alias="CONFIG_SYNC_INTERNAL_TOKEN",
+    )
+    config_watch_lkg_dir: str = Field(
+        default="",
+        validation_alias="IP_CONFIG_WATCH_LKG_DIR",
+    )
+    config_watch_tenant_discovery_sec: float = Field(
+        default=30.0,
+        validation_alias="IP_CONFIG_WATCH_TENANT_DISCOVERY_SEC",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_ip_engine_settings() -> IpEngineSettings:

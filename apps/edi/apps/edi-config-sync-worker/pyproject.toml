@@ -4,12 +4,11 @@ version = "0.1.0"
 description = "Worker service for syncing configurations from UCP Control Plane to EDI Data Plane"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "asyncpg>=0.29.0", "edi", "outbox", "seedwork", "ucp_models", "python-dotenv", "boto3", "identity", "pydantic", "botocore", "structlog", "database"]
+dependencies = ["sqlalchemy>=2.0.29", "asyncpg>=0.29.0", "edi", "config-sync", "seedwork", "ucp_models", "python-dotenv", "identity", "pydantic", "structlog", "database"]
 
 [tool.uv.sources]
 edi = { workspace = true }
-outbox = { workspace = true }
-pubsub = { workspace = true }
+config-sync = { workspace = true }
 seedwork = { workspace = true }
 
 [tool.deptry]

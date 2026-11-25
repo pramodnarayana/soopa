@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from outbox.domain.constants import BatchPublishDisposition
+
 
 @dataclass(frozen=True)
 class LogicalStreamEmissionResult:
@@ -13,4 +15,14 @@ class LogicalStreamEmissionResult:
     high_watermark: int | None
 
 
-__all__ = ["LogicalStreamEmissionResult"]
+@dataclass(frozen=True)
+class BatchPublishOutcome:
+    """First-class per-event disposition returned by a `StructuredOutboxPublisherPort`."""
+
+    event_id: str
+    disposition: BatchPublishDisposition
+    error_message: str | None = None
+    retry_delay_seconds: int | None = None
+
+
+__all__ = ["BatchPublishOutcome", "LogicalStreamEmissionResult"]

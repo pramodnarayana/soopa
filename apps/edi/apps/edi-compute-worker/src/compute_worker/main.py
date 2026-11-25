@@ -3,6 +3,7 @@ import asyncio
 from dotenv import load_dotenv
 from edi.bootstrap.container import (
     create_edi_control_plane_uow,
+    create_edi_dp_filtered_outbox_drain_repo,
     create_edi_tenant_uow_provider,
 )
 
@@ -19,9 +20,13 @@ from edi.application.use_cases.pipeline.compute_outbound_transform_use_case impo
     ComputeOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
-from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
+from edi.bootstrap.publisher_factory import (
+    EDI_COMPUTE_EVENT_TYPES,
+    create_edi_pipeline_publisher,
+)
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from observability import ObservabilityProvider
+from pubsub.domain.enums import is_database_queue_uri
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
 
@@ -72,12 +77,19 @@ class EdiComputeWorkerModule(LaunchableWorker):
             aws_endpoint=aws_endpoint,
         )
 
-        publisher = create_edi_pipeline_publisher(
-            compute_queue_url=settings.sqs.compute_queue_url,
-            orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
-            deliver_queue_url=settings.sqs.deliver_queue_url,
-            region_name=settings.aws.resolved_region,
-            endpoint_url=aws_endpoint,
+        compute_uri = settings.sqs.compute_queue_url or "db://edi-compute"
+        publisher = (
+            None
+            if is_database_queue_uri(compute_uri)
+            else create_edi_pipeline_publisher(
+                compute_queue_url=settings.sqs.compute_queue_url,
+                orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
+                deliver_queue_url=settings.sqs.deliver_queue_url,
+                region_name=settings.aws.resolved_region,
+                endpoint_url=aws_endpoint,
+                session_factory=self.db_router.global_session_scope,
+                database_url=settings.database.global_url,
+            )
         )
 
         async def use_case_factory(tenant_id: str) -> ComputeTransformUseCase:
@@ -101,11 +113,21 @@ class EdiComputeWorkerModule(LaunchableWorker):
             outbound_use_case_factory=outbound_use_case_factory,
         )
 
+        compute_shard_repo = (
+            create_edi_dp_filtered_outbox_drain_repo(
+                db_router=self.db_router,
+                event_types=EDI_COMPUTE_EVENT_TYPES,
+            )
+            if is_database_queue_uri(compute_uri)
+            else None
+        )
+
         self.manager = PubSubProvider.create_consumer_manager(
-            source_uri=settings.sqs.compute_queue_url,
+            source_uri=compute_uri,
             handler=dispatcher.dispatch_raw,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
+            shard_drain_repo=compute_shard_repo,
         )
         assert self.manager is not None
         self.manager.start()

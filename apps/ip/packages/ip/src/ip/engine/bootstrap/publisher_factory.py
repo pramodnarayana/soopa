@@ -5,6 +5,7 @@ from __future__ import annotations
 import structlog
 from outbox.adapters.outbound.event_type_router import EventTypeOutboxRouter, RouteKey
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from pubsub.adapters.database.sqlalchemy_database_queue_repository import SessionScopeFactory
 from pubsub.provider import PubSubProvider
 from seedwork.events import EventEnvelope, EventProcessingLane
 
@@ -14,6 +15,21 @@ from ip.engine.settings import IpEngineSettings
 logger = structlog.get_logger(__name__)
 
 NOTIFICATION_REQUESTED_EVENT_TYPE = "notification.requested"
+
+IP_ORCHESTRATOR_DP_EVENT_TYPES: tuple[str, ...] = (
+    IpEventType.INBOUND_RECORD_CREATED.value,
+    IpEventType.REPLICA_RECORD_CHANGED.value,
+    IpEventType.NORMALIZED_RECORD_CREATED.value,
+    IpEventType.CANONICAL_RECORD_CHANGED.value,
+    IpEventType.INTERVAL_BATCH_INGESTED.value,
+    IpEventType.INTERVAL_BATCH_PROCESSED.value,
+    IpEventType.FEEDER_OUTAGE_DETECTED.value,
+)
+
+IP_DELIVERY_DP_EVENT_TYPES: tuple[str, ...] = (
+    IpEventType.OUTBOUND_RECORD_CREATED.value,
+    IpEventType.FETCH_RECORD_REQUESTED.value,
+)
 
 
 class _UnconfiguredOutboxPublisher(OutboxPublisherPort):
@@ -50,7 +66,10 @@ class _UnconfiguredOutboxPublisher(OutboxPublisherPort):
 
 
 def _queue_or_noop(
-    queue_url: str, settings: IpEngineSettings, target_name: str = "sqs_queue"
+    queue_url: str,
+    settings: IpEngineSettings,
+    target_name: str = "sqs_queue",
+    session_factory: SessionScopeFactory | None = None,
 ) -> OutboxPublisherPort:
     if not queue_url:
         return _UnconfiguredOutboxPublisher(target_name=target_name)
@@ -58,11 +77,16 @@ def _queue_or_noop(
         destination_uri=queue_url,
         region_name=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
+        session_factory=session_factory,
+        database_url=settings.global_database_url,
     )
 
 
 def _topic_or_noop(
-    topic_arn: str, settings: IpEngineSettings, target_name: str = "sns_topic"
+    topic_arn: str,
+    settings: IpEngineSettings,
+    target_name: str = "sns_topic",
+    session_factory: SessionScopeFactory | None = None,
 ) -> OutboxPublisherPort:
     if not topic_arn:
         return _UnconfiguredOutboxPublisher(target_name=target_name)
@@ -70,6 +94,8 @@ def _topic_or_noop(
         destination_uri=topic_arn,
         region_name=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
+        session_factory=session_factory,
+        database_url=settings.global_database_url,
     )
 
 
@@ -199,43 +225,89 @@ def build_ip_dp_outbox_router(
     )
 
 
-def create_ip_cp_outbox_publisher(settings: IpEngineSettings) -> EventTypeOutboxRouter:
+def create_ip_cp_outbox_publisher(
+    settings: IpEngineSettings,
+    *,
+    session_factory: SessionScopeFactory | None = None,
+) -> EventTypeOutboxRouter:
     """Creates the production IP Control Plane outbox publisher router from IpEngineSettings."""
     return build_ip_cp_outbox_router(
         orchestrator_realtime_publisher=_queue_or_noop(
-            settings.ip_orchestrator_realtime_queue_url, settings
+            settings.ip_orchestrator_realtime_queue_url,
+            settings,
+            session_factory=session_factory,
         ),
         orchestrator_bulk_publisher=_queue_or_noop(
-            settings.ip_orchestrator_bulk_queue_url, settings
+            settings.ip_orchestrator_bulk_queue_url,
+            settings,
+            session_factory=session_factory,
         ),
         delivery_realtime_publisher=_queue_or_noop(
-            settings.ip_delivery_realtime_queue_url, settings
+            settings.ip_delivery_realtime_queue_url,
+            settings,
+            session_factory=session_factory,
         ),
-        delivery_bulk_publisher=_queue_or_noop(settings.ip_delivery_bulk_queue_url, settings),
-        notification_publisher=_queue_or_noop(settings.notification_queue_url, settings),
-        events_topic_publisher=_topic_or_noop(settings.ip_events_topic_arn, settings),
+        delivery_bulk_publisher=_queue_or_noop(
+            settings.ip_delivery_bulk_queue_url,
+            settings,
+            session_factory=session_factory,
+        ),
+        notification_publisher=_queue_or_noop(
+            settings.notification_queue_url,
+            settings,
+            session_factory=session_factory,
+        ),
+        events_topic_publisher=_topic_or_noop(
+            settings.ip_events_topic_arn,
+            settings,
+            session_factory=session_factory,
+        ),
     )
 
 
-def create_ip_dp_outbox_publisher(settings: IpEngineSettings) -> EventTypeOutboxRouter:
+def create_ip_dp_outbox_publisher(
+    settings: IpEngineSettings,
+    *,
+    session_factory: SessionScopeFactory | None = None,
+) -> EventTypeOutboxRouter:
     """Creates the production IP Data Plane outbox publisher router from IpEngineSettings."""
     return build_ip_dp_outbox_router(
         orchestrator_realtime_publisher=_queue_or_noop(
-            settings.ip_orchestrator_realtime_queue_url, settings
+            settings.ip_orchestrator_realtime_queue_url,
+            settings,
+            session_factory=session_factory,
         ),
         orchestrator_bulk_publisher=_queue_or_noop(
-            settings.ip_orchestrator_bulk_queue_url, settings
+            settings.ip_orchestrator_bulk_queue_url,
+            settings,
+            session_factory=session_factory,
         ),
         delivery_realtime_publisher=_queue_or_noop(
-            settings.ip_delivery_realtime_queue_url, settings
+            settings.ip_delivery_realtime_queue_url,
+            settings,
+            session_factory=session_factory,
         ),
-        delivery_bulk_publisher=_queue_or_noop(settings.ip_delivery_bulk_queue_url, settings),
-        notification_publisher=_queue_or_noop(settings.notification_queue_url, settings),
-        events_topic_publisher=_topic_or_noop(settings.ip_events_topic_arn, settings),
+        delivery_bulk_publisher=_queue_or_noop(
+            settings.ip_delivery_bulk_queue_url,
+            settings,
+            session_factory=session_factory,
+        ),
+        notification_publisher=_queue_or_noop(
+            settings.notification_queue_url,
+            settings,
+            session_factory=session_factory,
+        ),
+        events_topic_publisher=_topic_or_noop(
+            settings.ip_events_topic_arn,
+            settings,
+            session_factory=session_factory,
+        ),
     )
 
 
 __all__ = [
+    "IP_DELIVERY_DP_EVENT_TYPES",
+    "IP_ORCHESTRATOR_DP_EVENT_TYPES",
     "NOTIFICATION_REQUESTED_EVENT_TYPE",
     "build_ip_cp_outbox_router",
     "build_ip_dp_outbox_router",

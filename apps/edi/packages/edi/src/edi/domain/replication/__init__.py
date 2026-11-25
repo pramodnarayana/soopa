@@ -5,9 +5,6 @@ from edi.domain.replication.graph import (
     EntityDependencyProtocol,
     EntitySpec,
     EntitySpecProtocol,
-    PermanentProvisioningError,
-    ProvisioningError,
-    TransientProvisioningError,
     topological_layers,
     validate_replication_graph,
 )
@@ -17,9 +14,6 @@ __all__ = [
     "EntityDependencyProtocol",
     "EntitySpec",
     "EntitySpecProtocol",
-    "PermanentProvisioningError",
-    "ProvisioningError",
-    "TransientProvisioningError",
     "topological_layers",
     "validate_replication_graph",
 ]

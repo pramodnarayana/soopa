@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@soopa/database": "workspace:*",
-    "@soopa/ucp-models": "workspace:*"
+    "@soopa/ucp-models": "workspace:*",
+    "@soopa/pubsub": "workspace:*"
   }
 }

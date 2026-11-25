@@ -56,6 +56,8 @@ class WorkerContainer:
             destination_uri=self.settings.aws.sns_topic_arn,
             region_name=self.settings.aws.resolved_region,
             endpoint_url=self.settings.aws.endpoint_url,
+            session_factory=self.db_router.global_session_scope,
+            database_url=self.settings.database.global_url,
         )
 
         self._wire_scheduled_jobs(cp_outbox_repo, cp_outbox_repo, self.cp_outbox_publisher)
@@ -111,6 +113,8 @@ class WorkerContainer:
             handler=cp_dispatcher.dispatch,
             region_name=self.settings.aws.resolved_region,
             endpoint_url=self.settings.aws.endpoint_url,
+            session_factory=self.db_router.global_session_scope,
+            database_url=self.settings.database.global_url,
         )
 
     async def start(self) -> None:

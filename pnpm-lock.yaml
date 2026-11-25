@@ -174,12 +174,9 @@ importers:
       '@soopa/api':
         specifier: workspace:*
         version: link:../../packages/edi
-      '@soopa/outbox':
+      '@soopa/config-sync':
         specifier: workspace:*
-        version: link:../../../../core/platform/packages/outbox
-      '@soopa/pubsub':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/pubsub
+        version: link:../../../../core/platform/packages/config-sync
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
@@ -294,6 +291,9 @@ importers:
 
   apps/edi/packages/edi:
     devDependencies:
+      '@soopa/config-sync':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/config-sync
       '@soopa/identity':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/identity
@@ -427,6 +427,9 @@ importers:
 
   apps/ip/packages/ip:
     devDependencies:
+      '@soopa/config-sync':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/config-sync
       '@soopa/database':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/database
@@ -720,6 +723,12 @@ importers:
 
   core/platform/apps/scheduler-worker:
     devDependencies:
+      '@soopa/config-sync':
+        specifier: workspace:*
+        version: link:../../packages/config-sync
+      '@soopa/pubsub':
+        specifier: workspace:*
+        version: link:../../packages/pubsub
       '@soopa/scheduler':
         specifier: workspace:*
         version: link:../../packages/scheduler
@@ -729,6 +738,9 @@ importers:
       '@soopa/api':
         specifier: workspace:*
         version: link:../../../../apps/edi/packages/edi
+      '@soopa/config-sync':
+        specifier: workspace:*
+        version: link:../../packages/config-sync
       '@soopa/ip':
         specifier: workspace:*
         version: link:../../../../apps/ip/packages/ip
@@ -798,6 +810,15 @@ importers:
 
   core/platform/packages/cache: {}
 
+  core/platform/packages/config-sync:
+    devDependencies:
+      '@soopa/database':
+        specifier: workspace:*
+        version: link:../database
+      '@soopa/seedwork':
+        specifier: workspace:*
+        version: link:../seedwork
+
   core/platform/packages/database: {}
 
   core/platform/packages/identity:
@@ -861,6 +882,9 @@ importers:
       '@soopa/database':
         specifier: workspace:*
         version: link:../database
+      '@soopa/pubsub':
+        specifier: workspace:*
+        version: link:../pubsub
       '@soopa/ucp-models':
         specifier: workspace:*
         version: link:../../../ucp/packages/models

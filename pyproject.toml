@@ -62,6 +62,7 @@ members = [
     "core/platform/packages/orchestration",
     "core/platform/packages/strace",
     "core/platform/packages/cache",
+    "core/platform/packages/config-sync",
     "core/platform/packages/sharding",
     "core/platform/packages/webhooks",
     "core/platform/packages/replay",
@@ -89,6 +90,7 @@ secret-store = { workspace = true }
 orchestration = { workspace = true }
 strace = { workspace = true }
 cache = { workspace = true }
+config-sync = { workspace = true }
 sharding = { workspace = true }
 ip = { workspace = true }
 shttp = { workspace = true }

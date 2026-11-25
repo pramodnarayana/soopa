@@ -6,9 +6,11 @@ from collections.abc import AsyncIterable
 from datetime import UTC, datetime
 
 import aioboto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from storage.codecs import StorageCodec
 from storage.domain.enums import CompressionCodec
+from storage.domain.exceptions import StorageError
 from storage.ports.payload_storage_port import PayloadStoragePort
 
 MIN_MULTIPART_CHUNK_BYTES: int = 5 * 1024 * 1024  # 5MB S3 part size requirement
@@ -60,13 +62,17 @@ class Aioboto3PayloadStorage(PayloadStoragePort):
 
     async def upload(self, tenant_id: str, message_id: str, payload: bytes) -> str:
         key = f"tenants/{tenant_id}/inbound/{message_id}.bin"
+        return await self.upload_key(key=key, payload=payload)
+
+    async def upload_key(self, key: str, payload: bytes) -> str:
+        clean_key = key.lstrip("/")
         async with self.session.client("s3", **self._client_kwargs()) as s3:
             await s3.put_object(
                 Bucket=self.bucket,
-                Key=key,
+                Key=clean_key,
                 Body=payload,
             )
-        return f"s3://{self.bucket}/{key}"
+        return f"s3://{self.bucket}/{clean_key}"
 
     async def upload_partitioned(
         self,
@@ -177,10 +183,13 @@ class Aioboto3PayloadStorage(PayloadStoragePort):
 
         key = storage_uri.removeprefix(prefix)
 
-        async with self.session.client("s3", **self._client_kwargs()) as s3:
-            response = await s3.get_object(Bucket=self.bucket, Key=key)
-            async with response["Body"] as stream:
-                raw_bytes = bytes(await stream.read())
+        try:
+            async with self.session.client("s3", **self._client_kwargs()) as s3:
+                response = await s3.get_object(Bucket=self.bucket, Key=key)
+                async with response["Body"] as stream:
+                    raw_bytes = bytes(await stream.read())
+        except (ClientError, BotoCoreError) as exc:
+            raise StorageError(f"Failed to download S3 object {storage_uri}: {exc}") from exc
 
         if not decompress:
             return raw_bytes

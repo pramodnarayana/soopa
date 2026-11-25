@@ -1,17 +1,15 @@
-"""Narrow integration tests for IngestRecordUseCase using real PostgreSQL SAVEPOINTs and LocalStack S3.
+"""Narrow integration tests for IngestRecordUseCase using real PostgreSQL SAVEPOINTs and FileSystemPayloadStorage.
 
 Zero mocks, zero InMemory/Fake classes: Tests L1 Ingestion Gateway against SqlAlchemyInboundRecordRepository
-and TieredStorageAdapter backed by real LocalStack S3 (Aioboto3PayloadStorage).
+and TieredStorageAdapter backed by real FileSystemPayloadStorage on local disk.
 """
 
 from __future__ import annotations
 
-import os
-from collections.abc import AsyncGenerator
+import json
+from pathlib import Path
 
-import aioboto3
 import pytest
-import pytest_asyncio
 from database.types import TenantSession
 from identity.domain.constants import IdentityIdPrefix
 from ip.engine.adapters.outbound.database.data_plane.inbound_record_repository import (
@@ -24,39 +22,20 @@ from ip.engine.application.use_cases.ingress.ingest_record_use_case import (
 )
 from ip.engine.bootstrap.container import create_ip_data_plane_uow
 from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.ports.outbound.tiered_storage_port import TieredStorageResultDTO
 from seedwork import generate_id
 from seedwork.domain.types import JsonDict
-from storage.adapters.s3_storage_adapter import Aioboto3PayloadStorage
+from storage.adapters.file_system_storage_adapter import FileSystemPayloadStorage
 
 pytestmark = pytest.mark.integration
 
 
-@pytest_asyncio.fixture
-async def s3_bucket() -> AsyncGenerator[str, None]:
-    bucket_name = f"ip-ingest-{generate_id(IdentityIdPrefix.TENANT.value).replace('_', '-')}"
-    endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
-    session = aioboto3.Session()
-    async with session.client(
-        "s3",
-        region_name="us-east-1",
-        endpoint_url=endpoint_url,
-        aws_access_key_id="test",
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
-    ) as s3:
-        await s3.create_bucket(Bucket=bucket_name)
-        yield bucket_name
-        response = await s3.list_objects_v2(Bucket=bucket_name)
-        if "Contents" in response:
-            for obj in response["Contents"]:
-                await s3.delete_object(Bucket=bucket_name, Key=obj["Key"])
-        await s3.delete_bucket(Bucket=bucket_name)
-
-
 @pytest.mark.asyncio
-async def test_ingest_record_inline(tenant_session: TenantSession) -> None:
+async def test_ingest_record_inline(tenant_session: TenantSession, tmp_path: Path) -> None:
     uow = create_ip_data_plane_uow(tenant_session)
     repo = SqlAlchemyInboundRecordRepository(tenant_session)
-    tiered_storage = TieredStorageAdapter(threshold_bytes=64 * 1024)
+    storage = FileSystemPayloadStorage(base_directory=tmp_path)
+    tiered_storage = TieredStorageAdapter(storage_client=storage, threshold_bytes=64 * 1024)
     use_case = IngestRecordUseCase(uow=uow, tiered_storage=tiered_storage)
     tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     connection_id = generate_id(IpIdPrefix.CONNECTION.value)
@@ -89,21 +68,14 @@ async def test_ingest_record_inline(tenant_session: TenantSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ingest_record_s3_offload(
+async def test_ingest_record_storage_offload(
     tenant_session: TenantSession,
-    s3_bucket: str,
+    tmp_path: Path,
 ) -> None:
-    endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
-    s3_storage = Aioboto3PayloadStorage(
-        bucket=s3_bucket,
-        region="us-east-1",
-        endpoint_url=endpoint_url,
-        access_key_id="test",
-        secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
-    )
+    storage = FileSystemPayloadStorage(base_directory=tmp_path)
     uow = create_ip_data_plane_uow(tenant_session)
     repo = SqlAlchemyInboundRecordRepository(tenant_session)
-    tiered_storage = TieredStorageAdapter(storage_client=s3_storage, threshold_bytes=500)
+    tiered_storage = TieredStorageAdapter(storage_client=storage, threshold_bytes=500)
     use_case = IngestRecordUseCase(uow=uow, tiered_storage=tiered_storage)
     tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     connection_id = generate_id(IpIdPrefix.CONNECTION.value)
@@ -128,4 +100,16 @@ async def test_ingest_record_s3_offload(
     assert saved is not None
     assert saved.request_body is None
     assert saved.request_s3_key is not None
-    assert saved.request_s3_key.startswith(f"s3://{s3_bucket}/tenants/{tenant_id}/inbound/")
+    assert saved.request_s3_key.startswith("file://")
+
+    retrieved = await tiered_storage.retrieve(
+        TieredStorageResultDTO(
+            is_inlined=False,
+            raw_payload=None,
+            s3_key=saved.request_s3_key,
+            payload_size_bytes=result.payload_size_bytes,
+            payload_sha256=saved.request_sha256,
+        )
+    )
+    assert retrieved.is_ok is True
+    assert json.loads(retrieved.value.decode("utf-8")) == large_dict

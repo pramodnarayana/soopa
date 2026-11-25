@@ -4,7 +4,8 @@ Application Layer (Layer 3) - EDI Bounded Context: AS2 Server
 Provisions only the AS2 Server ECS Fargate service.
 
 Tier 6: Deployed on every code push (image_tag change).
-Depends on: edi/messaging (queue URLs), edi/storage (S3 payloads bucket), platform (cluster, ECR, ALB), data (DB).
+Depends on: edi/storage (S3 payloads bucket), platform (cluster, ECR, ALB), data (DB).
+Messaging env vars are resolved directly from topology.json as PostgreSQL Pub/Sub URIs (`db://`).
 """
 
 import json
@@ -14,8 +15,9 @@ import pulumi_aws as aws
 from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
 from infra_seedwork.env import queue_env_vars_to_ecs_format
-from infra_seedwork.messaging import resolve_messaging_queue_arns
+from infra_seedwork.messaging import build_database_pubsub_env_vars
 from infra_seedwork.network import provision_target_group_and_rule
+from infra_seedwork.topology import load_topology
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-edi-"
@@ -27,13 +29,11 @@ edi_environment = config.get("edi_environment") or "T"
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
-messaging_stack_ref = config.get("messaging_stack") or f"organization/edi-messaging/{_env}"
 storage_stack_ref = config.get("storage_stack") or f"organization/edi-storage/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
-messaging = pulumi.StackReference(messaging_stack_ref)
 storage = pulumi.StackReference(storage_stack_ref)
 obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
 obs = pulumi.StackReference(obs_stack_ref)
@@ -58,8 +58,11 @@ global_db_secret_arn = data.require_output("global_db_secret_arn")
 
 as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
 as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
-queue_env_vars = messaging.require_output("queue_env_vars")
-queue_arns = resolve_messaging_queue_arns(messaging)
+_topology = load_topology()
+_edi_queues = {
+    name for q in _topology.get("queues", []) if (name := q.get("name")) and name.startswith("edi-")
+}
+queue_env_vars = build_database_pubsub_env_vars(_topology, queue_filter=_edi_queues)
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
@@ -231,14 +234,6 @@ as2_server = provision_fargate_service(
             "Effect": "Allow",
             "Action": ["s3:ListBucket"],
             "Resource": as2_payloads_bucket_arn,
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "sqs:SendMessage",
-                "sqs:GetQueueAttributes",
-            ],
-            "Resource": queue_arns,
         },
     ],
     autoscaling_config=autoscaling_config,

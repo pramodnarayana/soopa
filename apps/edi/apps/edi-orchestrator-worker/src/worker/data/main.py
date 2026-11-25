@@ -17,13 +17,20 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
     DispatchOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
-from edi.bootstrap.container import create_edi_tenant_uow_provider
-from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
+from edi.bootstrap.container import (
+    create_edi_dp_filtered_outbox_drain_repo,
+    create_edi_tenant_uow_provider,
+)
+from edi.bootstrap.publisher_factory import (
+    EDI_ORCHESTRATOR_EVENT_TYPES,
+    create_edi_pipeline_publisher,
+)
 from edi.domain.routing.enums import EdiDirection
 from edi.domain.transaction.enums import PipelineEventType
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from pubsub.domain.enums import is_database_queue_uri
 from pubsub.exceptions import ConsumerTerminalError
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
@@ -46,7 +53,7 @@ logger = structlog.get_logger(__name__)
 def _build_orchestrator_route_registry(
     transformer: TransformerPort,
     settings: WorkerSettings,
-    publisher: OutboxPublisherPort,
+    publisher: OutboxPublisherPort | None,
 ) -> EdiDataPlaneRouteRegistry:
     def router_factory(uow_fact: UowFactory) -> DeliveryRouterUseCase:
         return DeliveryRouterUseCase(uow_factory=uow_fact, publisher=publisher)
@@ -130,13 +137,21 @@ def _setup_registry(
     transformer: TransformerPort,
     settings: WorkerSettings,
     uow_provider: SqlAlchemyTenantUoWProvider,
+    db_router: DatabaseRouter | None = None,
 ) -> EdiDataPlaneEventDispatcher:
-    publisher = create_edi_pipeline_publisher(
-        compute_queue_url=settings.sqs.compute_queue_url,
-        orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
-        deliver_queue_url=settings.sqs.deliver_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=settings.aws.endpoint_url,
+    orch_uri = settings.sqs.orchestrator_queue_url or "db://edi-orchestrator"
+    publisher: OutboxPublisherPort | None = (
+        None
+        if is_database_queue_uri(orch_uri)
+        else create_edi_pipeline_publisher(
+            compute_queue_url=settings.sqs.compute_queue_url,
+            orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
+            deliver_queue_url=settings.sqs.deliver_queue_url,
+            region_name=settings.aws.resolved_region,
+            endpoint_url=settings.aws.endpoint_url,
+            session_factory=db_router.global_session_scope if db_router is not None else None,
+            database_url=settings.database.global_url,
+        )
     )
     registry = _build_orchestrator_route_registry(transformer, settings, publisher)
 
@@ -182,13 +197,23 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
             aws_endpoint=aws_endpoint,
         )
 
-        consumer = _setup_registry(transformer, settings, uow_provider)
+        consumer = _setup_registry(transformer, settings, uow_provider, db_router=self.db_router)
+        orch_uri = settings.sqs.orchestrator_queue_url or "db://edi-orchestrator"
+        orch_shard_repo = (
+            create_edi_dp_filtered_outbox_drain_repo(
+                db_router=self.db_router,
+                event_types=EDI_ORCHESTRATOR_EVENT_TYPES,
+            )
+            if is_database_queue_uri(orch_uri)
+            else None
+        )
 
         self.orchestrator_manager = PubSubProvider.create_consumer_manager(
-            source_uri=settings.sqs.orchestrator_queue_url,
+            source_uri=orch_uri,
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
+            shard_drain_repo=orch_shard_repo,
         )
         self.orchestrator_manager.start()
 

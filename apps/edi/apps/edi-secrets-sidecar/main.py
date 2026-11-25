@@ -1,12 +1,14 @@
 import asyncio
 import os
+from collections.abc import Iterable
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Protocol, cast
 
 import boto3
 import structlog
 from edi.config.constants import SecretCategory
+from secret_store.provider import SecretStoreBackend
 
 logger = structlog.get_logger(__name__)
 
@@ -16,8 +18,12 @@ if POLL_INTERVAL_SECONDS <= 0:
     raise ValueError("SECRETS_SYNC_INTERVAL_SECONDS must be strictly positive.")
 
 
+class PaginatorProtocol(Protocol):
+    def paginate(self, **kwargs: object) -> Iterable[dict[str, object]]: ...
+
+
 class SecretsManagerClient(Protocol):
-    def get_paginator(self, operation_name: str) -> Any: ...
+    def get_paginator(self, operation_name: str) -> PaginatorProtocol: ...
     def get_secret_value(
         self,
         *,
@@ -42,8 +48,10 @@ def get_client() -> SecretsManagerClient:
     return cast(SecretsManagerClient, boto3.client("secretsmanager", **client_kwargs))
 
 
-def _process_secret(client: SecretsManagerClient, secret: dict[str, Any]) -> str | None:
-    secret_name = secret["Name"]
+def _process_secret(client: SecretsManagerClient, secret: dict[str, object]) -> str | None:
+    secret_name = str(secret.get("Name", ""))
+    if not secret_name:
+        return None
     response = client.get_secret_value(SecretId=secret_name)
     secret_string = response.get("SecretString")
     if not secret_string:
@@ -65,7 +73,7 @@ def _process_secret(client: SecretsManagerClient, secret: dict[str, Any]) -> str
     try:
         SecretCategory(category_str)
     except ValueError:
-        logger.warning("unknown_secret_category", category=category_str)
+        logger.error("unknown_secret_category", category=category_str)
         return None
 
     file_path = os.path.join(SECRETS_MOUNT_PATH, *parts)
@@ -123,7 +131,7 @@ def _reconcile_files(active_files: set[str], target_dir: str | None = None) -> N
                     os.remove(local_file)
                     logger.info("removed_revoked_secret_file", path=local_file)
                 except OSError as e:
-                    logger.warning(
+                    logger.error(
                         "failed_to_remove_revoked_secret_file",
                         path=local_file,
                         error=str(e),
@@ -131,6 +139,20 @@ def _reconcile_files(active_files: set[str], target_dir: str | None = None) -> N
 
 
 def sync_secrets() -> None:
+    raw_backend = os.environ.get("SECRETS_BACKEND", SecretStoreBackend.AWS.value).strip().lower()
+    if raw_backend in {
+        SecretStoreBackend.FILE.value,
+        SecretStoreBackend.KUBERNETES.value,
+        SecretStoreBackend.VAULT.value,
+    }:
+        os.makedirs(SECRETS_MOUNT_PATH, exist_ok=True)
+        logger.info(
+            "secrets_sync_managed_by_sovereign_backend",
+            backend=raw_backend,
+            mount_path=SECRETS_MOUNT_PATH,
+        )
+        return
+
     client = get_client()
     try:
         paginator = client.get_paginator("list_secrets")
@@ -148,10 +170,13 @@ def sync_secrets() -> None:
         active_files: set[str] = set()
 
         for page in page_iterator:
-            for secret in page.get("SecretList", []):
-                file_path = _process_secret(client, secret)
-                if file_path:
-                    active_files.add(file_path)
+            secret_list = page.get("SecretList")
+            if isinstance(secret_list, list):
+                for secret in secret_list:
+                    if isinstance(secret, dict):
+                        file_path = _process_secret(client, secret)
+                        if file_path:
+                            active_files.add(file_path)
 
         _reconcile_files(active_files, target_dir=reconcile_target)
 

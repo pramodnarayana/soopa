@@ -11,10 +11,10 @@ import json
 
 import pulumi
 import pulumi_aws as aws
+import pulumi_random as random
 from alb import provision_load_balancer
 from ecr import provision_ecr
 from ecs_cluster import provision_cluster
-from event_bus import provision_event_bus
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"
@@ -64,8 +64,10 @@ main_alb, main_listener, obs_listener = provision_load_balancer(
 ecs_cluster, cloud_map_namespace = provision_cluster(prefix=_prefix, tags=_TAGS, vpc_id=vpc_id)
 
 
-# ── Universal Event Bus (Messaging) ───────────────────────────────────────────
-platform_events_topic = provision_event_bus(prefix=_prefix, tags=_TAGS)
+# ── Universal Event Bus (PostgreSQL Pub/Sub — Zero AWS SNS) ───────────────────
+# Platform topic fan-out is backed by `pubsub.platform_topic_subscriptions` in global_db.
+# Removing `provision_event_bus` cleanly retires the legacy AWS SNS topic on rollout.
+platform_events_topic_uri = "db://topic/platform-events-topic"
 
 # ── Container Registries ──────────────────────────────────────────────────────
 zitadel_ecr_repo, app_ecr_repo, openobserve_ecr_repo = provision_ecr(prefix=_prefix, tags=_TAGS)
@@ -88,20 +90,30 @@ identity_default_user_password = pulumi.Output.secret(identity_pwd_param.value)
 
 secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
 
+config_sync_internal_token = random.RandomPassword(
+    f"{_prefix}config-sync-internal-token",
+    length=48,
+    special=False,
+)
+
 app_defaults_secret = aws.secretsmanager.Secret(
     f"{_prefix}app-defaults",
     name=f"{_prefix}app-defaults",
-    description="Shared application-level credentials for platform workers (e.g. identity seed password, machine key).",
+    description="Shared application-level credentials for platform services (identity seed password, internal config watch token).",
     recovery_window_in_days=secret_recovery_window_days,
     tags=_TAGS,
 )
 aws.secretsmanager.SecretVersion(
     f"{_prefix}app-defaults-version",
     secret_id=app_defaults_secret.id,
-    secret_string=pulumi.Output.all(pwd=identity_default_user_password).apply(
+    secret_string=pulumi.Output.all(
+        pwd=identity_default_user_password,
+        sync_token=config_sync_internal_token.result,
+    ).apply(
         lambda args: json.dumps(
             {
                 "identity_default_user_password": args["pwd"],
+                "config_sync_internal_token": args["sync_token"],
             }
         )
     ),
@@ -178,7 +190,8 @@ pulumi.export("main_alb_dns_name", main_alb.dns_name)
 pulumi.export("main_alb_zone_id", main_alb.zone_id)
 pulumi.export("staging_domain", staging_domain)
 
-pulumi.export("sns_platform_events_topic_arn", platform_events_topic.arn)
+pulumi.export("pubsub_platform_events_topic_uri", platform_events_topic_uri)
+pulumi.export("sns_platform_events_topic_arn", platform_events_topic_uri)
 pulumi.export("zitadel_ecr_repo_url", zitadel_ecr_repo.repository_url)
 pulumi.export("ecr_repository_url", app_ecr_repo.repository_url)
 pulumi.export("openobserve_ecr_repo_url", openobserve_ecr_repo.repository_url)

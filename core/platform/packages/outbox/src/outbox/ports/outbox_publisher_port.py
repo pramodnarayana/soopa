@@ -1,5 +1,7 @@
-from typing import Protocol
+from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
 
+from outbox.domain.models import BatchPublishOutcome
 from seedwork.events import EventEnvelope
 
 
@@ -24,4 +26,15 @@ class OutboxPublisherPort(Protocol):
         entries fail. A transport failure that prevents every entry from being attempted or
         acknowledged must be propagated so the processor can preserve its failure reason.
         """
+        ...
+
+
+@runtime_checkable
+class StructuredOutboxPublisherPort(OutboxPublisherPort, Protocol):
+    """Extension of OutboxPublisherPort returning per-event ACK/NACK/DLQ dispositions."""
+
+    async def publish_batch_structured(
+        self, events: Sequence[EventEnvelope]
+    ) -> list[BatchPublishOutcome]:
+        """Publishes/dispatches a batch and returns explicit per-event dispositions."""
         ...

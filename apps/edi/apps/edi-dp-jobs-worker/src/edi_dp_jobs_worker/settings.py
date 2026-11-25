@@ -1,6 +1,5 @@
 import typing
 from functools import lru_cache
-from typing import Literal
 
 from edi.config.models import (
     CommonSettings,
@@ -15,9 +14,6 @@ from seedwork.infra.config import load_settings_safely
 
 
 class WorkerSettings(CommonSettings):
-    storage_backend: Literal["postgres", "s3"] = Field(
-        validation_alias="STORAGE_BACKEND", default="postgres"
-    )
     s3: S3Settings = Field(default_factory=lambda: typing.cast(S3Settings, {}))
     aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
     identity: PlatformIdentitySettings = Field(

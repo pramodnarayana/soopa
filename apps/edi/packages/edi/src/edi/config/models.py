@@ -72,10 +72,6 @@ class EdiDataPlaneSqsSettings(CleanBaseSettings):
 class EdiControlPlaneSqsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
-    provisioning_queue_url: str = Field(
-        validation_alias="SQS_PROVISIONING_QUEUE_URL",
-        description="The SQS queue URL for EDI Config Sync/Provisioning",
-    )
     control_plane_jobs_queue_url: str = Field(
         validation_alias="SQS_CONTROL_PLANE_JOBS_QUEUE_URL",
         description="The SQS queue URL for EDI Control Plane Jobs",

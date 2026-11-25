@@ -14,6 +14,7 @@ from scripts.seed_jobs import (
     build_ip_scheduled_jobs,
 )
 from sync_topology import (
+    PubSubTransportMode,
     build_env_mappings,
     compose_topology_manifests,
     resolve_topology_paths,
@@ -66,18 +67,24 @@ def test_compose_topology_manifests_and_build_env_mappings_ip_only() -> None:
     assert "edi-compute" not in queue_names
 
     mappings = build_env_mappings(composed)
+    assert mappings["SQS_IP_ORCHESTRATOR_REALTIME_QUEUE_URL"] == "db://ip-orchestrator-realtime"
+    assert mappings["SQS_IP_CONTROL_PLANE_JOBS_QUEUE_URL"] == "db://ip-control-plane-jobs.fifo"
+    assert mappings["SNS_IP_EVENTS_TOPIC_ARN"] == "db://topic/ip-events-topic"
+    assert "SQS_EDI_COMPUTE_QUEUE_URL" not in mappings
+
+    aws_mappings = build_env_mappings(composed, transport=PubSubTransportMode.AWS)
     assert (
-        mappings["SQS_IP_ORCHESTRATOR_REALTIME_QUEUE_URL"]
+        aws_mappings["SQS_IP_ORCHESTRATOR_REALTIME_QUEUE_URL"]
         == "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/ip-orchestrator-realtime"
     )
     assert (
-        mappings["SQS_IP_CONTROL_PLANE_JOBS_QUEUE_URL"]
+        aws_mappings["SQS_IP_CONTROL_PLANE_JOBS_QUEUE_URL"]
         == "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/ip-control-plane-jobs.fifo"
     )
     assert (
-        mappings["SNS_IP_EVENTS_TOPIC_ARN"] == "arn:aws:sns:us-east-1:000000000000:ip-events-topic"
+        aws_mappings["SNS_IP_EVENTS_TOPIC_ARN"]
+        == "arn:aws:sns:us-east-1:000000000000:ip-events-topic"
     )
-    assert "SQS_EDI_COMPUTE_QUEUE_URL" not in mappings
 
 
 def test_sync_topology_writes_composed_manifest_and_updates_env(tmp_path: Path) -> None:

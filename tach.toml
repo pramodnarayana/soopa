@@ -17,7 +17,61 @@ source_roots = [
     "core/platform/packages/orchestration/src",
     "core/platform/packages/strace/src",
     "core/platform/packages/cache/src",
+    "core/platform/packages/config-sync/src",
     "core/platform/packages/sharding/src"
+]
+
+[[modules]]
+path = "config_sync.domain"
+depends_on = []
+
+[[modules]]
+path = "config_sync.ports"
+depends_on = [
+    "config_sync.domain"
+]
+
+[[modules]]
+path = "config_sync.application"
+depends_on = [
+    "config_sync.domain",
+    "config_sync.ports"
+]
+
+[[modules]]
+path = "config_sync.adapters"
+depends_on = [
+    "config_sync.domain",
+    "config_sync.ports",
+    "config_sync.application",
+    "database.models",
+    "database.utils"
+]
+
+[[modules]]
+path = "config_sync.provider"
+depends_on = [
+    "config_sync.domain",
+    "config_sync.ports",
+    "config_sync.application",
+    "config_sync.adapters"
+]
+
+[[modules]]
+path = "config_sync.gateway"
+depends_on = [
+    "config_sync.domain",
+    "config_sync.ports",
+    "config_sync.application",
+    "config_sync.adapters",
+    "config_sync.provider"
+]
+
+[[modules]]
+path = "config_sync.testing"
+depends_on = [
+    "config_sync.domain",
+    "config_sync.ports"
 ]
 
 
@@ -236,7 +290,9 @@ depends_on = [
     "strace.orm",
     "sharding.domain",
     "sharding.application",
-    "sharding.provider"
+    "sharding.provider",
+    "config_sync.domain",
+    "config_sync.ports"
 ]
 
 [[modules]]
@@ -326,7 +382,11 @@ depends_on = [
     "strace.domain",
     "strace.ports",
     "strace.application",
-    "strace.adapters"
+    "strace.adapters",
+    "config_sync.domain",
+    "config_sync.ports",
+    "config_sync.application",
+    "config_sync.provider"
 ]
 
 [[modules]]
@@ -405,7 +465,9 @@ depends_on = [
     "strace.ports",
     "strace.orm",
     "sharding.domain",
-    "sharding.provider"
+    "sharding.provider",
+    "config_sync.domain",
+    "config_sync.ports"
 ]
 
 [[modules]]

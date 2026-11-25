@@ -15,7 +15,7 @@ from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from seedwork.events import EventEnvelope, EventProcessingLane
-from sqlalchemy import case, delete, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
@@ -33,6 +33,8 @@ class SqlAlchemyGlobalOutboxRepository(
     """
 
     _SWEEP_BATCH_SIZE: int = 5000
+    _BASE_RETRY_BACKOFF_SECONDS: int = 10
+    _MAX_RETRY_BACKOFF_SECONDS: int = 300
 
     def __init__(
         self,
@@ -41,11 +43,25 @@ class SqlAlchemyGlobalOutboxRepository(
         model_cls: type[OutboxModelT],
         source: str,
         max_attempts: int = 3,
+        event_types: Sequence[str] | None = None,
+        exclude_event_types: Sequence[str] | None = None,
+        lanes: Sequence[str] | None = None,
+        base_retry_backoff_seconds: int = _BASE_RETRY_BACKOFF_SECONDS,
+        max_retry_backoff_seconds: int = _MAX_RETRY_BACKOFF_SECONDS,
     ) -> None:
         self._session_scope = session_factory
         self._model_cls = model_cls
         self._source = source
         self._max_attempts = max_attempts
+        self._event_types: tuple[str, ...] | None = (
+            tuple(event_types) if event_types is not None else None
+        )
+        self._exclude_event_types: tuple[str, ...] | None = (
+            tuple(exclude_event_types) if exclude_event_types is not None else None
+        )
+        self._lanes: tuple[str, ...] | None = tuple(lanes) if lanes is not None else None
+        self._base_retry_backoff_seconds = base_retry_backoff_seconds
+        self._max_retry_backoff_seconds = max_retry_backoff_seconds
 
     async def claim_next_events(
         self, worker_id: str, limit: int, lock_lease_ms: int = 30000
@@ -55,23 +71,30 @@ class SqlAlchemyGlobalOutboxRepository(
         m = self._model_cls
 
         async with self._session_scope() as session:
-            subq = (
-                select(m.id)
-                .where(
-                    or_(
-                        m.status == OutboxStatus.PENDING.value,
-                        (m.status == OutboxStatus.PROCESSING.value) & (m.lease_expires_at < now),
-                    )
+            retry_ready = or_(m.lease_expires_at.is_(None), m.lease_expires_at <= now)
+            subq_stmt = select(m.id).where(
+                or_(
+                    (m.status == OutboxStatus.PENDING.value) & retry_ready,
+                    (m.status == OutboxStatus.PROCESSING.value) & (m.lease_expires_at < now),
                 )
-                .order_by(m.lane.desc(), m.created_at.asc())
+            )
+            if self._event_types is not None:
+                subq_stmt = subq_stmt.where(m.event_type.in_(self._event_types))
+            if self._exclude_event_types is not None:
+                subq_stmt = subq_stmt.where(m.event_type.not_in(self._exclude_event_types))
+            if self._lanes is not None:
+                subq_stmt = subq_stmt.where(m.lane.in_(self._lanes))
+
+            claimed_cte = (
+                subq_stmt.order_by(m.lane.desc(), m.created_at.asc())
                 .limit(limit)
                 .with_for_update(skip_locked=True)
-                .scalar_subquery()
+                .cte("claimed_global_outbox_rows")
             )
 
             stmt = (
                 update(m)
-                .where(m.id.in_(subq))
+                .where(m.id == claimed_cte.c.id)
                 .values(
                     status=OutboxStatus.PROCESSING.value,
                     updated_at=now,
@@ -99,7 +122,7 @@ class SqlAlchemyGlobalOutboxRepository(
             while True:
                 now = datetime.now(UTC)
                 stale_cutoff = now - timedelta(milliseconds=lock_lease_ms)
-                subq = (
+                sweep_cte = (
                     select(m.id)
                     .where(
                         m.status == OutboxStatus.PROCESSING.value,
@@ -110,11 +133,11 @@ class SqlAlchemyGlobalOutboxRepository(
                     )
                     .limit(self._SWEEP_BATCH_SIZE)
                     .with_for_update(skip_locked=True)
-                    .scalar_subquery()
+                    .cte("swept_global_outbox_rows")
                 )
                 stmt = (
                     update(m)
-                    .where(m.id.in_(subq))
+                    .where(m.id == sweep_cte.c.id)
                     .values(
                         status=OutboxStatus.PENDING.value,
                         lease_expires_at=None,
@@ -174,6 +197,18 @@ class SqlAlchemyGlobalOutboxRepository(
                 (m.attempts + 1 >= self._max_attempts, OutboxStatus.FAILED.value),
                 else_=OutboxStatus.PENDING.value,
             )
+            if self._base_retry_backoff_seconds <= 0:
+                next_retry_at: object = None
+            else:
+                capped_secs = func.least(
+                    self._max_retry_backoff_seconds,
+                    self._base_retry_backoff_seconds * func.power(2, m.attempts),
+                )
+                backoff_expr = func.now() + func.make_interval(0, 0, 0, 0, 0, 0, capped_secs)
+                next_retry_at = case(
+                    (m.attempts + 1 >= self._max_attempts, None),
+                    else_=backoff_expr,
+                )
             stmt = (
                 update(m)
                 .where(
@@ -186,7 +221,7 @@ class SqlAlchemyGlobalOutboxRepository(
                     attempts=m.attempts + 1,
                     error_reason=error_message,
                     updated_at=now,
-                    lease_expires_at=None,
+                    lease_expires_at=next_retry_at,
                     owner_token=None,
                 )
             )
@@ -201,16 +236,17 @@ class SqlAlchemyGlobalOutboxRepository(
         m = self._model_cls
         async with self._session_scope() as session:
             while True:
-                subq = (
+                delete_cte = (
                     select(m.id)
                     .where(
                         m.status.in_((OutboxStatus.PROCESSED.value, OutboxStatus.COMPLETED.value)),
                         m.created_at < cutoff,
                     )
                     .limit(self._SWEEP_BATCH_SIZE)
-                    .scalar_subquery()
+                    .with_for_update(skip_locked=True)
+                    .cte("deleted_global_outbox_rows")
                 )
-                stmt = delete(m).where(m.id.in_(subq)).returning(m.id)
+                stmt = delete(m).where(m.id == delete_cte.c.id).returning(m.id)
                 res = await session.execute(stmt)
                 deleted = len(res.scalars().all())
                 total_deleted += deleted

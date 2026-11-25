@@ -11,8 +11,12 @@ x-base-env: &base-env
   SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard
   IP_DATABASE_URL: postgresql://ip:ip_password@ip_postgres_shard:5432/ip_shard
   SHARD_OVERRIDES__IP_SHARD_1: postgresql+asyncpg://ip:ip_password@ip_postgres_shard:5432/ip_shard
-  AWS_ENDPOINT_URL: http://localstack:4566
-  AWS_REGION: us-east-1
+  STORAGE_BACKEND: ${STORAGE_BACKEND:-file}
+  STORAGE_FILE_PATH: ${STORAGE_FILE_PATH:-/mnt/storage}
+  SECRETS_BACKEND: ${SECRETS_BACKEND:-file}
+  SECRETS_MOUNT_PATH: ${SECRETS_MOUNT_PATH:-/mnt/secrets}
+  CONFIG_WATCH_BASE_URL: http://config-watch-gateway:8081
+  CONFIG_SYNC_INTERNAL_TOKEN: ${CONFIG_SYNC_INTERNAL_TOKEN:-dev-internal-config-sync-token}
 
 x-modular-monolith-base: &modular-monolith-base
   build:
@@ -25,10 +29,11 @@ x-modular-monolith-base: &modular-monolith-base
   env_file: .env
   environment:
     <<: *base-env
+  volumes:
+    - soopa_storage:/mnt/storage
+    - soopa_secrets:/mnt/secrets
   depends_on:
     postgres_global:
-      condition: service_healthy
-    localstack:
       condition: service_healthy
 
 services:
@@ -62,13 +67,21 @@ services:
     ports:
       - "127.0.0.1:3000:8000"
 
+  config-watch-gateway:
+    <<: *modular-monolith-base
+    profiles: ["platform", "ip", "edi"]
+    environment:
+      <<: *base-env
+      ENABLED_APPS: ${ENABLED_APPS:-edi,ip}
+    command: [ "uvicorn", "unified_api.watch_gateway:app", "--host", "0.0.0.0", "--port", "8081" ]
+    ports:
+      - "127.0.0.1:8081:8081"
+
   edi-as2-server:
     <<: *modular-monolith-base
     profiles: ["edi"]
     depends_on:
       postgres_global:
-        condition: service_healthy
-      localstack:
         condition: service_healthy
       edi_postgres_shard:
         condition: service_healthy
@@ -101,8 +114,6 @@ services:
     depends_on:
       postgres_global:
         condition: service_healthy
-      localstack:
-        condition: service_healthy
       ip_postgres_shard:
         condition: service_healthy
     command: [ "python", "-m", "unified_worker.main" ]
@@ -123,8 +134,6 @@ services:
     profiles: ["edi"]
     depends_on:
       postgres_global:
-        condition: service_healthy
-      localstack:
         condition: service_healthy
       edi_postgres_shard:
         condition: service_healthy
@@ -150,8 +159,6 @@ services:
     depends_on:
       postgres_global:
         condition: service_healthy
-      localstack:
-        condition: service_healthy
       edi_postgres_shard:
         condition: service_healthy
       ip_postgres_shard:
@@ -160,3 +167,7 @@ services:
     environment:
       <<: *base-env
       WORKER_MODULES: "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-delivery-dlq-worker,edi-dp-jobs-worker,ip-orchestrator-worker,ip-delivery-worker,ip-dp-jobs-worker"
+
+volumes:
+  soopa_storage:
+  soopa_secrets:

@@ -206,6 +206,151 @@ def upgrade() -> None:
         unique=False,
         schema="scheduling",
     )
+    op.execute("CREATE SCHEMA IF NOT EXISTS pubsub")
+    op.create_table(
+        "platform_queue_messages",
+        sa.Column("queue_name", sa.String(length=255), nullable=False),
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=True),
+        sa.Column("source", sa.String(length=128), nullable=False),
+        sa.Column("event_type", sa.String(length=128), nullable=False),
+        sa.Column("idempotency_key", sa.String(length=255), nullable=True),
+        sa.Column("trace_id", sa.String(length=64), nullable=True),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column(
+            "lane", sa.String(length=32), server_default=sa.text("'realtime'"), nullable=False
+        ),
+        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "status", sa.String(length=50), server_default=sa.text("'PENDING'"), nullable=False
+        ),
+        sa.Column("attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("max_attempts", sa.Integer(), server_default=sa.text("5"), nullable=False),
+        sa.Column("next_retry_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("owner_token", sa.String(length=128), nullable=True),
+        sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("error_reason", sa.Text(), nullable=True),
+        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("queue_name", "id"),
+        schema="pubsub",
+    )
+    op.create_index(
+        "ix_platform_queue_pending",
+        "platform_queue_messages",
+        ["queue_name", sa.text("lane DESC"), "created_at"],
+        unique=False,
+        schema="pubsub",
+        postgresql_where=sa.text("status = 'PENDING'"),
+    )
+    op.create_index(
+        "ix_platform_queue_processing_lease",
+        "platform_queue_messages",
+        ["queue_name", "lease_expires_at"],
+        unique=False,
+        schema="pubsub",
+        postgresql_where=sa.text("status = 'PROCESSING'"),
+    )
+    op.create_index(
+        "ix_platform_queue_processed_cleanup",
+        "platform_queue_messages",
+        ["created_at"],
+        unique=False,
+        schema="pubsub",
+        postgresql_where=sa.text("status IN ('PROCESSED', 'COMPLETED')"),
+    )
+    op.create_index(
+        "uq_platform_queue_name_idempotency",
+        "platform_queue_messages",
+        ["queue_name", "idempotency_key"],
+        unique=True,
+        schema="pubsub",
+        postgresql_where=sa.text("idempotency_key IS NOT NULL"),
+    )
+    op.create_table(
+        "platform_topic_subscriptions",
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("topic_name", sa.String(length=255), nullable=False),
+        sa.Column("target_queue", sa.String(length=255), nullable=False),
+        sa.Column("event_types", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        schema="pubsub",
+    )
+    op.create_index(
+        "ix_platform_topic_sub_active_topic",
+        "platform_topic_subscriptions",
+        ["topic_name"],
+        unique=False,
+        schema="pubsub",
+        postgresql_where=sa.text("is_active IS TRUE"),
+    )
+    op.create_index(
+        "uq_platform_topic_sub_topic_queue",
+        "platform_topic_subscriptions",
+        ["topic_name", "target_queue"],
+        unique=True,
+        schema="pubsub",
+    )
+    op.execute("CREATE SCHEMA IF NOT EXISTS config_sync")
+    op.create_table(
+        "config_changelog",
+        sa.Column("version", sa.BigInteger(), sa.Identity(always=False), nullable=False),
+        sa.Column("event_id", sa.String(length=128), nullable=False),
+        sa.Column("app_id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("entity_type", sa.String(length=128), nullable=False),
+        sa.Column("entity_id", sa.String(length=255), nullable=False),
+        sa.Column("action", sa.String(length=32), nullable=False),
+        sa.Column("checksum", sa.String(length=128), nullable=False),
+        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("version"),
+        sa.UniqueConstraint("event_id"),
+        schema="config_sync",
+    )
+    op.create_index(
+        "ix_config_changelog_app_tenant_version",
+        "config_changelog",
+        ["app_id", "tenant_id", "version"],
+        unique=False,
+        schema="config_sync",
+    )
+    op.create_index(
+        "ix_config_changelog_created_at",
+        "config_changelog",
+        ["created_at"],
+        unique=False,
+        schema="config_sync",
+    )
     op.create_table(
         "apps",
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -773,6 +918,49 @@ def downgrade() -> None:
     op.drop_table("outbox", schema="ucp")
     op.drop_table("database_shards", schema="ucp")
     op.drop_table("apps", schema="ucp")
+    op.drop_index(
+        "ix_config_changelog_created_at",
+        table_name="config_changelog",
+        schema="config_sync",
+    )
+    op.drop_index(
+        "ix_config_changelog_app_tenant_version",
+        table_name="config_changelog",
+        schema="config_sync",
+    )
+    op.drop_table("config_changelog", schema="config_sync")
+    op.drop_index(
+        "uq_platform_topic_sub_topic_queue",
+        table_name="platform_topic_subscriptions",
+        schema="pubsub",
+    )
+    op.drop_index(
+        "ix_platform_topic_sub_active_topic",
+        table_name="platform_topic_subscriptions",
+        schema="pubsub",
+    )
+    op.drop_table("platform_topic_subscriptions", schema="pubsub")
+    op.drop_index(
+        "uq_platform_queue_name_idempotency",
+        table_name="platform_queue_messages",
+        schema="pubsub",
+    )
+    op.drop_index(
+        "ix_platform_queue_processed_cleanup",
+        table_name="platform_queue_messages",
+        schema="pubsub",
+    )
+    op.drop_index(
+        "ix_platform_queue_processing_lease",
+        table_name="platform_queue_messages",
+        schema="pubsub",
+    )
+    op.drop_index(
+        "ix_platform_queue_pending",
+        table_name="platform_queue_messages",
+        schema="pubsub",
+    )
+    op.drop_table("platform_queue_messages", schema="pubsub")
     op.drop_index("job_status_next_run_idx", table_name="scheduled_jobs", schema="scheduling")
     op.drop_table("scheduled_jobs", schema="scheduling")
     op.drop_index(

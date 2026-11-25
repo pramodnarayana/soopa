@@ -52,7 +52,7 @@ class SQSJobDispatcher(JobDispatcherPort):
     async def dispatch(self, job: ScheduledJob) -> None:
         if not job.target_queue:
             logger.error("sqs_dispatcher_missing_target_queue", job_id=job.id, job_name=job.name)
-            return
+            raise ValueError(f"No target_queue defined for job {job.name}")
 
         queue_url = self.queue_url_map.get(job.target_queue)
         if not queue_url:
