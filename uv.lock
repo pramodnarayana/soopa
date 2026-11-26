@@ -2686,6 +2686,7 @@ dependencies = [
     { name = "aioboto3" },
     { name = "notification" },
     { name = "outbox" },
+    { name = "pubsub" },
     { name = "seedwork" },
     { name = "structlog" },
 ]
@@ -2701,6 +2702,7 @@ requires-dist = [
     { name = "aioboto3" },
     { name = "notification", editable = "core/platform/packages/notification" },
     { name = "outbox", editable = "core/platform/packages/outbox" },
+    { name = "pubsub", editable = "core/platform/packages/pubsub" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "structlog" },
 ]
@@ -4488,6 +4490,7 @@ dependencies = [
     { name = "httpx" },
     { name = "identity" },
     { name = "outbox" },
+    { name = "pubsub" },
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
@@ -4513,7 +4516,6 @@ dev = [
     { name = "boto3" },
     { name = "httpx" },
     { name = "psycopg2-binary" },
-    { name = "pubsub" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -4530,6 +4532,7 @@ requires-dist = [
     { name = "identity", editable = "core/platform/packages/identity" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
     { name = "outbox", editable = "core/platform/packages/outbox" },
+    { name = "pubsub", editable = "core/platform/packages/pubsub" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.13.4,<3.0.0" },
     { name = "pydantic-settings", specifier = ">=2.3.4" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2.2" },
@@ -4551,7 +4554,6 @@ dev = [
     { name = "boto3", specifier = ">=1.40.61" },
     { name = "httpx", specifier = ">=0.28.1,<0.29.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.12" },
-    { name = "pubsub", editable = "core/platform/packages/pubsub" },
     { name = "pytest", specifier = ">=9.1.1,<10.0.0" },
     { name = "pytest-asyncio", specifier = ">=1.4.0,<2.0.0" },
 ]
@@ -4660,6 +4662,7 @@ dependencies = [
     { name = "observability" },
     { name = "secret-store" },
     { name = "security" },
+    { name = "storage" },
     { name = "strace" },
     { name = "ucp" },
     { name = "uvicorn" },
@@ -4693,6 +4696,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5.0" },
     { name = "secret-store", editable = "core/platform/packages/secret-store" },
     { name = "security", editable = "core/platform/packages/security" },
+    { name = "storage", editable = "core/platform/packages/storage" },
     { name = "strace", editable = "core/platform/packages/strace" },
     { name = "ucp", editable = "core/ucp/packages/ucp" },
     { name = "uvicorn", specifier = ">=0.30.1" },

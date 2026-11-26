@@ -3,6 +3,7 @@ from datetime import UTC
 
 import structlog
 from database.models.identity import Tenant as DbTenant
+from identity.domain.constants import TenantIsolationMode
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App, AppSubscription
@@ -32,7 +33,8 @@ class SqlAlchemyTenantQueryService(TenantQueryServicePort):
             id=row.id,
             name=row.name,
             slug=row.slug,
-            idp_tenant_id=row.idp_tenant_id,
+            idp_realm_name=row.idp_realm_name,
+            isolation_mode=TenantIsolationMode(row.isolation_mode),
             status=typing.cast(
                 typing.Literal[LifecycleStatus.ACTIVE, LifecycleStatus.INACTIVE],
                 row.status,
@@ -103,7 +105,13 @@ class SqlAlchemyTenantQueryService(TenantQueryServicePort):
 
     async def get_tenant_by_id(self, tenant_id: str) -> TenantReadModel | None:
         stmt = select(DbTenant).where(
-            ((DbTenant.id == tenant_id) | (DbTenant.idp_tenant_id == tenant_id))
+            (
+                (DbTenant.id == tenant_id)
+                | (
+                    (DbTenant.idp_realm_name == tenant_id)
+                    & (DbTenant.isolation_mode == TenantIsolationMode.DEDICATED_IDP_ORG.value)
+                )
+            )
             & DbTenant.deleted_at.is_(None)
         )
         result = await self.session.execute(stmt)

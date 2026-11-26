@@ -8,7 +8,8 @@ export interface Tenant {
   status: 'active' | 'inactive';
   createdAt: string;
   updatedAt: string;
-  zitadelOrgId: string;
+  idpRealmName: string | null;
+  isolationMode: string;
   subscriptions: string[];
 }
 

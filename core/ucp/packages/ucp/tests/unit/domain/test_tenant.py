@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from identity.domain.constants import TenantIsolationMode
 from seedwork.utils import generate_id
 
 from ucp.domain.constants import LifecycleStatus, UcpEventType
@@ -23,7 +24,7 @@ def test_tenant_create_validates_name_and_slug() -> None:
         id=generate_id(DomainIdPrefix.TENANT),
         name="   ",
         slug="valid-slug",
-        idp_tenant_id=None,
+        idp_realm_name=None,
     )
     assert empty_name.is_err
     assert empty_name.unwrap_err().code == UcpErrorCode.EMPTY_TENANT_NAME
@@ -32,7 +33,7 @@ def test_tenant_create_validates_name_and_slug() -> None:
         id=generate_id(DomainIdPrefix.TENANT),
         name="Valid Name",
         slug="   ",
-        idp_tenant_id=None,
+        idp_realm_name=None,
     )
     assert empty_slug.is_err
     assert empty_slug.unwrap_err().code == UcpErrorCode.INVALID_TENANT_NAME
@@ -43,7 +44,8 @@ def test_tenant_mark_deleted_success() -> None:
         id=generate_id(DomainIdPrefix.TENANT),
         name="Test",
         slug="test",
-        idp_tenant_id="org_123",
+        idp_realm_name="soopa-global",
+        isolation_mode=TenantIsolationMode.POOLED_REALM,
     ).unwrap()
     assert tenant.deleted_at is None
 
@@ -53,8 +55,46 @@ def test_tenant_mark_deleted_success() -> None:
     assert tenant.deleted_at is not None
     assert isinstance(tenant.deleted_at, datetime)
     assert len(tenant.domain_events) == 2
-    assert isinstance(tenant.domain_events[-1], TenantDeletedEvent)
-    assert tenant.domain_events[-1].event_name == UcpEventType.TENANT_DELETED.value
+    deleted_event = tenant.domain_events[-1]
+    assert isinstance(deleted_event, TenantDeletedEvent)
+    assert deleted_event.event_name == UcpEventType.TENANT_DELETED.value
+    assert deleted_event.tenant_id == tenant.id
+    assert deleted_event.get_routing_tenant_id() == tenant.id
+    assert deleted_event.idp_realm_name is None
+
+
+def test_dedicated_tenant_lifecycle_events_include_canonical_tenant_id_and_dedicated_realm() -> (
+    None
+):
+    tenant = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT),
+        name="Acme Enterprise",
+        slug="acme-enterprise",
+        idp_realm_name="org_acme_enterprise",
+        isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG,
+    ).unwrap()
+    tenant.clear_domain_events()
+
+    assert tenant.rename("Acme Global Enterprise").is_ok
+    rename_event = tenant.domain_events[-1]
+    assert isinstance(rename_event, TenantNameUpdatedEvent)
+    assert rename_event.tenant_id == tenant.id
+    assert rename_event.get_routing_tenant_id() == tenant.id
+    assert rename_event.idp_realm_name == "org_acme_enterprise"
+
+    assert tenant.change_status(LifecycleStatus.INACTIVE).is_ok
+    status_event = tenant.domain_events[-1]
+    assert isinstance(status_event, TenantStatusToggledEvent)
+    assert status_event.tenant_id == tenant.id
+    assert status_event.get_routing_tenant_id() == tenant.id
+    assert status_event.idp_realm_name == "org_acme_enterprise"
+
+    assert tenant.mark_deleted().is_ok
+    deleted_event = tenant.domain_events[-1]
+    assert isinstance(deleted_event, TenantDeletedEvent)
+    assert deleted_event.tenant_id == tenant.id
+    assert deleted_event.get_routing_tenant_id() == tenant.id
+    assert deleted_event.idp_realm_name == "org_acme_enterprise"
 
 
 def test_tenant_mark_deleted_already_deleted() -> None:
@@ -62,7 +102,7 @@ def test_tenant_mark_deleted_already_deleted() -> None:
         id=generate_id(DomainIdPrefix.TENANT),
         name="Test",
         slug="test",
-        idp_tenant_id="org_123",
+        idp_realm_name="org_123",
     ).unwrap()
     assert tenant.mark_deleted().is_ok
 
@@ -76,13 +116,13 @@ def test_tenant_rename_set_idp_subscribe_unsubscribe_and_status_results() -> Non
         id=generate_id(DomainIdPrefix.TENANT),
         name="Initial",
         slug="initial",
-        idp_tenant_id=None,
+        idp_realm_name=None,
     ).unwrap()
     tenant.clear_domain_events()
 
-    assert tenant.set_idp_tenant_id("org_1").is_ok
-    assert tenant.set_idp_tenant_id("org_1").is_ok
-    conflict = tenant.set_idp_tenant_id("org_2")
+    assert tenant.set_idp_realm_name("org_1").is_ok
+    assert tenant.set_idp_realm_name("org_1").is_ok
+    conflict = tenant.set_idp_realm_name("org_2")
     assert conflict.is_err
     assert conflict.unwrap_err().code == UcpErrorCode.IDP_ORGANIZATION_CONFLICT
 

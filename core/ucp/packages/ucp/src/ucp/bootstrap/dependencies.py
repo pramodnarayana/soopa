@@ -4,10 +4,12 @@ from urllib.parse import urlparse
 
 from database.provider import DatabaseProvider
 from fastapi import Request
-from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
-    ZitadelTokenVerifierAdapter,
-    ZitadelTokenVerifierOptions,
+from identity.adapters.outbound.oidc.oidc_jwks_token_verifier_adapter import (
+    OidcJwksTokenVerifierAdapter,
+    OidcTokenVerifierOptions,
 )
+from identity.ports.outbound.tenant_hierarchy_port import GlobalAuthzCatalogPort
+from identity.ports.outbound.token_verifier_port import TokenVerifierPort
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.config.settings import get_settings
@@ -19,34 +21,37 @@ async def get_db_session(request: Request) -> AsyncGenerator[AsyncSession, None]
         yield session
 
 
-@lru_cache(maxsize=1)
-def get_token_verifier() -> ZitadelTokenVerifierAdapter:
+def build_token_verifier(
+    global_catalog: GlobalAuthzCatalogPort | None = None,
+) -> TokenVerifierPort:
+    """Build the generic multi-issuer OIDC JWKS token verifier (100% IdP-agnostic)."""
     settings = get_settings()
 
-    # JWKS fetching uses the internal Cloud Map URL (no ALB hairpin) but overrides
-    # the Host header to the public issuer domain. Zitadel is host-header sensitive:
-    # it only serves /oauth/v2/keys when the Host header matches its configured
-    # ZITADEL_EXTERNALDOMAIN. Sending the internal URL's hostname (e.g.
-    # "zitadel.staging-cluster.local") would cause a 404 from Zitadel.
-    jwks_url = f"{settings.idp_api_url.rstrip('/')}/oauth/v2/keys" if settings.idp_api_url else None
-    # Extract the bare hostname from the public issuer URL (e.g. "identity.staging.flowwolf.io")
-    # to use as the Host header when making internal JWKS requests.
-    # urlparse is used (not str.split) so that issuer URLs with path components
-    # (e.g. "https://host/path") are handled correctly.
-    jwks_host_header = (
-        urlparse(settings.identity.issuer).netloc if settings.identity.issuer else None
-    )
+    jwks_url = settings.identity.jwks_url.strip()
+    if not jwks_url and settings.idp_api_url:
+        jwks_url = f"{settings.idp_api_url.rstrip('/')}/.well-known/jwks"
+
+    jwks_host_header = settings.identity.jwks_host_header.strip() or None
+    if jwks_host_header is None and settings.identity.issuer and settings.idp_api_url:
+        issuer_netloc = urlparse(settings.identity.issuer).netloc
+        api_netloc = urlparse(settings.idp_api_url).netloc
+        if issuer_netloc and api_netloc and issuer_netloc != api_netloc:
+            jwks_host_header = issuer_netloc
 
     accepted_audiences = settings.identity.accepted_audiences
     if not accepted_audiences and settings.control_plane_project_id:
         accepted_audiences = (settings.control_plane_project_id,)
 
-    options = ZitadelTokenVerifierOptions(
-        issuer=settings.identity.issuer,
-        audience=accepted_audiences,
-        platform_org_id=settings.identity.platform_org_id,
-        jwks_url=jwks_url,
-        jwks_host_header=jwks_host_header,
+    options = OidcTokenVerifierOptions(
+        default_issuer=settings.identity.issuer,
+        default_jwks_uri=jwks_url,
+        default_audiences=tuple(accepted_audiences),
+        default_jwks_host_header=jwks_host_header,
         allow_private_ips=settings.identity.allow_private_ips,
     )
-    return ZitadelTokenVerifierAdapter(options)
+    return OidcJwksTokenVerifierAdapter(options=options, global_catalog=global_catalog)
+
+
+@lru_cache(maxsize=1)
+def get_token_verifier() -> TokenVerifierPort:
+    return build_token_verifier()

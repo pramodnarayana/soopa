@@ -7,7 +7,7 @@ from types import TracebackType
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from identity.domain.identity_context import IdentityContext
+from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
     get_ip_control_plane_uow,
     require_flows_read,
@@ -49,7 +49,7 @@ class _StubStitchRepo(StitchRepositoryPort):
 
     async def get_by_id(self, *, tenant_id: str, stitch_id: str) -> Stitch | None:
         s = self.items.get(stitch_id)
-        if s and (s.tenant_id == tenant_id or s.tenant_id == "*"):
+        if s and (s.tenant_id == tenant_id or s.tenant_id == PLATFORM_TENANT_ID):
             return s
         return None
 
@@ -57,7 +57,11 @@ class _StubStitchRepo(StitchRepositoryPort):
         return self.items.get(stitch_id)
 
     async def list_by_tenant(self, *, tenant_id: str) -> list[Stitch]:
-        return [s for s in self.items.values() if s.tenant_id == tenant_id or s.tenant_id == "*"]
+        return [
+            s
+            for s in self.items.values()
+            if s.tenant_id == tenant_id or s.tenant_id == PLATFORM_TENANT_ID
+        ]
 
     async def list_for_event(self, *, tenant_id: str, canonical_event_type: str) -> list[Stitch]:
         return []

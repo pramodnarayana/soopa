@@ -1,5 +1,5 @@
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from fastapi import Depends, Header, HTTPException, status
 
@@ -18,6 +18,11 @@ class _HeadersProtocol(Protocol):
 
 
 @runtime_checkable
+class _IdentityStateProtocol(Protocol):
+    identity: IdentityContext | None
+
+
+@runtime_checkable
 class _RequestLike(Protocol):
     """Structural protocol for the minimal request interface used by attach_identity_to_request.
 
@@ -27,7 +32,7 @@ class _RequestLike(Protocol):
     """
 
     headers: _HeadersProtocol
-    state: Any
+    state: _IdentityStateProtocol
 
 
 def identity_dependency(

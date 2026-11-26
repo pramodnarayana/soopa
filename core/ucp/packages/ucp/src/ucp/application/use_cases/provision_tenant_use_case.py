@@ -62,7 +62,7 @@ class ProvisionTenantUseCase:
                     id=local_id,
                     name=command.name,
                     slug=slug,
-                    idp_tenant_id=None,
+                    idp_realm_name=None,
                     subscriptions=[],
                 )
                 if create_res.is_err:

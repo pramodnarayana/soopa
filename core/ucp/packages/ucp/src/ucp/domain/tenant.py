@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import ClassVar
 
+from identity.domain.constants import TenantIsolationMode
 from seedwork.domain.aggregate import AggregateRoot
 from seedwork.domain.exceptions import Result
 
@@ -47,10 +48,11 @@ class Tenant(AggregateRoot):
     id: str
     name: str
     slug: str
-    idp_tenant_id: str | None
+    idp_realm_name: str | None
     status: LifecycleStatus
     created_at: datetime
     updated_at: datetime
+    isolation_mode: TenantIsolationMode = TenantIsolationMode.POOLED_REALM
     subscriptions: list[TenantSubscription] = field(default_factory=list)
     deleted_at: datetime | None = None
 
@@ -60,7 +62,8 @@ class Tenant(AggregateRoot):
         id: str,
         name: str,
         slug: str,
-        idp_tenant_id: str | None,
+        idp_realm_name: str | None = None,
+        isolation_mode: TenantIsolationMode = TenantIsolationMode.POOLED_REALM,
         subscriptions: list[TenantSubscription] | None = None,
     ) -> Result[Tenant, UcpError]:
         if not name or not name.strip():
@@ -77,7 +80,8 @@ class Tenant(AggregateRoot):
             id=id or cls.new_id(),
             name=cleaned_name,
             slug=cleaned_slug,
-            idp_tenant_id=idp_tenant_id,
+            idp_realm_name=idp_realm_name,
+            isolation_mode=isolation_mode,
             status=LifecycleStatus.ACTIVE,
             created_at=now,
             updated_at=now,
@@ -94,6 +98,11 @@ class Tenant(AggregateRoot):
         )
         return Result.ok(tenant)
 
+    def _dedicated_idp_realm(self) -> str | None:
+        if self.isolation_mode == TenantIsolationMode.DEDICATED_IDP_ORG:
+            return self.idp_realm_name
+        return None
+
     def rename(self, new_name: str) -> Result[Tenant, UcpError]:
         if not new_name or not new_name.strip():
             return Result.fail(EmptyTenantNameError())
@@ -103,16 +112,21 @@ class Tenant(AggregateRoot):
 
         self.name = cleaned
         self.updated_at = datetime.now(UTC)
-        if self.idp_tenant_id:
-            self.add_domain_event(TenantNameUpdatedEvent(org_id=self.idp_tenant_id, name=self.name))
+        self.add_domain_event(
+            TenantNameUpdatedEvent(
+                tenant_id=self.id,
+                name=self.name,
+                idp_realm_name=self._dedicated_idp_realm(),
+            )
+        )
         return Result.ok(self)
 
-    def set_idp_tenant_id(self, idp_tenant_id: str) -> Result[Tenant, UcpError]:
-        if self.idp_tenant_id:
-            if self.idp_tenant_id == idp_tenant_id:
+    def set_idp_realm_name(self, idp_realm_name: str) -> Result[Tenant, UcpError]:
+        if self.idp_realm_name:
+            if self.idp_realm_name == idp_realm_name:
                 return Result.ok(self)
-            return Result.fail(IdpOrganizationConflictError.for_org(self.idp_tenant_id))
-        self.idp_tenant_id = idp_tenant_id
+            return Result.fail(IdpOrganizationConflictError.for_realm(self.idp_realm_name))
+        self.idp_realm_name = idp_realm_name
         self.updated_at = datetime.now(UTC)
         return Result.ok(self)
 
@@ -154,20 +168,25 @@ class Tenant(AggregateRoot):
         if self.status != new_status:
             self.status = new_status
             self.updated_at = datetime.now(UTC)
-            if self.idp_tenant_id:
-                self.add_domain_event(
-                    TenantStatusToggledEvent(
-                        org_id=self.idp_tenant_id, active=self.status == LifecycleStatus.ACTIVE
-                    )
+            self.add_domain_event(
+                TenantStatusToggledEvent(
+                    tenant_id=self.id,
+                    active=self.status == LifecycleStatus.ACTIVE,
+                    idp_realm_name=self._dedicated_idp_realm(),
                 )
+            )
         return Result.ok(self)
 
     def mark_deleted(self) -> Result[Tenant, UcpError]:
-        """Logically deletes this tenant and stages TenantDeletedEvent for IdP cleanup."""
+        """Logically deletes this tenant and stages TenantDeletedEvent for async cascade cleanup."""
         if self.deleted_at is not None:
             return Result.fail(TenantAlreadyDeletedError.for_id(self.id))
         self.deleted_at = datetime.now(UTC)
         self.updated_at = self.deleted_at
-        if self.idp_tenant_id:
-            self.add_domain_event(TenantDeletedEvent(org_id=self.idp_tenant_id))
+        self.add_domain_event(
+            TenantDeletedEvent(
+                tenant_id=self.id,
+                idp_realm_name=self._dedicated_idp_realm(),
+            )
+        )
         return Result.ok(self)

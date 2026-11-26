@@ -28,6 +28,7 @@ class NotificationJobsWorkerModule(LaunchableWorker):
         self.container.config.from_pydantic(settings)
         self.container.config.database_url.from_value(settings.database_url)
         self.container.config.sns_topic_arn.from_value(settings.sns_topic_arn)
+        self.container.config.pubsub_transport.from_value(settings.pubsub_transport)
         self.container.config.aws_region.from_value(settings.aws_region)
         self.container.config.aws_endpoint_url.from_value(settings.aws_endpoint_url)
         self.container.config.sqs_notification_jobs_queue_url.from_value(

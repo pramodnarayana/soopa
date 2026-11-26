@@ -9,7 +9,7 @@ from contextlib import AbstractAsyncContextManager
 import pytest
 from fastapi import Request
 from identity.domain.authorization import Capability
-from identity.domain.constants import IdentityIdPrefix
+from identity.domain.constants import IdentityIdPrefix, TenantIsolationMode
 from identity.domain.identity_context import IdentityContext
 from seedwork import generate_id, generate_random_hex
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +34,8 @@ async def test_tenant_auth_mapping_resolves_idp_id(
             id=canonical_id,
             name=f"Test Trucking {unique_suffix}",
             slug=f"test-trucking-{unique_suffix}",
-            idp_tenant_id=idp_id,
+            idp_realm_name=idp_id,
+            isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG,
             status=LifecycleStatus.ACTIVE,
             created_at=datetime.datetime.now(datetime.UTC),
             updated_at=datetime.datetime.now(datetime.UTC),

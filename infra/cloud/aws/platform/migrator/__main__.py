@@ -22,12 +22,12 @@ config = pulumi.Config()
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
+identity_stack_ref = config.get("identity_stack") or f"organization/casdoor/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
-zitadel_stack_ref = config.get("zitadel_stack") or f"organization/zitadel-infrastructure/{_env}"
-zitadel = pulumi.StackReference(zitadel_stack_ref)
+identity_stack = pulumi.StackReference(identity_stack_ref)
 
 pubsub_env_vars = build_database_pubsub_env_vars(
     load_topology(),
@@ -48,9 +48,13 @@ global_db_secret_arn = data.require_output("global_db_secret_arn")
 image_tag = config.get("image_tag") or "latest"
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
-identity_platform_org_id = zitadel.require_output("platform_org_id")
-identity_platform_admin_id = zitadel.require_output("platform_admin_id")
-identity_edi_project_id = zitadel.require_output("edi_project_id")
+identity_platform_realm = identity_stack.get_output("platform_realm").apply(
+    lambda value: value or "soopa-platform"
+)
+identity_global_realm = identity_stack.get_output("global_realm").apply(
+    lambda value: value or "soopa-global"
+)
+identity_admin_oauth_secret_arn = identity_stack.require_output("admin_oauth_secret_arn")
 
 identity_jobs_queue_url = pubsub_env_vars["SQS_IDENTITY_JOBS_QUEUE_URL"]
 notification_jobs_queue_url = pubsub_env_vars["SQS_NOTIFICATION_JOBS_QUEUE_URL"]
@@ -60,10 +64,6 @@ _region = aws.get_region()
 _identity = aws.get_caller_identity()
 
 # ── IAM Execution Role (Platform Infrastructure Owned) ───────────────────────
-# The ECS Task Execution Role is an infrastructure concern owned and pre-provisioned
-# by the Platform stack (provision-infra.yml) to guarantee global IAM propagation
-# before application rollout commences.
-# Uses get_output with safe fallback during speculative previews before platform is deployed.
 execution_role_arn = platform.get_output("ecs_execution_role_arn").apply(
     lambda arn: arn or f"arn:aws:iam::{_identity.account_id}:role/{_prefix}ecs-execution-role"
 )
@@ -81,9 +81,9 @@ migrator_task = aws.ecs.TaskDefinition(
     container_definitions=pulumi.Output.all(
         placeholder_image,
         global_db_secret_arn,
-        identity_platform_org_id,
-        identity_platform_admin_id,
-        identity_edi_project_id,
+        identity_platform_realm,
+        identity_global_realm,
+        identity_admin_oauth_secret_arn,
         identity_jobs_queue_url,
         notification_jobs_queue_url,
         ucp_jobs_queue_url,
@@ -97,13 +97,14 @@ migrator_task = aws.ecs.TaskDefinition(
                     "command": [
                         "sh",
                         "-c",
-                        "python -m platform_migrator migrate --domain platform && python -m platform_migrator seed --domain all",
+                        "python -m platform_migrator migrate --domain platform && python infra/local/scripts/reconcile_schema_drift.py --domain platform --skip-dotenv && python -m platform_migrator seed --domain platform",
                     ],
                     "environment": [
                         {"name": "PUBSUB_TRANSPORT", "value": pubsub_env_vars["PUBSUB_TRANSPORT"]},
+                        {"name": "IDENTITY_PROVIDER", "value": "casdoor"},
+                        {"name": "IDENTITY_PLATFORM_REALM", "value": args[2]},
+                        {"name": "IDENTITY_GLOBAL_REALM", "value": args[3]},
                         {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args[2]},
-                        {"name": "IDENTITY_PLATFORM_ADMIN_ID", "value": args[3]},
-                        {"name": "IDENTITY_EDI_PROJECT_ID", "value": args[4]},
                         {"name": "SQS_IDENTITY_JOBS_QUEUE_URL", "value": args[5]},
                         {"name": "SQS_NOTIFICATION_JOBS_QUEUE_URL", "value": args[6]},
                         {"name": "SQS_UCP_JOBS_QUEUE_URL", "value": args[7]},
@@ -111,6 +112,10 @@ migrator_task = aws.ecs.TaskDefinition(
                     "secrets": [
                         {"name": "GLOBAL_DATABASE_URL", "valueFrom": f"{args[1]}:url::"},
                         {"name": "DATABASE_URL", "valueFrom": f"{args[1]}:url::"},
+                        {
+                            "name": "IDENTITY_PLATFORM_ADMIN_ID",
+                            "valueFrom": f"{args[4]}:platform_admin_id::",
+                        },
                     ],
                     "logConfiguration": {
                         "logDriver": "awslogs",

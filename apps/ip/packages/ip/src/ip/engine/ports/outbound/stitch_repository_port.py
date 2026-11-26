@@ -20,7 +20,7 @@ class StitchRepositoryPort(Protocol):
         tenant_id: str,
         stitch_id: str,
     ) -> Stitch | None:
-        """Retrieves a Stitch by ID for a tenant (or wildcard '*')."""
+        """Retrieves a Stitch by ID for a tenant (or platform-shared scope)."""
         ...
 
     async def get_by_id_global(
@@ -36,7 +36,7 @@ class StitchRepositoryPort(Protocol):
         *,
         tenant_id: str,
     ) -> list[Stitch]:
-        """Lists all Stitches visible to a tenant (tenant-specific and wildcard '*')."""
+        """Lists all Stitches visible to a tenant (tenant-specific and platform-shared)."""
         ...
 
     async def list_for_event(
@@ -45,7 +45,7 @@ class StitchRepositoryPort(Protocol):
         tenant_id: str,
         canonical_event_type: str,
     ) -> list[Stitch]:
-        """Lists all active Stitches matching a tenant (or '*') and canonical_event_type."""
+        """Lists all active Stitches matching a tenant (or platform-shared) and canonical_event_type."""
         ...
 
     async def list_by_mapping_spec_id(

@@ -7,9 +7,12 @@ export interface AuthUser {
   email?: string;
   name?: string;
   tenantId?: string;
+  idpRealm?: string;
   isPlatformAdmin?: boolean;
+  mfaVerified?: boolean;
   capabilities?: string[];
   authorizedTenants?: string[];
+  subscribedApps?: string[];
 }
 
 export const useAuthUser = () => {

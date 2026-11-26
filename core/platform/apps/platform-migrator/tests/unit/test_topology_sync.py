@@ -125,7 +125,12 @@ def test_sync_topology_writes_composed_manifest_and_updates_env(tmp_path: Path) 
         encoding="utf-8",
     )
     env_file = tmp_path / ".env"
-    env_file.write_text("SQS_IDENTITY_JOBS_QUEUE_URL=old\n", encoding="utf-8")
+    env_file.write_text(
+        "AWS_ENDPOINT_URL=http://localhost:4566\n"
+        "SQS_IDENTITY_JOBS_QUEUE_URL=old\n"
+        "SQS_IDENTITY_JOBS_QUEUE_URL=http://localhost:4566/000000000000/identity-jobs.fifo\n",
+        encoding="utf-8",
+    )
 
     mappings = sync_topology(tmp_path, domains="platform,ip")
     assert "SQS_IP_DATA_PLANE_JOBS_QUEUE_URL" in mappings
@@ -140,8 +145,12 @@ def test_sync_topology_writes_composed_manifest_and_updates_env(tmp_path: Path) 
     ]
 
     env_text = env_file.read_text(encoding="utf-8")
-    assert "SQS_IP_DATA_PLANE_JOBS_QUEUE_URL=" in env_text
-    assert "SNS_IP_EVENTS_TOPIC_ARN=" in env_text
+    assert "PUBSUB_TRANSPORT=db" in env_text
+    assert "AWS_ENDPOINT_URL=\n" in env_text
+    assert env_text.count("SQS_IDENTITY_JOBS_QUEUE_URL=") == 1
+    assert "SQS_IDENTITY_JOBS_QUEUE_URL=db://identity-jobs.fifo" in env_text
+    assert "SQS_IP_DATA_PLANE_JOBS_QUEUE_URL=db://ip-data-plane-jobs.fifo" in env_text
+    assert "SNS_IP_EVENTS_TOPIC_ARN=db://topic/ip-events-topic" in env_text
 
 
 def test_build_ip_scheduled_jobs_returns_all_five_canonical_jobs() -> None:

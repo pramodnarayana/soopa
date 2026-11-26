@@ -18,6 +18,7 @@ from database.models import Webhook
 from seedwork import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from storage import PlatformStorageSettings, StorageBackend
 
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
@@ -35,7 +36,7 @@ from edi.adapters.outbound.database.models.data_plane import (
 from edi.adapters.outbound.database.models.data_plane import (
     Webhook as DataPlaneWebhook,
 )
-from edi.adapters.outbound.pipeline.storage import S3StorageClient
+from edi.adapters.outbound.pipeline.storage import PlatformStorageAdapter
 from edi.adapters.outbound.transformer.bots_transformer_adapter import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
@@ -219,7 +220,10 @@ async def test_inbound_flow_e2e(
         # 1. Manually run ComputeTransformUseCase
 
         uow = create_edi_data_plane_uow(
-            tenant_session=session, storage=S3StorageClient("test", None)
+            tenant_session=session,
+            storage=PlatformStorageAdapter.from_settings(
+                PlatformStorageSettings(backend=StorageBackend.FILE)
+            ),
         )
         translate_svc = ComputeTransformUseCase(
             uow, BotsTransformerAdapter(), publisher=FakeOutboxPublisher()

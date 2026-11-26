@@ -12,18 +12,21 @@ from __future__ import annotations
 import collections.abc
 import contextlib
 
-from config_sync.adapters.inbound.fastapi_watch_router import create_config_sync_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
+from identity.adapters.outbound.database.authz_directory_repository import (
+    SqlAlchemyAuthzDirectoryRepository,
+)
+from identity.adapters.outbound.database.external_identity_repository import (
+    SqlAlchemyExternalIdentityRepository,
+)
 from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
-from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from ucp.application.use_cases.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
 from ucp.bootstrap.container import Container as UcpContainer
-from ucp.bootstrap.dependencies import get_token_verifier
 
 from unified_api.adapters.inbound.http.identity.routers import (
     auth_router,
@@ -49,11 +52,8 @@ from unified_api.adapters.inbound.http.ucp.routers import (
     users_router,
     webhooks_router,
 )
-from unified_api.bootstrap.config_sync import (
-    build_config_watch_stream_use_case,
-    resolve_watch_auth_strategy,
-)
 from unified_api.bootstrap.exceptions import setup_shell_exception_handlers
+from unified_api.bootstrap.identity_authz import create_identity_authz_runtime
 from unified_api.bootstrap.lifespan import shell_lifespan
 from unified_api.bootstrap.middleware import AuthenticationMiddleware, TenantContextMiddleware
 from unified_api.bootstrap.observability import setup_observability
@@ -78,6 +78,8 @@ def create_app(enabled_apps: str | None = None) -> FastAPI:
     shell.state.ucp_container = None
     shell.state.api_modules = []
     shell.state.edi_app = None
+    identity_authz = create_identity_authz_runtime(settings.identity)
+    shell.state.identity_authz = identity_authz
     setup_observability(shell)
 
     # Layer 3 — Tenant Context Resolution
@@ -110,6 +112,20 @@ def create_app(enabled_apps: str | None = None) -> FastAPI:
         async with shell.state.db_provider.session() as session:
             yield SqlAlchemyRoleRepository(session)
 
+    @contextlib.asynccontextmanager
+    async def external_identity_repo_factory() -> collections.abc.AsyncIterator[
+        SqlAlchemyExternalIdentityRepository
+    ]:
+        async with shell.state.db_provider.session() as session:
+            yield SqlAlchemyExternalIdentityRepository(session)
+
+    @contextlib.asynccontextmanager
+    async def authz_directory_repo_factory() -> collections.abc.AsyncIterator[
+        SqlAlchemyAuthzDirectoryRepository
+    ]:
+        async with shell.state.db_provider.session() as session:
+            yield SqlAlchemyAuthzDirectoryRepository(session)
+
     shell.add_middleware(
         AuthenticationMiddleware,
         strategies=[
@@ -118,7 +134,11 @@ def create_app(enabled_apps: str | None = None) -> FastAPI:
                 tenant_repo_factory=tenant_repo_factory,
                 user_repo_factory=user_repo_factory,
                 role_repo_factory=role_repo_factory,
-                token_verifier=get_token_verifier(),
+                token_verifier=identity_authz.token_verifier,
+                external_identity_repo_factory=external_identity_repo_factory,
+                authz_directory_repo_factory=authz_directory_repo_factory,
+                principal_cache=identity_authz.principal_cache,
+                global_catalog=identity_authz.global_catalog,
             ),
         ],
         public_paths=_PUBLIC_PATHS,
@@ -150,26 +170,6 @@ def create_app(enabled_apps: str | None = None) -> FastAPI:
 
     ucp_container = UcpContainer()
     shell.state.ucp_container = ucp_container
-
-    # Universal Queue-Free Control-to-Data Plane Dynamic Watch Router (pure HTTP/SSE; zero background loops)
-    @contextlib.asynccontextmanager
-    async def config_sync_session_factory() -> collections.abc.AsyncIterator[AsyncSession]:
-        async with shell.state.db_provider.session() as session:
-            yield session
-
-    config_watch_use_case = build_config_watch_stream_use_case(
-        session_factory=config_sync_session_factory,
-        enabled_apps=resolved_enabled_apps,
-    )
-    shell.include_router(
-        create_config_sync_router(
-            use_case_provider=lambda: config_watch_use_case,
-            auth_strategy=resolve_watch_auth_strategy(
-                internal_token=settings.config_sync_internal_token,
-                env=settings.env,
-            ),
-        )
-    )
 
     # Health Check (registered BEFORE bounded-context mounts)
     @shell.get("/health", tags=["System"])

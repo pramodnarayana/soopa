@@ -4,16 +4,10 @@
 # EDI AS2 - Enterprise Task Runner
 # ==============================================================================
 
-# Load variables from root .env and local .env.edi
--include ../../.env
-ifneq (,$(wildcard ../../.env))
-export $(shell awk -F= '/^[a-zA-Z_][a-zA-Z0-9_]*=/ {print $$1}' ../../.env)
-endif
-
--include .env.edi
-ifneq (,$(wildcard .env.edi))
-export $(shell awk -F= '/^[a-zA-Z_][a-zA-Z0-9_]*=/ {print $$1}' .env.edi)
-endif
+# Configuration Note:
+# Do NOT parse .env via GNU `make -include` — make is not a dotenv parser and
+# leaves literal quotes / expands `$` in secrets, corrupting os.environ before
+# Python runs. All Python scripts load the root .env via CleanBaseSettings / python-dotenv.
 
 build:
 	@echo "=== Building Backend ==="

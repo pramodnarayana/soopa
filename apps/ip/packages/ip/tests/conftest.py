@@ -158,7 +158,7 @@ async def seeded_ip_tenant(global_session: GlobalSession) -> str:
         name="IP Narrow Integration Tenant",
         slug=f"ip-narrow-{tenant_id[-8:]}",
         status=LifecycleStatus.ACTIVE,
-        idp_tenant_id=f"org_{tenant_id[-8:]}",
+        idp_realm_name=f"org_{tenant_id[-8:]}",
     )
     global_session.add(tenant)
     await global_session.flush()

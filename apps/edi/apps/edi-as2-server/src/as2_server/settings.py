@@ -5,18 +5,24 @@ from edi.config.models import (
     CommonSettings,
     EdiAwsSettings,
     EdiDataPlaneSqsSettings,
-    SecretsSettings,
 )
 from identity import PlatformIdentitySettings
 from pydantic import Field
+from secret_store import PlatformSecretStoreSettings
 from seedwork.infra.config import load_settings_safely
+from storage import PlatformStorageSettings
 
 
 class As2ServerSettings(CommonSettings):
     identity: PlatformIdentitySettings = Field(
         default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
     )
-    secrets: SecretsSettings = Field(default_factory=lambda: typing.cast(SecretsSettings, {}))
+    secrets: PlatformSecretStoreSettings = Field(
+        default_factory=lambda: typing.cast(PlatformSecretStoreSettings, {})
+    )
+    storage: PlatformStorageSettings = Field(
+        default_factory=lambda: typing.cast(PlatformStorageSettings, {})
+    )
     aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
     sqs: EdiDataPlaneSqsSettings = Field(
         default_factory=lambda: typing.cast(EdiDataPlaneSqsSettings, {})

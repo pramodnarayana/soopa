@@ -168,10 +168,10 @@ def test_edi_header_as2_partnership_and_tenant_mappers() -> None:
     assert partner.id == local_partner_id
     assert partner.as2_id == "ACME_AS2"
 
-    idp_org_id = generate_id(SystemIdPrefix.GENERIC.value)
+    idp_realm = generate_id(SystemIdPrefix.GENERIC.value)
     tenant_orm = OrmTenant(
         id=tenant_id,
-        idp_tenant_id=idp_org_id,
+        idp_realm_name=idp_realm,
         name="Acme Corp",
         slug="acme-corp",
         status=LifecycleStatus.ACTIVE.value,
@@ -180,7 +180,7 @@ def test_edi_header_as2_partnership_and_tenant_mappers() -> None:
     )
     tenant_summary = SqlAlchemyTenantRepository._to_domain_model(tenant_orm)
     assert tenant_summary.id == tenant_id
-    assert tenant_summary.idp_tenant_id == idp_org_id
+    assert tenant_summary.idp_realm_name == idp_realm
     assert tenant_summary.name == "Acme Corp"
 
 

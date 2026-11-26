@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from database.models import Webhook as DbWebhook
 from database.models.identity import Tenant as DbTenant
+from identity.domain.constants import TenantIsolationMode
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 from ucp_models.subscriptions import App as DbApp
@@ -31,7 +32,8 @@ def test_tenant_repository_mappers_preserve_slug_immutability() -> None:
         id=tenant_id_1,
         name="Acme Logistics",
         slug="acme-logistics",
-        idp_tenant_id=idp_org_1,
+        idp_realm_name=idp_org_1,
+        isolation_mode=TenantIsolationMode.POOLED_REALM.value,
         status=LifecycleStatus.ACTIVE.value,
         created_at=now_naive,
         updated_at=now_naive,
@@ -55,7 +57,7 @@ def test_tenant_repository_mappers_preserve_slug_immutability() -> None:
         id=tenant_id_2,
         name="Beta Corp",
         slug="beta-corp",
-        idp_tenant_id=idp_org_2,
+        idp_realm_name=idp_org_2,
     ).unwrap()
     orm_tenant = SqlAlchemyTenantRepository._to_orm_record(fresh_tenant)
     assert orm_tenant.id == tenant_id_2
@@ -108,7 +110,8 @@ def test_webhook_app_and_tenant_query_mappers() -> None:
         id=tenant_id,
         name="Acme Logistics",
         slug="acme-logistics",
-        idp_tenant_id=idp_org_id,
+        idp_realm_name=idp_org_id,
+        isolation_mode=TenantIsolationMode.POOLED_REALM.value,
         status=LifecycleStatus.ACTIVE.value,
         created_at=now_naive,
         updated_at=now_naive,

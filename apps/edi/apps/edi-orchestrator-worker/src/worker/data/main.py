@@ -180,7 +180,6 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
         logger.info("orchestrator_worker_starting")
         settings = get_settings()
         aws_endpoint = settings.aws.endpoint_url
-        s3_bucket = settings.s3.bucket
 
         self.db_router = DatabaseRouter(
             global_db_url=settings.database.global_url,
@@ -193,8 +192,8 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
         uow_provider = create_edi_tenant_uow_provider(
             resolver=resolver,
             db_router=self.db_router,
-            s3_bucket=s3_bucket,
-            aws_endpoint=aws_endpoint,
+            storage_settings=settings.storage,
+            aws_settings=settings.aws,
         )
 
         consumer = _setup_registry(transformer, settings, uow_provider, db_router=self.db_router)
@@ -212,7 +211,8 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
             source_uri=orch_uri,
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
-            endpoint_url=aws_endpoint,
+            endpoint_url=settings.effective_aws_endpoint_url(aws_endpoint),
+            transport=settings.pubsub_transport,
             shard_drain_repo=orch_shard_repo,
         )
         self.orchestrator_manager.start()

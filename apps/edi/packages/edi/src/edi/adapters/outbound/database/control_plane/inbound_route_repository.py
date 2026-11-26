@@ -11,6 +11,11 @@ from edi.adapters.outbound.database.models.control_plane import AS2Partner, SFTP
 from edi.adapters.outbound.database.models.control_plane import InboundRoute as OrmInboundRoute
 from edi.domain.routing.enums import EdiConnectionType, ProcessingMode
 from edi.domain.routing.inbound_route import InboundRoute
+from edi.domain.routing.isa_resolution import (
+    IsaRouteCandidate,
+    IsaTenantResolution,
+    resolve_isa_candidates,
+)
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 
 
@@ -202,23 +207,43 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         record = result.scalars().first()
         return self._to_domain_model(record) if record else None
 
-    async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
+    async def resolve_tenant_by_isa(
+        self,
+        isa_sender_id: str,
+        isa_receiver_id: str,
+        *,
+        transaction_type: str | None = None,
+    ) -> IsaTenantResolution:
         result = await self.session.execute(
-            select(OrmInboundRoute.tenant_id).where(
+            select(
+                OrmInboundRoute.id,
+                OrmInboundRoute.tenant_id,
+                OrmInboundRoute.name,
+                OrmInboundRoute.active,
+                OrmInboundRoute.transaction_type,
+            ).where(
                 OrmInboundRoute.isa_sender_id == isa_sender_id,
                 OrmInboundRoute.isa_receiver_id == isa_receiver_id,
-                OrmInboundRoute.active.is_(True),
                 OrmInboundRoute.deleted_at.is_(None),
             )
         )
-        rows = result.scalars().all()
-        unique_tenants = set(rows)
-        if len(unique_tenants) > 1:
-            raise ValueError(
-                f"Ambiguous ISA pair ({isa_sender_id!r} -> {isa_receiver_id!r}) "
-                f"matched {len(unique_tenants)} distinct tenants: {unique_tenants}"
+        candidates = [
+            IsaRouteCandidate(
+                route_id=str(row.id),
+                tenant_id=str(row.tenant_id),
+                name=str(row.name) if row.name is not None else None,
+                active=bool(row.active),
+                transaction_type=(
+                    str(row.transaction_type) if row.transaction_type is not None else None
+                ),
             )
-        return str(rows[0]) if rows else None
+            for row in result.all()
+        ]
+        return resolve_isa_candidates(
+            candidates,
+            platform_tenant_id=PLATFORM_TENANT_ID,
+            transaction_type=transaction_type,
+        )
 
     async def delete(self, aggregate: InboundRoute) -> None:
         await self.session.execute(

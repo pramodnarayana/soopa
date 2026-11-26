@@ -22,7 +22,7 @@ def dummy_tenant_data() -> dict[str, object]:
         "id": tenant_id,
         "name": f"Api Token Test Tenant {generate_random_hex(6)}",
         "slug": f"api-token-tenant-{generate_random_hex(6)}",
-        "idp_tenant_id": f"zitadel_org_{generate_random_hex(8)}",
+        "idp_realm_name": f"org_{generate_random_hex(8)}",
         "status": "active",
         "created_at": now_naive,
         "updated_at": now_naive,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase
 from ip.engine.domain.webhook.enums import PayloadSemantic, VerificationStrategy
 from seedwork.domain.types import JsonDict
@@ -22,6 +23,8 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    column,
+    literal,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -213,7 +216,7 @@ class StitchRecord(IpGlobalBase):
             "uq_ip_stitches_concrete_id",
             "id",
             unique=True,
-            postgresql_where=text("tenant_id != '*'"),
+            postgresql_where=column("tenant_id") != literal(PLATFORM_TENANT_ID),
         ),
         {"schema": "ip"},
     )

@@ -77,6 +77,7 @@ class WorkerContainer:
             handler=self.events_dispatcher.dispatch,
             region_name=self.settings.aws_region,
             endpoint_url=self.settings.aws_endpoint_url,
+            transport=self.settings.pubsub_transport,
             session_factory=self.session_factory,
             database_url=self.database_url,
             subscribe_topics=(

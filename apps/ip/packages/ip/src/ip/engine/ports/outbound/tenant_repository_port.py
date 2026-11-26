@@ -8,10 +8,10 @@ from ip.engine.domain.authorization import TenantSummary
 
 
 class TenantRepositoryPort(Protocol):
-    """Outbound port for resolving UCP Tenant records by federated IdP tenant ID or slug."""
+    """Outbound port for resolving UCP Tenant records by dedicated IdP realm or slug."""
 
-    async def get_by_idp_tenant_id(self, idp_tenant_id: str) -> TenantSummary | None:
-        """Resolves an active UCP tenant matching the federated IdP tenant ID."""
+    async def get_by_idp_realm(self, idp_realm_name: str) -> TenantSummary | None:
+        """Resolves an active dedicated-realm UCP tenant matching the IdP realm name."""
         ...
 
     async def get_by_slug(self, tenant_slug: str) -> TenantSummary | None:

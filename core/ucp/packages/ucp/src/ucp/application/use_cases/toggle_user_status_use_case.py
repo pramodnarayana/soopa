@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import structlog
-from identity.domain.constants import UserStatusAction
+from identity.domain.constants import MembershipStatus, UserStatusAction
 from seedwork.domain.exceptions import Result
 
 from ucp.application.use_cases._identity_error_translator import translate_identity_error
@@ -43,8 +43,8 @@ class ToggleUserStatusUseCase:
                 bound_logger.error("toggle_user_status.tenant_not_found")
                 return Result.fail(TenantNotFoundError.for_id(command.tenant_id))
 
-            if not tenant.idp_tenant_id:
-                bound_logger.error("toggle_user_status.missing_idp_tenant")
+            if not tenant.idp_realm_name:
+                bound_logger.error("toggle_user_status.missing_idp_realm")
                 return Result.fail(MissingIdpOrganizationError.for_tenant(command.tenant_id))
 
             user = await self._uow.user_repo.find_by_id_and_tenant(
@@ -67,6 +67,14 @@ class ToggleUserStatusUseCase:
                 )
                 return Result.fail(translate_identity_error(user_err))
 
+            membership_status = (
+                MembershipStatus.ACTIVE if command.is_active else MembershipStatus.SUSPENDED
+            )
+            await self._uow.user_repo.upsert_tenant_membership(
+                tenant_id=tenant.id,
+                user_id=user.id,
+                status=membership_status,
+            )
             await self._uow.user_repo.save(user)
             await self._uow.commit()
 

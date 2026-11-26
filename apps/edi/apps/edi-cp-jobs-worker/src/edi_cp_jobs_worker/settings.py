@@ -5,24 +5,38 @@ from edi.config.models import (
     CommonSettings,
     EdiAwsSettings,
     EdiControlPlaneSqsSettings,
-    S3Settings,
-    SecretsSettings,
 )
 from identity import PlatformIdentitySettings
-from pydantic import Field
+from pydantic import Field, model_validator
+from secret_store import PlatformSecretStoreSettings
 from seedwork.infra.config import load_settings_safely
+from storage import PlatformStorageSettings
 
 
 class WorkerSettings(CommonSettings):
-    s3: S3Settings = Field(default_factory=lambda: typing.cast(S3Settings, {}))
+    storage: PlatformStorageSettings = Field(
+        default_factory=lambda: typing.cast(PlatformStorageSettings, {})
+    )
     aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
     identity: PlatformIdentitySettings = Field(
         default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
     )
-    secrets: SecretsSettings = Field(default_factory=lambda: typing.cast(SecretsSettings, {}))
+    secrets: PlatformSecretStoreSettings = Field(
+        default_factory=lambda: typing.cast(PlatformSecretStoreSettings, {})
+    )
     sqs: EdiControlPlaneSqsSettings = Field(
         default_factory=lambda: typing.cast(EdiControlPlaneSqsSettings, {})
     )
+
+    @model_validator(mode="after")
+    def validate_pubsub_transport_uris(self) -> "WorkerSettings":
+        self.pubsub.validate_uris(
+            {
+                **self.sqs.pubsub_uris(),
+                "SNS_PLATFORM_EVENTS_TOPIC_ARN": self.aws.sns_topic_arn,
+            }
+        )
+        return self
 
 
 @lru_cache

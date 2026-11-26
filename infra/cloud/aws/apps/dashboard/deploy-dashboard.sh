@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../../.." && pwd)"
 ENV=${1:-staging}
 
-echo "=== Dynamically Fetching Configuration from Pulumi (The Advanced Enterprise Way) [$ENV] ==="
+echo "=== Dynamically Fetching Configuration from Pulumi (Casdoor OIDC) [$ENV] ==="
 
 # 1. Fetch Domain from Platform Stack
 ALB_DOMAIN=$(pulumi stack output staging_domain -s "$ENV" -C "$REPO_ROOT/infra/cloud/aws/platform")
@@ -14,19 +14,18 @@ export VITE_UCP_API_URL="https://api.${ALB_DOMAIN}"
 export VITE_IDENTITY_API_URL="https://identity.${ALB_DOMAIN}"
 export IDENTITY_API_URL="https://identity.${ALB_DOMAIN}"
 
-# 2. Fetch Client and Project IDs from Zitadel Config Stack
-# Note: Since client ID is a secret, we use --show-secrets.
-IDENTITY_UCP_WEB_CLIENT_ID=$(pulumi stack output ucp_web_client_id -s "$ENV" -C "$REPO_ROOT/infra/cloud/zitadel" --show-secrets)
+# 2. Fetch Dashboard OAuth Client ID from Casdoor Stack Secrets Manager Entry
+ADMIN_OAUTH_SECRET_ARN=$(pulumi stack output admin_oauth_secret_arn -s "$ENV" -C "$REPO_ROOT/infra/cloud/aws/casdoor")
+IDENTITY_UCP_WEB_CLIENT_ID=$(aws secretsmanager get-secret-value \
+    --secret-id "$ADMIN_OAUTH_SECRET_ARN" \
+    --query "SecretString" \
+    --output text | python3 -c "import json, sys; print(json.load(sys.stdin)['dashboard_client_id'])")
 export VITE_IDENTITY_UCP_WEB_CLIENT_ID="$IDENTITY_UCP_WEB_CLIENT_ID"
 export IDENTITY_UCP_WEB_CLIENT_ID
-IDENTITY_UCP_PROJECT_ID=$(pulumi stack output ucp_project_id -s "$ENV" -C "$REPO_ROOT/infra/cloud/zitadel")
-export VITE_IDENTITY_UCP_PROJECT_ID="$IDENTITY_UCP_PROJECT_ID"
-export IDENTITY_UCP_PROJECT_ID
 
 echo "Discovered Frontend Config: "
 echo "- API Target: $VITE_API_PROXY_TARGET"
 echo "- Identity URL: $VITE_IDENTITY_API_URL"
-echo "- Project ID: $VITE_IDENTITY_UCP_PROJECT_ID"
 
 echo "=== Building Dashboard ==="
 cd "$REPO_ROOT"

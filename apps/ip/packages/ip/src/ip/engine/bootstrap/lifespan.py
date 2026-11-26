@@ -40,6 +40,7 @@ async def startup(
     if container_configurator is not None:
         container_configurator(container)
     app.state.ip_container = container
+    app.state.payload_storage = container.payload_storage()
     app.state.ip_tiered_storage = container.tiered_storage()
     app.state.ip_transformer_registry = container.transformer_registry()
     app.state.ip_stitch_catalog = container.stitch_catalog()
@@ -54,6 +55,7 @@ async def shutdown(app: FastAPI | None = None) -> None:
     logger.info("ip_shutdown_started")
     if app is not None:
         app.state.ip_container = None
+        app.state.payload_storage = None
         app.state.ip_tenant_resolver = None
         app.state.ip_tiered_storage = None
         app.state.ip_transformer_registry = None

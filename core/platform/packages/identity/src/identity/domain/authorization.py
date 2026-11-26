@@ -14,6 +14,7 @@ class Capability(StrEnum):
 
     # Global / Platform capabilities
     PLATFORM_ADMIN = "platform:admin"  # Grants full control over everything
+    PLATFORM_IMPERSONATE = "platform:impersonate"  # Audited break-glass support impersonation
 
     # Tenant Management
     TENANT_ADMIN = "tenant:admin"  # Grants full control over a specific tenant
@@ -60,6 +61,9 @@ class CapabilityDescriptor:
     display_name: str
     description: str
     is_sensitive: bool = False
+    requires_mfa: bool = False
+    machine_allowed: bool = True
+    tier_scope: str = "TENANT"
 
 
 class StandardRole(StrEnum):
@@ -86,6 +90,8 @@ class Role(AggregateRoot):
     name: str
     description: str | None
     capabilities: list[str] = field(default_factory=list)
+    deny_capabilities: list[str] = field(default_factory=list)
+    is_system: bool = False
 
     def __post_init__(self) -> None:
         super().__init__()
@@ -98,6 +104,8 @@ class Role(AggregateRoot):
         name: str,
         description: str | None,
         capabilities: list[str],
+        deny_capabilities: list[str] | None = None,
+        is_system: bool = False,
     ) -> "Role":
         role = cls(
             id=id,
@@ -105,6 +113,8 @@ class Role(AggregateRoot):
             name=name,
             description=description,
             capabilities=capabilities,
+            deny_capabilities=list(deny_capabilities or []),
+            is_system=is_system,
         )
         role.add_domain_event(
             RoleCreatedEvent(

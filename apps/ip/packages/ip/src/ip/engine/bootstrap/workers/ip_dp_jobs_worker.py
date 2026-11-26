@@ -185,6 +185,7 @@ class IpDpJobsWorkerModule(LaunchableWorker):
                 handler=dispatcher.dispatch,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,
+                transport=settings.pubsub_transport,
                 session_factory=(
                     self.db_router.global_session_scope if self.db_router is not None else None
                 ),

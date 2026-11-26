@@ -17,8 +17,8 @@ COMPANY_DOMAIN = os.getenv("COMPANY_DOMAIN", "flowwolf.io")
 PLATFORM_ADMIN_EMAIL = os.getenv("IDENTITY_PLATFORM_ADMIN_EMAIL", f"admin@{COMPANY_DOMAIN}")
 TENANT_DEFAULT_PASSWORD = os.getenv("IDENTITY_DEFAULT_USER_PASSWORD", "Password1!")
 PLATFORM_ADMIN_PASSWORD = os.getenv("IDENTITY_PLATFORM_ADMIN_PASSWORD", TENANT_DEFAULT_PASSWORD)
-ZITADEL_ADMIN_USER = "zitadel-admin@zitadel.ucp.localhost"
-ZITADEL_ADMIN_PASSWORD = "Password1!"  # noqa: S105 - Standard local dev credential display
+CASDOOR_ADMIN_USER = "admin"
+CASDOOR_ADMIN_PASSWORD = os.getenv("CASDOOR_ADMIN_PASSWORD", "Password1!")
 
 
 def main() -> None:
@@ -31,17 +31,18 @@ def main() -> None:
         + "\n"
         + " 1. Flowwolf Dashboard:\n"
         + "    - URL:                     http://localhost:5173\n"
-        + f"    - Platform Admin Username: {PLATFORM_ADMIN_EMAIL}\n"
+        + f"    - Platform Admin Email:    {PLATFORM_ADMIN_EMAIL} (Realm: soopa-platform)\n"
         + f"    - Platform Admin Password: {PLATFORM_ADMIN_PASSWORD}\n"
-        + f"    - Tenant Default Password: {TENANT_DEFAULT_PASSWORD} (Assigned to all new tenant users)\n"
+        + f"    - Demo SMB User:           demo@acme.local / {TENANT_DEFAULT_PASSWORD} (Realm: soopa-global)\n"
+        + f"    - Demo Individual User:    solo@example.com / {TENANT_DEFAULT_PASSWORD} (Realm: soopa-global)\n"
         + "    - Role:                    PlatformAdmin (Global Sentinel Tenant)\n"
         + "-" * 68
         + "\n"
-        + " 2. Zitadel IAM Console:\n"
-        + "    - URL:      http://ucp.localhost:8080/ui/console\n"
-        + f"    - Username: {ZITADEL_ADMIN_USER}\n"
-        + f"    - Password: {ZITADEL_ADMIN_PASSWORD}\n"
-        + "    - Role:     IAM Owner / Instance SuperAdmin\n"
+        + " 2. Casdoor IAM Console:\n"
+        + "    - URL:      http://localhost:8080\n"
+        + f"    - Username: {CASDOOR_ADMIN_USER} (Org: built-in)\n"
+        + f"    - Password: {CASDOOR_ADMIN_PASSWORD}\n"
+        + "    - Role:     Casdoor Global Administrator\n"
         + "-" * 68
         + "\n"
         + " 3. Mock External Partners:\n"

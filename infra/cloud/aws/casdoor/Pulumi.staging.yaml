@@ -1,0 +1,2 @@
+config:
+  casdoor:enable_observability: "true"

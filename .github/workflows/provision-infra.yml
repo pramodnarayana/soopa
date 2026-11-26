@@ -17,7 +17,7 @@ on:
       - '!infra/cloud/aws/apps/edi/workers/**'
       - '!infra/cloud/aws/apps/edi/as2/**'
       - '!infra/cloud/aws/platform/migrator/**'
-      - 'infra/cloud/zitadel/**'
+      - '!infra/cloud/aws/zitadel/**'
       - 'versions.env'
       - '.github/workflows/provision-infra.yml'
       - '.github/workflows/preview-infra.yml'
@@ -159,13 +159,13 @@ jobs:
           stack-name: ${{ env.TARGET_ENV }}
           refresh: ${{ env.REFRESH_STATE }}
 
-      # Step 3: Third-Party Images Sync (OpenObserve, Zitadel)
+      # Step 3: Third-Party Images Sync (OpenObserve, Casdoor)
       - name: Sync Third-Party Container Images to ECR
         shell: bash
         run: |
           ./infra/cloud/aws/platform/sync-images.sh "${{ env.TARGET_ENV }}"
 
-      # Step 4: Platform Services & Identity
+      # Step 4: Platform Services & Identity (Casdoor only on AWS)
       - name: Deploy OpenObserve
         uses: ./.github/actions/pulumi-stack-up
         with:
@@ -173,17 +173,10 @@ jobs:
           stack-name: ${{ env.TARGET_ENV }}
           refresh: ${{ env.REFRESH_STATE }}
 
-      - name: Deploy Zitadel Infra
+      - name: Deploy Casdoor Identity Provider
         uses: ./.github/actions/pulumi-stack-up
         with:
-          stack-dir: infra/cloud/aws/zitadel
-          stack-name: ${{ env.TARGET_ENV }}
-          refresh: ${{ env.REFRESH_STATE }}
-
-      - name: Deploy Zitadel Configuration
-        uses: ./.github/actions/pulumi-stack-up
-        with:
-          stack-dir: infra/cloud/zitadel
+          stack-dir: infra/cloud/aws/casdoor
           stack-name: ${{ env.TARGET_ENV }}
           refresh: ${{ env.REFRESH_STATE }}
 

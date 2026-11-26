@@ -1,5 +1,6 @@
 from typing import Protocol
 
+from identity.domain.constants import MembershipScope, MembershipStatus
 from identity.domain.user import User
 
 
@@ -10,6 +11,21 @@ class UserRepositoryPort(Protocol):
 
     async def has_any_tenant_memberships(self, user_id: str) -> bool:
         """Checks if a user belongs to any active tenants"""
+        ...
+
+    async def upsert_tenant_membership(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        scope: MembershipScope = MembershipScope.DIRECT,
+        status: MembershipStatus = MembershipStatus.ACTIVE,
+    ) -> None:
+        """Creates or updates a user's membership ledger entry in `identity.tenant_users`."""
+        ...
+
+    async def remove_tenant_membership(self, *, tenant_id: str, user_id: str) -> None:
+        """Removes a user's membership ledger entry from `identity.tenant_users`."""
         ...
 
     async def find_by_email(self, email: str) -> User | None:

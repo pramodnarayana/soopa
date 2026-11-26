@@ -2,10 +2,11 @@ from datetime import UTC, datetime
 
 import structlog
 from database.interceptors import intercept_db_errors
-from database.models.identity import ApiKey, ApiToken, Role, UserRole
+from database.models.identity import ApiKey, ApiToken, Role, TenantUser, UserRole
 from database.models.identity import Tenant as DbTenant
 from database.models.webhooks import Webhook
 from database.outbox_serializer import serialize_domain_event
+from identity.domain.constants import TenantIsolationMode
 from seedwork.utils import generate_id
 from sharding.domain.constants import DatabaseShardStatus, ShardRoutingStrategy
 from sqlalchemy import delete, func, select, update
@@ -35,7 +36,8 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort):
             id=row.id,
             name=row.name,
             slug=row.slug,
-            idp_tenant_id=row.idp_tenant_id,
+            idp_realm_name=row.idp_realm_name,
+            isolation_mode=TenantIsolationMode(row.isolation_mode),
             status=LifecycleStatus(row.status),
             created_at=row.created_at.replace(tzinfo=UTC),
             updated_at=row.updated_at.replace(tzinfo=UTC),
@@ -48,7 +50,8 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort):
             id=tenant.id,
             name=tenant.name,
             slug=tenant.slug,
-            idp_tenant_id=tenant.idp_tenant_id,
+            idp_realm_name=tenant.idp_realm_name,
+            isolation_mode=tenant.isolation_mode.value,
             status=tenant.status.value,
             created_at=tenant.created_at.replace(tzinfo=None),
             updated_at=tenant.updated_at.replace(tzinfo=None),
@@ -57,7 +60,8 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort):
     @staticmethod
     def _update_record_from_domain(db_tenant: DbTenant, tenant: Tenant) -> None:
         db_tenant.name = tenant.name
-        db_tenant.idp_tenant_id = tenant.idp_tenant_id
+        db_tenant.idp_realm_name = tenant.idp_realm_name
+        db_tenant.isolation_mode = tenant.isolation_mode.value
         db_tenant.status = tenant.status.value
         # Slug is intentionally immutable — not updated on rename.
         # See TECHNICAL_DEBT.md: "Slug Redirect Trail for Self-Service Tenant Portals".
@@ -72,9 +76,11 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort):
         subs = await self._load_subscription_ids(row.id)
         return self._to_domain_model(row, subs)
 
-    async def find_by_idp_tenant_id(self, idp_tenant_id: str) -> Tenant | None:
+    async def find_by_idp_realm(self, idp_realm_name: str) -> Tenant | None:
         stmt = select(DbTenant).where(
-            DbTenant.idp_tenant_id == idp_tenant_id, DbTenant.deleted_at.is_(None)
+            DbTenant.idp_realm_name == idp_realm_name,
+            DbTenant.isolation_mode == TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            DbTenant.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         row = result.scalar_one_or_none()
@@ -140,7 +146,8 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort):
                 id=tenant.id,
                 name=tenant.name,
                 slug=tenant.slug,
-                idp_tenant_id=tenant.idp_tenant_id,
+                idp_realm_name=tenant.idp_realm_name,
+                isolation_mode=tenant.isolation_mode.value,
                 status=tenant.status.value,
                 created_at=tenant.created_at.replace(tzinfo=None),
                 updated_at=tenant.updated_at.replace(tzinfo=None),
@@ -204,6 +211,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort):
             )
 
         # Hard delete junction/metadata tables
+        await self.session.execute(delete(TenantUser).where(TenantUser.tenant_id == tenant_id))
         await self.session.execute(delete(UserRole).where(UserRole.tenant_id == tenant_id))
         await self.session.execute(
             delete(ShardRegistry).where(ShardRegistry.tenant_id == tenant_id)

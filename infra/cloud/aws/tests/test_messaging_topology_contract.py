@@ -433,3 +433,33 @@ def test_aws_compute_stacks_wire_dynamic_watch_base_url_and_secret_token() -> No
     for rel in ("apps/ucp/workers/__main__.py", "apps/edi/workers/__main__.py"):
         source = (AWS_ROOT / rel).read_text(encoding="utf-8")
         assert '"CONFIG_WATCH_BASE_URL"' in source, f"{rel} must inject CONFIG_WATCH_BASE_URL"
+
+
+def test_config_watch_gateway_foundation_endpoints_and_staging_reconcile_contracts() -> None:
+    """Enforce dedicated config-watch-gateway Fargate service, retired SNS/SQS VPC endpoints, and Staging schema reconcile."""
+    api_source = (AWS_ROOT / "apps" / "api" / "__main__.py").read_text(encoding="utf-8")
+    assert "config-watch-gateway" in api_source
+    assert "unified_api.watch_gateway:app" in api_source
+    assert 'path_pattern="/api/v1/internal/*/config/*"' in api_source
+    assert "priority=190" in api_source
+    assert 'cpu="256"' in api_source
+    assert 'memory="512"' in api_source
+    assert "port=8081" in api_source
+    assert "deregistration_delay=30" in api_source
+    assert api_source.count("autoscaling_config=autoscaling_config") >= 2
+
+    foundation_source = (AWS_ROOT / "foundation" / "__main__.py").read_text(encoding="utf-8")
+    assert '"sns"' not in foundation_source
+    assert '"sqs"' not in foundation_source
+    assert '["logs", "secretsmanager"]' in foundation_source
+
+    repo_root = AWS_ROOT.parents[2]
+    deploy_source = (repo_root / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    migrate_idx = deploy_source.index("python -m platform_migrator migrate --domain platform")
+    reconcile_idx = deploy_source.index(
+        "python infra/local/scripts/reconcile_schema_drift.py --domain platform --skip-dotenv"
+    )
+    seed_idx = deploy_source.index("python -m platform_migrator seed --domain platform")
+    assert migrate_idx < reconcile_idx < seed_idx, (
+        "deploy.yml must reconcile global_db schema drift after migrate and before seed"
+    )

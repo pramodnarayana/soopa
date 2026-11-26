@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
+from identity.domain.constants import TenantIsolationMode
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.domain.authorization import TenantSummary
 from ip.engine.ports.outbound.tenant_repository_port import TenantRepositoryPort
@@ -26,18 +27,19 @@ class SqlAlchemyTenantRepository(GlobalSqlAlchemyRepository, TenantRepositoryPor
         return TenantSummary(
             id=record.id,
             slug=record.slug,
-            idp_tenant_id=record.idp_tenant_id,
+            idp_realm_name=record.idp_realm_name,
             name=record.name,
         )
 
-    async def get_by_idp_tenant_id(self, idp_tenant_id: str) -> TenantSummary | None:
-        normalized = idp_tenant_id.strip()
+    async def get_by_idp_realm(self, idp_realm_name: str) -> TenantSummary | None:
+        normalized = idp_realm_name.strip()
         if not normalized:
             return None
         stmt = (
             select(Tenant)
             .where(
-                Tenant.idp_tenant_id == normalized,
+                Tenant.idp_realm_name == normalized,
+                Tenant.isolation_mode == TenantIsolationMode.DEDICATED_IDP_ORG.value,
                 Tenant.deleted_at.is_(None),
             )
             .limit(1)
@@ -79,9 +81,9 @@ class SqlAlchemySessionScopedTenantRepository(TenantRepositoryPort):
         self._session_scope = session_scope
         self._repository_factory = repository_factory
 
-    async def get_by_idp_tenant_id(self, idp_tenant_id: str) -> TenantSummary | None:
+    async def get_by_idp_realm(self, idp_realm_name: str) -> TenantSummary | None:
         async with self._session_scope() as session:
-            return await self._repository_factory(session).get_by_idp_tenant_id(idp_tenant_id)
+            return await self._repository_factory(session).get_by_idp_realm(idp_realm_name)
 
     async def get_by_slug(self, tenant_slug: str) -> TenantSummary | None:
         async with self._session_scope() as session:

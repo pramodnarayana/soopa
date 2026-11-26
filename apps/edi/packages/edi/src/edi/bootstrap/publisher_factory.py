@@ -25,6 +25,7 @@ def create_edi_pipeline_publisher(
     deliver_queue_url: str,
     region_name: str,
     endpoint_url: str | None = None,
+    transport: str | None = None,
     database_url: str | None = None,
     session_factory: SessionScopeFactory | None = None,
 ) -> OutboxPublisherPort:
@@ -41,6 +42,7 @@ def create_edi_pipeline_publisher(
             destination_uri=queue_url,
             region_name=region_name,
             endpoint_url=endpoint_url,
+            transport=transport,
             session_factory=session_factory,
             database_url=database_url,
         )

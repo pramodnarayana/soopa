@@ -28,6 +28,7 @@ class NotificationWorkerModule(LaunchableWorker):
         self.container.config.sqs_notification_queue_url.from_value(
             settings.sqs_notification_queue_url
         )
+        self.container.config.pubsub_transport.from_value(settings.pubsub_transport)
         self.container.config.aws_region.from_value(settings.aws_region)
         self.container.config.aws_endpoint_url.from_value(settings.aws_endpoint_url)
 

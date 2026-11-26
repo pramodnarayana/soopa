@@ -36,7 +36,8 @@ class TenantResponse(BaseModel):
     id: str
     name: str
     slug: str
-    idp_tenant_id: str | None = Field(serialization_alias="zitadelOrgId")
+    idp_realm_name: str | None = Field(default=None, serialization_alias="idpRealmName")
+    isolation_mode: str = Field(serialization_alias="isolationMode")
     status: str
     subscriptions: list[str]
     created_at: datetime = Field(serialization_alias="createdAt")
@@ -48,7 +49,8 @@ class TenantResponse(BaseModel):
             id=rm.id,
             name=rm.name,
             slug=rm.slug,
-            idp_tenant_id=rm.idp_tenant_id,
+            idp_realm_name=rm.idp_realm_name,
+            isolation_mode=rm.isolation_mode.value,
             status=rm.status,
             subscriptions=rm.subscriptions,
             created_at=rm.created_at,

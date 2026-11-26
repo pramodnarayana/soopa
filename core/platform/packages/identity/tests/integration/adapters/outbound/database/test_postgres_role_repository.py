@@ -1,15 +1,21 @@
 import datetime
 
 import pytest
+from database.models.config_sync import ConfigChangelogEntry
 from database.models.identity import Tenant as OrmTenant
 from database.models.identity import User as OrmUser
 from seedwork import generate_id, generate_random_hex
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ucp.domain.constants import LifecycleStatus
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
 from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
 from identity.domain.authorization import Role as DomainRole
+from identity.domain.constants import (
+    IDENTITY_CONFIG_APP_ID,
+    IdentityConfigEntityType,
+)
 from identity.domain.constants import IdentityIdPrefix as DomainIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
@@ -25,7 +31,7 @@ async def _setup_data(db_session):
         "id": test_tenant_id,
         "name": f"Role Test Tenant {generate_random_hex(6)}",
         "slug": f"role-tenant-{generate_random_hex(6)}",
-        "idp_tenant_id": generate_id("idp"),
+        "idp_realm_name": generate_id("idp"),
         "status": LifecycleStatus.ACTIVE,
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
@@ -34,7 +40,7 @@ async def _setup_data(db_session):
         "id": platform_tenant_id,
         "name": "Platform Tenant",
         "slug": f"platform-{generate_random_hex(6)}",
-        "idp_tenant_id": f"platform-{generate_random_hex(6)}",
+        "idp_realm_name": f"platform-{generate_random_hex(6)}",
         "status": LifecycleStatus.ACTIVE,
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
@@ -130,14 +136,26 @@ async def test_postgres_role_repository_assignments(db_session_factory):
         caps = await repo.get_user_capabilities(test_tenant_id, user_id)
         assert "tenant:read" in caps
 
-        assert await repo.has_any_tenant_memberships(user_id) is True
-
         await repo.remove_user_roles(test_tenant_id, user_id)
 
         caps_after = await repo.get_user_capabilities(test_tenant_id, user_id)
         assert len(caps_after) == 0
 
-        assert await repo.has_any_tenant_memberships(user_id) is False
+        tombstones = (
+            (
+                await db_session.execute(
+                    select(ConfigChangelogEntry).where(
+                        ConfigChangelogEntry.app_id == IDENTITY_CONFIG_APP_ID,
+                        ConfigChangelogEntry.entity_type
+                        == IdentityConfigEntityType.USER_REVOCATION.value,
+                        ConfigChangelogEntry.entity_id == user_id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(tombstones) == 2
 
 
 @pytest.mark.asyncio
@@ -188,7 +206,7 @@ async def test_assign_user_role_cross_tenant_error(db_session_factory):
                         "id": other_tenant_id,
                         "name": "Other",
                         "slug": f"other-{generate_random_hex(6)}",
-                        "idp_tenant_id": f"oth-{generate_random_hex(6)}",
+                        "idp_realm_name": f"oth-{generate_random_hex(6)}",
                         "status": "active",
                         "created_at": datetime.datetime.now().replace(tzinfo=None),
                         "updated_at": datetime.datetime.now().replace(tzinfo=None),

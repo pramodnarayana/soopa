@@ -2,16 +2,16 @@
 Global Authentication Middleware.
 
 Validates the Bearer token exactly ONCE at the perimeter for every inbound
-request. The resolved ``IdentityContext`` is attached to ``request.state.identity``
-and ``request.scope['identity']`` so all downstream guards and domain auth
-dependencies can simply read from it.
-
-Architecture note:
-  This is the outermost shell of the Hexagonal Architecture: the HTTP edge.
-  It uses the Strategy Pattern to evaluate different token types dynamically.
+request. Attaches both ``IdentityContext`` (``request.state.identity``) and
+immutable ``PrincipalContext`` (``request.state.principal``) so all downstream
+guards (`RequireAuthorization`, `RequireCapability`, domain dependencies) read
+from a single verified request state.
 """
 
+from __future__ import annotations
+
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import Request, Response
@@ -21,6 +21,8 @@ from identity.application.authenticate_use_case import (
     TenantNotProvisionedError,
 )
 from identity.domain.authentication_strategy import AuthenticationStrategyPort
+from identity.domain.constants import MFA_AMR_VALUES, ActorType
+from identity.domain.dtos import PrincipalContext
 from identity.domain.identity_context import IdentityContext
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
@@ -35,6 +37,7 @@ _PUBLIC_PATHS: frozenset[str] = frozenset(
         "/redoc",
         "/docs/oauth2-redirect",
         "/health",
+        "/api/v1/auth/hrd",
     }
 )
 
@@ -43,10 +46,60 @@ _PUBLIC_PATHS: frozenset[str] = frozenset(
 _INTERNAL_AUTH_PREFIXES: tuple[str, ...] = ("/api/v1/internal/",)
 
 
+def _to_principal_context(identity: IdentityContext) -> PrincipalContext:
+    """Translate verified `IdentityContext` into immutable `PrincipalContext` for the 4-Layer PDP."""
+    claims = identity.claims
+    iss_raw = claims.get("iss")
+    idp_issuer = iss_raw.strip().rstrip("/") if isinstance(iss_raw, str) else ""
+    sub_raw = claims.get("sub")
+    idp_subject = str(sub_raw) if isinstance(sub_raw, str) and sub_raw else identity.subject
+
+    iat_raw = claims.get("iat")
+    token_issued_at = (
+        datetime.fromtimestamp(iat_raw, tz=UTC) if isinstance(iat_raw, int) else datetime.now(UTC)
+    )
+
+    raw_amr = claims.get("amr")
+    amr_values = (
+        {str(item).lower() for item in raw_amr}
+        if isinstance(raw_amr, (list, tuple, set))
+        else set()
+    )
+    mfa_verified = bool(amr_values & MFA_AMR_VALUES)
+
+    email_raw = claims.get("email")
+    email = email_raw.strip().lower() if isinstance(email_raw, str) and email_raw.strip() else None
+    email_verified = bool(claims.get("email_verified") or claims.get("emailVerified"))
+
+    realm_raw = claims.get("owner") or claims.get("idp_realm")
+    idp_realm = realm_raw.strip() if isinstance(realm_raw, str) and realm_raw.strip() else None
+
+    jti_raw = claims.get("jti")
+    jti = jti_raw if isinstance(jti_raw, str) and jti_raw else None
+
+    is_machine = not idp_issuer and identity.tenant_id is not None
+    actor_type = ActorType.MACHINE if is_machine else ActorType.HUMAN
+
+    return PrincipalContext(
+        user_id=identity.subject,
+        idp_issuer=idp_issuer,
+        idp_subject=idp_subject,
+        actor_type=actor_type,
+        token_issued_at=token_issued_at,
+        assurance_level="aal2" if mfa_verified else "aal1",
+        mfa_verified=mfa_verified,
+        email=email,
+        email_verified=email_verified,
+        idp_realm=idp_realm,
+        bound_tenant_id=identity.tenant_id if is_machine else None,
+        jti=jti,
+    )
+
+
 class AuthenticationMiddleware(BaseHTTPMiddleware):
     """
     ASGI middleware: validates the auth token once per request and populates
-    ``request.state.identity`` and ``request.scope['identity']``.
+    ``request.state.identity`` / ``request.state.principal`` and ASGI scope keys.
     """
 
     def __init__(
@@ -67,9 +120,16 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             response.headers.setdefault("WWW-Authenticate", "Bearer")
         return response
 
+    @staticmethod
+    def _set_request_identity(request: Request, identity: IdentityContext | None) -> None:
+        principal = _to_principal_context(identity) if identity is not None else None
+        request.state.identity = identity
+        request.state.principal = principal
+        request.scope["identity"] = identity
+        request.scope["principal"] = principal
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        request.state.identity = None
-        request.scope["identity"] = None
+        self._set_request_identity(request, None)
 
         logger.debug(
             "auth_middleware_intercepted_request",
@@ -88,41 +148,23 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             token = authorization.strip()
             while token.lower().startswith("bearer "):
                 token = token[7:].strip()
-        # Note: Query parameter token authentication removed for security.
-        # SSE clients must use Authorization header or cookie-based authentication.
 
         if token:
-            logger.debug(
-                "auth_middleware_token_found",
-                token_prefix=token[:15],
-            )
-
-            # Chain of Responsibility / Strategy Execution
+            logger.debug("auth_middleware_token_found", token_prefix=token[:15])
             strategy_found = False
             for strategy in self.strategies:
-                logger.debug(
-                    "auth_middleware_evaluating_strategy",
-                    strategy=type(strategy).__name__,
-                )
                 if strategy.can_handle(token):
-                    logger.debug(
-                        "auth_middleware_strategy_claimed_token",
-                        strategy=type(strategy).__name__,
-                    )
                     strategy_found = True
                     try:
                         identity = await strategy.authenticate(token)
-                        request.state.identity = identity
-                        request.scope["identity"] = identity
+                        self._set_request_identity(request, identity)
                         break
                     except AuthenticationError:
-                        # Don't reject here — let route-specific guards raise 401/403.
                         logger.debug(
                             "auth_middleware_authentication_failed",
                             path=request.url.path,
                         )
-                        request.state.identity = None
-                        request.scope["identity"] = None
+                        self._set_request_identity(request, None)
                         break
                     except TenantNotProvisionedError as e:
                         logger.error(
@@ -132,17 +174,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                         return JSONResponse(status_code=403, content={"detail": str(e)})
 
             if not strategy_found:
-                logger.error(
-                    "auth_middleware_no_strategy_found",
-                    path=request.url.path,
-                )
+                logger.error("auth_middleware_no_strategy_found", path=request.url.path)
         else:
             logger.debug("auth_middleware_no_authorization_header", path=request.url.path)
 
-        logger.debug(
-            "auth_middleware_proceeding",
-            path=request.url.path,
-            has_identity=request.state.identity is not None,
-        )
         response = await call_next(request)
         return self._preserve_bearer_challenge(response, request.state.identity)

@@ -72,6 +72,7 @@ from ip.engine.ports.outbound.uow import (
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
 from security.ports.cipher_port import CipherPort
 from sqlalchemy.ext.asyncio import AsyncSession
+from storage.config import PlatformStorageSettings
 from storage.ports.payload_storage_port import PayloadStoragePort
 from storage.provider import StorageProvider
 
@@ -161,7 +162,7 @@ async def require_tenant_member(
         )
 
     if identity.is_platform_admin:
-        tenant_summary = await tenant_repo.get_by_idp_tenant_id(tenant_id)
+        tenant_summary = await tenant_repo.get_by_idp_realm(tenant_id)
         canonical_tenant_id = tenant_summary.id if tenant_summary is not None else tenant_id
         request.state.identity = identity
         request.state.ucp_tenant_id = canonical_tenant_id
@@ -576,13 +577,13 @@ def get_olap_client(request: Request) -> OlapClientPort:
 
 
 def get_payload_storage(request: Request) -> PayloadStoragePort:
-    """Resolves PayloadStoragePort from application state or StorageProvider."""
+    """Resolves PayloadStoragePort from application state or centralized PlatformStorageSettings."""
     try:
         storage: PayloadStoragePort | None = request.app.state.payload_storage
     except AttributeError:
         storage = None
     if storage is None:
-        storage = StorageProvider.create_payload_storage()
+        storage = StorageProvider.from_settings(PlatformStorageSettings())
         request.app.state.payload_storage = storage
     return storage
 

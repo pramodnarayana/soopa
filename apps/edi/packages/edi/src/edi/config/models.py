@@ -4,6 +4,7 @@ from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlparse
 
+from pubsub.config import PlatformPubSubSettings
 from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 from seedwork.infra.config import CleanBaseSettings, load_settings_safely
@@ -13,27 +14,11 @@ from seedwork.infra.config_models import (
     PlatformOtelSettings,
 )
 
-from edi.config.constants import SECRETS_MOUNT_PATH
-
 """
 Shared application settings for all EDI AS2 services.
 All settings are loaded from environment variables and validated by Pydantic.
 Each service can use the full AppSettings or cherry-pick specific groups.
 """
-
-
-class S3Settings(CleanBaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
-
-    bucket: str = Field(validation_alias="S3_BUCKET", default="edi-as2-payloads")
-    endpoint_url: str | None = Field(
-        validation_alias="S3_ENDPOINT_URL",
-        default=None,
-        description="Override for MinIO or other S3-compatible stores. Leave empty for AWS S3.",
-    )
-    region: str = Field(validation_alias="S3_REGION", default="us-east-1")
-    access_key_id: str | None = Field(validation_alias="S3_ACCESS_KEY_ID", default=None)
-    secret_access_key: str | None = Field(validation_alias="S3_SECRET_ACCESS_KEY", default=None)
 
 
 class EdiAwsSettings(PlatformAwsSettings):
@@ -68,6 +53,15 @@ class EdiDataPlaneSqsSettings(CleanBaseSettings):
         description="The SQS queue URL for EDI Data Plane Jobs",
     )
 
+    def pubsub_uris(self) -> dict[str, str | None]:
+        return {
+            "SQS_ORCHESTRATOR_QUEUE_URL": self.orchestrator_queue_url,
+            "SQS_COMPUTE_QUEUE_URL": self.compute_queue_url,
+            "SQS_DELIVER_QUEUE_URL": self.deliver_queue_url,
+            "SQS_DELIVER_DLQ_URL": self.deliver_dlq_url,
+            "SQS_DATA_PLANE_JOBS_QUEUE_URL": self.data_plane_jobs_queue_url,
+        }
+
 
 class EdiControlPlaneSqsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
@@ -77,6 +71,11 @@ class EdiControlPlaneSqsSettings(CleanBaseSettings):
         description="The SQS queue URL for EDI Control Plane Jobs",
     )
 
+    def pubsub_uris(self) -> dict[str, str | None]:
+        return {
+            "SQS_CONTROL_PLANE_JOBS_QUEUE_URL": self.control_plane_jobs_queue_url,
+        }
+
 
 class PublicSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
@@ -84,15 +83,6 @@ class PublicSettings(CleanBaseSettings):
     base_url: str = Field(
         validation_alias="PUBLIC_BASE_URL",
         description="The external base URL of the EDI platform",
-    )
-
-
-class SecretsSettings(CleanBaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
-
-    mount_path: str = Field(validation_alias="SECRETS_MOUNT_PATH", default=SECRETS_MOUNT_PATH)
-    sync_interval_seconds: int = Field(
-        validation_alias="SECRETS_SYNC_INTERVAL_SECONDS", default=300
     )
 
 
@@ -115,10 +105,18 @@ class CommonSettings(CleanBaseSettings):
         description="Allow private IPs in AS2/HTTP delivery (for local docker testing)",
     )
     database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
+    pubsub: PlatformPubSubSettings = Field(default_factory=PlatformPubSubSettings)
     otel: PlatformOtelSettings = Field(
         default_factory=lambda: typing.cast(PlatformOtelSettings, {})
     )
     public: PublicSettings = Field(default_factory=lambda: typing.cast(PublicSettings, {}))
+
+    @property
+    def pubsub_transport(self) -> str | None:
+        return self.pubsub.transport
+
+    def effective_aws_endpoint_url(self, endpoint_url: str | None) -> str | None:
+        return self.pubsub.effective_aws_endpoint_url(endpoint_url)
 
     @model_validator(mode="after")
     def validate_and_resolve_settings(self) -> "CommonSettings":

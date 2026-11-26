@@ -2,13 +2,13 @@ import typing
 
 from identity import PlatformIdentitySettings
 from pydantic import Field
+from secret_store import PlatformSecretStoreSettings
 from seedwork.infra.config import load_settings_safely
+from storage import PlatformStorageSettings
 
 from edi.config.models import (
     CommonSettings,
     EdiAwsSettings,
-    S3Settings,
-    SecretsSettings,
 )
 
 
@@ -18,8 +18,12 @@ class EdiTestSettings(CommonSettings):
         default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
     )
     aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
-    s3: S3Settings = Field(default_factory=lambda: typing.cast(S3Settings, {}))
-    secrets: SecretsSettings = Field(default_factory=lambda: typing.cast(SecretsSettings, {}))
+    storage: PlatformStorageSettings = Field(
+        default_factory=lambda: typing.cast(PlatformStorageSettings, {})
+    )
+    secrets: PlatformSecretStoreSettings = Field(
+        default_factory=lambda: typing.cast(PlatformSecretStoreSettings, {})
+    )
 
 
 def get_test_settings():

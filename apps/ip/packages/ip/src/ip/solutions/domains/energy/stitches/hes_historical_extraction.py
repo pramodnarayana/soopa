@@ -9,6 +9,7 @@ Authored by the Energy Domain Solution Engineer (Pure Python Code):
 
 from __future__ import annotations
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from orchestration.domain.constants import EffectPolicy, NodeKind, Priority
 from orchestration.domain.definition import NodeDefinition, WorkflowDefinition
 
@@ -205,7 +206,7 @@ def build_hes_historical_extraction_stitch() -> Stitch:
     """Build the unified Stitch triggering historical extraction on extract command events."""
     return Stitch(
         id="stch_hes_historical_extraction",
-        tenant_id="*",
+        tenant_id=PLATFORM_TENANT_ID,
         canonical_event_type="command.historical_extract_requests",
         target_workflow_id="energy.hes_historical_extraction_stitch",
         name="HES Historical Interval Extraction",
@@ -285,7 +286,7 @@ def build_hes_historical_dispatch_stitch() -> Stitch:
     """Build the Outbound Dispatch Stitch."""
     return Stitch(
         id="stch_hes_historical_dispatch",
-        tenant_id="*",
+        tenant_id=PLATFORM_TENANT_ID,
         canonical_event_type="command.historical_extract_requests",
         target_workflow_id="energy.hes_historical_dispatch_stitch",
         name="HES Historical Extract Dispatch",
@@ -347,7 +348,7 @@ def build_itron_batch_ingestion_stitch() -> Stitch:
     """Build the Itron Inbound Ingestion Stitch."""
     return Stitch(
         id="stch_itron_batch_ingestion",
-        tenant_id="*",
+        tenant_id=PLATFORM_TENANT_ID,
         canonical_event_type="hes.itron.batch_push.received",
         target_workflow_id="energy.itron_batch_ingestion_stitch",
         name="Itron Batch Interval Streaming",
@@ -409,7 +410,7 @@ def build_landis_batch_ingestion_stitch() -> Stitch:
     """Build the Landis+Gyr Inbound Ingestion Stitch."""
     return Stitch(
         id="stch_landis_batch_ingestion",
-        tenant_id="*",
+        tenant_id=PLATFORM_TENANT_ID,
         canonical_event_type="hes.landis.batch_push.received",
         target_workflow_id="energy.landis_batch_ingestion_stitch",
         name="Landis+Gyr Batch Interval Streaming",
@@ -471,7 +472,7 @@ def build_siemens_batch_ingestion_stitch() -> Stitch:
     """Build the Siemens Inbound Ingestion Stitch."""
     return Stitch(
         id="stch_siemens_batch_ingestion",
-        tenant_id="*",
+        tenant_id=PLATFORM_TENANT_ID,
         canonical_event_type="hes.siemens.batch_push.received",
         target_workflow_id="energy.siemens_batch_ingestion_stitch",
         name="Siemens Batch Interval Streaming",

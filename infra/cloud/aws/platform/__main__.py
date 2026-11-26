@@ -70,7 +70,9 @@ ecs_cluster, cloud_map_namespace = provision_cluster(prefix=_prefix, tags=_TAGS,
 platform_events_topic_uri = "db://topic/platform-events-topic"
 
 # ── Container Registries ──────────────────────────────────────────────────────
-zitadel_ecr_repo, app_ecr_repo, openobserve_ecr_repo = provision_ecr(prefix=_prefix, tags=_TAGS)
+zitadel_ecr_repo, casdoor_ecr_repo, app_ecr_repo, openobserve_ecr_repo = provision_ecr(
+    prefix=_prefix, tags=_TAGS
+)
 
 # ── App Defaults Secret ───────────────────────────────────────────────────────
 # Stores application-level shared credentials that must NOT be injected as
@@ -126,6 +128,7 @@ aws.secretsmanager.SecretVersion(
 # Provisioned once by the Platform/Infra pipeline to guarantee global propagation
 # before any application rollout begins.
 _region = aws.get_region()
+_identity = aws.get_caller_identity()
 
 ecs_execution_role = aws.iam.Role(
     f"{_prefix}ecs-execution-role",
@@ -165,7 +168,10 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [arn for arn in args if arn],
+                        "Resource": [
+                            *[arn for arn in args if arn],
+                            f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:platform/{_prefix}casdoor-admin-oauth-*",
+                        ],
                     },
                     {
                         "Effect": "Allow",
@@ -193,6 +199,7 @@ pulumi.export("staging_domain", staging_domain)
 pulumi.export("pubsub_platform_events_topic_uri", platform_events_topic_uri)
 pulumi.export("sns_platform_events_topic_arn", platform_events_topic_uri)
 pulumi.export("zitadel_ecr_repo_url", zitadel_ecr_repo.repository_url)
+pulumi.export("casdoor_ecr_repo_url", casdoor_ecr_repo.repository_url)
 pulumi.export("ecr_repository_url", app_ecr_repo.repository_url)
 pulumi.export("openobserve_ecr_repo_url", openobserve_ecr_repo.repository_url)
 

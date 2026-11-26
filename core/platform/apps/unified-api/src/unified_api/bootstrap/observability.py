@@ -12,19 +12,18 @@ from observability import NoOpMetrics, ObservabilityProvider, OtelTracer, Struct
 from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
 
 
-def setup_observability(app: FastAPI) -> None:
+def setup_observability(app: FastAPI, *, service_name: str = "soopa-unified-api") -> None:
     """
-    Configures the Enterprise Observability stack for the Unified API.
+    Configures the Enterprise Observability stack for Unified API & Watch Gateway containers.
     """
     # In a real environment, this would come from Settings.
     # We fallback to None for local development to avoid connection errors
     otlp_endpoint = os.getenv("OTLP_ENDPOINT")
-    service_name = "soopa-unified-api"
     log_level = os.getenv("LOG_LEVEL", "INFO")
 
     # 1. Initialize the concrete adapters
     tracer = OtelTracer(service_name=service_name, otlp_endpoint=otlp_endpoint)
-    logger = StructlogLogger(name="unified_api", log_level=log_level)
+    logger = StructlogLogger(name=service_name, log_level=log_level)
     metrics = NoOpMetrics()  # To be replaced with PrometheusMetrics later
 
     # 2. Register with the global provider

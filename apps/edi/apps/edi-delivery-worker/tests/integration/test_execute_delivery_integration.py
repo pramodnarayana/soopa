@@ -56,7 +56,7 @@ async def test_execute_delivery_integration(
 
     await db_router.global_conn.execute(
         text(
-            "INSERT INTO identity.tenants (id, name, slug, status, idp_tenant_id, created_at, updated_at) VALUES (:id, 'Test', :slug, 'active', 'idp_123', NOW(), NOW())"
+            "INSERT INTO identity.tenants (id, name, slug, status, idp_realm_name, created_at, updated_at) VALUES (:id, 'Test', :slug, 'active', 'soopa-global', NOW(), NOW())"
         ),
         {"id": tenant_id, "slug": f"deliv-{generate_random_hex(6)}"},
     )

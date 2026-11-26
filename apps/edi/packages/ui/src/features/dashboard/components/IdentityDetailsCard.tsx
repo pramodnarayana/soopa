@@ -53,7 +53,7 @@ export function IdentityDetailsCard() {
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5">
             Auth
           </p>
-          <p className="text-sm font-bold text-slate-800">Zitadel SSO</p>
+          <p className="text-sm font-bold text-slate-800">OIDC SSO</p>
         </div>
       </div>
     </div>

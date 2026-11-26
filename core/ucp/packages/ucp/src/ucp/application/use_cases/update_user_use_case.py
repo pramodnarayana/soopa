@@ -41,8 +41,8 @@ class UpdateUserUseCase:
                 bound_logger.error("update_user.tenant_not_found")
                 return Result.fail(TenantNotFoundError.for_id(command.tenant_id))
 
-            if not tenant.idp_tenant_id:
-                bound_logger.error("update_user.missing_idp_tenant")
+            if not tenant.idp_realm_name:
+                bound_logger.error("update_user.missing_idp_realm")
                 return Result.fail(MissingIdpOrganizationError.for_tenant(command.tenant_id))
 
             user = await self._uow.user_repo.find_by_id_and_tenant(

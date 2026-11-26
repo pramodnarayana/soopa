@@ -8,6 +8,7 @@ from typing import Protocol, runtime_checkable
 from seedwork.domain.exceptions import Result
 
 from config_sync.domain.dtos import (
+    ConfigCursor,
     ConfigDeltaEvent,
     ConfigSnapshot,
     ConfigSyncError,
@@ -35,7 +36,7 @@ class ConfigWatchClientPort(Protocol):
         *,
         app_id: str,
         tenant_id: str,
-        since_version: int = 0,
+        since_cursor: ConfigCursor | None = None,
     ) -> AsyncIterator[WatchStreamItem]:
         """Yields assembled `ConfigSnapshot`, live `ConfigDeltaEvent`, `ConfigWatchHeartbeat`, or `ConfigSyncError`."""
         ...

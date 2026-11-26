@@ -31,6 +31,24 @@ def provision_ecr(prefix: str, tags: dict):
         untagged_retention_days=1,
     )
 
+    # ECR Repository for Casdoor Mirror
+    casdoor_ecr_repo = aws.ecr.Repository(
+        f"{prefix}casdoor-image",
+        name=f"{prefix}casdoor-image",
+        image_scanning_configuration=aws.ecr.RepositoryImageScanningConfigurationArgs(
+            scan_on_push=True,
+        ),
+        force_delete=False,
+        tags=tags,
+        opts=pulumi.ResourceOptions(protect=True),
+    )
+    attach_ecr_lifecycle_policy(
+        f"{prefix}casdoor-image",
+        casdoor_ecr_repo,
+        max_image_count=max_images,
+        untagged_retention_days=1,
+    )
+
     # ECR Repository for the Monorepo App
     app_ecr_repo = aws.ecr.Repository(
         f"{prefix}app-image",
@@ -67,4 +85,4 @@ def provision_ecr(prefix: str, tags: dict):
         untagged_retention_days=1,
     )
 
-    return zitadel_ecr_repo, app_ecr_repo, openobserve_ecr_repo
+    return zitadel_ecr_repo, casdoor_ecr_repo, app_ecr_repo, openobserve_ecr_repo

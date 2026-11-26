@@ -18,7 +18,7 @@ from config_sync.application.stream_config_watch_use_case import (
     StreamConfigWatchQuery,
     StreamConfigWatchUseCase,
 )
-from config_sync.domain.dtos import ConfigSnapshot, ConfigWatchFrame
+from config_sync.domain.dtos import ConfigCursor, ConfigSnapshot, ConfigWatchFrame
 from config_sync.domain.enums import ConfigSyncErrorCode
 from config_sync.ports.config_watch_auth_port import ConfigWatchAuthStrategyPort
 
@@ -27,6 +27,8 @@ logger = structlog.get_logger(__name__)
 
 def _format_sse_frame(frame: ConfigWatchFrame) -> str:
     serialized = json.dumps(frame.data, sort_keys=True, separators=(",", ":"), default=str)
+    if frame.frame_id:
+        return f"id: {frame.frame_id}\nevent: {frame.event}\ndata: {serialized}\n\n"
     return f"event: {frame.event}\ndata: {serialized}\n\n"
 
 
@@ -44,10 +46,28 @@ def _serialize_snapshot(snapshot: ConfigSnapshot) -> JsonDict:
     return {
         "app_id": snapshot.app_id,
         "tenant_id": snapshot.tenant_id,
+        "txid": snapshot.txid,
         "version": snapshot.version,
+        "cursor": snapshot.cursor.encode(),
         "checksum": snapshot.checksum,
         "entities": entities,
     }
+
+
+def _resolve_since_cursor(
+    *,
+    since_cursor: str | None,
+    last_event_id: str | None,
+    since_version: int,
+) -> ConfigCursor:
+    raw = since_cursor or last_event_id
+    if raw:
+        parsed = ConfigCursor.parse(raw)
+        if parsed is not None:
+            return parsed
+    if since_version > 0:
+        return ConfigCursor(txid=0, version=since_version)
+    return ConfigCursor.zero()
 
 
 def _enforce_auth(
@@ -95,10 +115,12 @@ def create_config_sync_router(
     async def watch_app_config(
         app_id: str,
         tenant_id: str = Query(..., min_length=1),
+        since_cursor: str | None = Query(default=None),
         since_version: int = Query(default=0, ge=0),
         chunk_size: int = Query(default=100, ge=1, le=1000),
         max_events: int | None = Query(default=None, ge=1),
         authorization: str | None = Header(default=None),
+        last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     ) -> StreamingResponse:
         _enforce_auth(resolved_auth, authorization)
         use_case = use_case_provider()
@@ -109,10 +131,15 @@ def create_config_sync_router(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=err.message)
 
         provider = provider_res.unwrap()
+        resolved_cursor = _resolve_since_cursor(
+            since_cursor=since_cursor,
+            last_event_id=last_event_id,
+            since_version=since_version,
+        )
         query = StreamConfigWatchQuery(
             app_id=provider.app_id,
             tenant_id=tenant_id,
-            since_version=since_version,
+            since_cursor=resolved_cursor,
             chunk_size=chunk_size,
             heartbeat_interval_seconds=heartbeat_interval_seconds,
             max_events=max_events,

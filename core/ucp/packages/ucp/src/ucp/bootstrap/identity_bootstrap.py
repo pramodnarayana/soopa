@@ -13,8 +13,14 @@ from typing import Protocol, TypedDict, cast
 
 import httpx
 import structlog
-from database.models.identity import Role, Tenant, User, UserRole
+from database.models.identity import ExternalIdentity, Role, Tenant, TenantUser, User, UserRole
 from identity.adapters.outbound.zitadel import ZitadelMachineAuthenticationError
+from identity.domain.constants import (
+    IdentityIdPrefix,
+    MembershipScope,
+    MembershipStatus,
+    TenantIsolationMode,
+)
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -85,6 +91,7 @@ class PlatformSeedConfig:
     platform_org_id: str
     platform_admin_id: str
     platform_admin_email: str
+    idp_issuer: str = ""
 
 
 @dataclass(frozen=True)
@@ -419,9 +426,10 @@ async def _seed_platform_tenant(session: AsyncSession, platform_org_id: str) -> 
         update(Tenant)
         .where(
             Tenant.id != PLATFORM_TENANT_ID,
-            Tenant.idp_tenant_id == platform_org_id,
+            Tenant.isolation_mode == TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            Tenant.idp_realm_name == platform_org_id,
         )
-        .values(idp_tenant_id=None)
+        .values(idp_realm_name=None)
     )
 
     stmt_tenant = (
@@ -430,7 +438,8 @@ async def _seed_platform_tenant(session: AsyncSession, platform_org_id: str) -> 
             id=PLATFORM_TENANT_ID,
             name="Platform Organization",
             slug="platform",
-            idp_tenant_id=platform_org_id,
+            isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            idp_realm_name=platform_org_id,
             status=LifecycleStatus.ACTIVE.value,
             deleted_at=None,
             deleted_by=None,
@@ -440,7 +449,8 @@ async def _seed_platform_tenant(session: AsyncSession, platform_org_id: str) -> 
             set_={
                 "name": "Platform Organization",
                 "slug": "platform",
-                "idp_tenant_id": platform_org_id,
+                "isolation_mode": TenantIsolationMode.DEDICATED_IDP_ORG.value,
+                "idp_realm_name": platform_org_id,
                 "status": LifecycleStatus.ACTIVE.value,
                 "deleted_at": None,
                 "deleted_by": None,
@@ -492,10 +502,14 @@ async def _seed_platform_admin(
     platform_admin_id: str,
     platform_admin_role_id: str,
     platform_admin_email: str,
+    *,
+    platform_org_id: str = "",
+    idp_issuer: str = "",
 ) -> None:
     digest = hashlib.sha256(platform_admin_id.encode()).hexdigest()[:16]
     platform_user_id = f"{UcpIdPrefix.USER.value}_{digest}"
     user_role_id = f"{UcpIdPrefix.USER_ROLE.value}_{digest}"
+    ext_identity_id = f"{IdentityIdPrefix.EXTERNAL_IDENTITY.value}_{digest}"
     clean_email = platform_admin_email.strip().lower()
 
     await session.execute(
@@ -532,6 +546,55 @@ async def _seed_platform_admin(
     )
     actual_user_id = str((await session.execute(stmt_user)).scalar_one())
 
+    stmt_membership = (
+        pg_insert(TenantUser)
+        .values(
+            user_id=actual_user_id,
+            tenant_id=PLATFORM_TENANT_ID,
+            scope=MembershipScope.SUBTREE.value,
+            status=MembershipStatus.ACTIVE.value,
+            active=True,
+        )
+        .on_conflict_do_update(
+            index_elements=[TenantUser.user_id, TenantUser.tenant_id],
+            set_={
+                "scope": MembershipScope.SUBTREE.value,
+                "status": MembershipStatus.ACTIVE.value,
+                "active": True,
+            },
+        )
+    )
+    await session.execute(stmt_membership)
+
+    clean_issuer = idp_issuer.strip().rstrip("/")
+    if clean_issuer:
+        # Remove any stale subject link for this user + issuer (e.g. after IdP reset)
+        await session.execute(
+            delete(ExternalIdentity).where(
+                ExternalIdentity.user_id == actual_user_id,
+                ExternalIdentity.idp_issuer == clean_issuer,
+                ExternalIdentity.idp_subject != platform_admin_id,
+            )
+        )
+        stmt_ext = (
+            pg_insert(ExternalIdentity)
+            .values(
+                id=ext_identity_id,
+                user_id=actual_user_id,
+                idp_issuer=clean_issuer,
+                idp_subject=platform_admin_id,
+                idp_realm_name=platform_org_id or None,
+            )
+            .on_conflict_do_update(
+                index_elements=[ExternalIdentity.idp_issuer, ExternalIdentity.idp_subject],
+                set_={
+                    "user_id": actual_user_id,
+                    "idp_realm_name": platform_org_id or None,
+                },
+            )
+        )
+        await session.execute(stmt_ext)
+
     stmt_user_role = (
         pg_insert(UserRole)
         .values(
@@ -565,5 +628,7 @@ async def seed_platform_bootstrap(
             config.platform_admin_id,
             platform_admin_role_id,
             config.platform_admin_email,
+            platform_org_id=config.platform_org_id,
+            idp_issuer=config.idp_issuer,
         )
         await session.commit()

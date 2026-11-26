@@ -46,9 +46,3 @@ class RoleRepositoryPort(abc.ABC):
         """
         Removes all roles assigned to a user within a specific tenant context.
         """
-
-    @abc.abstractmethod
-    async def has_any_tenant_memberships(self, user_id: str) -> bool:
-        """
-        Checks if a user has any tenant memberships by looking for any UserRole assigned to them.
-        """

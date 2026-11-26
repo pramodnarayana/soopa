@@ -40,7 +40,7 @@ async def test_verify_platform_tenant_idp_alignment_quiet_when_aligned() -> None
                     id=PLATFORM_TENANT_ID,
                     name="Platform Organization",
                     slug="platform",
-                    idp_tenant_id="397365687661625347",
+                    idp_realm_name="397365687661625347",
                     status="active",
                 )
             )
@@ -70,7 +70,7 @@ async def test_verify_platform_tenant_idp_alignment_logs_error_on_mismatch() -> 
                     id=PLATFORM_TENANT_ID,
                     name="Platform Organization",
                     slug="platform",
-                    idp_tenant_id="384772010141548547",
+                    idp_realm_name="384772010141548547",
                     status="active",
                 )
             )
@@ -159,7 +159,7 @@ async def test_verify_platform_tenant_idp_alignment_logs_distinct_error_when_org
                     id=PLATFORM_TENANT_ID,
                     name="Platform Organization",
                     slug="platform",
-                    idp_tenant_id=None,
+                    idp_realm_name=None,
                     status="active",
                 )
             )
@@ -199,7 +199,7 @@ async def test_verify_platform_tenant_idp_alignment_ignores_soft_deleted_platfor
                     id=PLATFORM_TENANT_ID,
                     name="Platform Organization",
                     slug="platform",
-                    idp_tenant_id="397365687661625347",
+                    idp_realm_name="397365687661625347",
                     status="inactive",
                     deleted_at=datetime.now(UTC).replace(tzinfo=None),
                 )

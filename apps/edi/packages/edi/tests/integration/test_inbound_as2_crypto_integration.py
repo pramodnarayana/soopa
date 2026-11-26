@@ -31,7 +31,7 @@ from edi.application.use_cases.process_inbound_as2_message_use_case import (
 )
 from edi.bootstrap.container import create_edi_control_plane_uow, create_edi_data_plane_uow
 from edi.domain.partner.as2.builder import build_outbound_message
-from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher, InMemoryStorageAdapter
+from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -183,22 +183,22 @@ async def test_inbound_as2_crypto_integration(
 
     dp_factory = FakeDpFactory()
     crypto_service = SmimeCryptoService()
-    publisher = FakeOutboxPublisher()
 
     use_case = ProcessInboundAs2MessageUseCase(
         control_plane_uow=cp_uow,
         dp_factory=dp_factory,
         secret_store=override_get_secret_store,
         crypto_service=crypto_service,
-        publisher=publisher,
     )
 
     cmd = ProcessInboundAs2Command(
         headers={k.lower(): v for k, v in msg.headers.items()}, body_bytes=msg.body
     )
 
-    mdn_bytes, _mdn_headers = await use_case.process_inbound_message(cmd)
-    assert b"processed" in mdn_bytes
+    res = await use_case.process_inbound_message(cmd)
+    assert res.is_ok
+    processed = res.unwrap()
+    assert b"processed" in processed.mdn_body
 
     # Verify Data Plane: The pure EDI payload must be saved!
 

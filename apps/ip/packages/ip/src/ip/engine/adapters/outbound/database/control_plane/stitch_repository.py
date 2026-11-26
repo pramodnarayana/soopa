@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from config_sync.domain.checksum import compute_payload_checksum
-from config_sync.domain.enums import ConfigChangeAction, ConfigSyncChannel
+from config_sync.domain.enums import ConfigChangeAction
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.control_plane import StitchRecord
 from ip.engine.domain.config_payloads import stitch_to_config_payload
@@ -138,7 +139,6 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
             action=ConfigChangeAction.UPSERT.value,
             checksum=compute_payload_checksum(payload),
             payload=dict(payload),
-            notify_channel=ConfigSyncChannel.CONFIG_CHANGELOG_NOTIFY.value,
         )
 
     async def get_by_id(
@@ -147,12 +147,12 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         tenant_id: str,
         stitch_id: str,
     ) -> Stitch | None:
-        """Retrieve a Stitch by ID for a tenant (prioritizing tenant-specific before wildcard '*')."""
+        """Retrieve a Stitch by ID for a tenant (prioritizing tenant-specific before PLATFORM_TENANT_ID)."""
         stmt = (
             select(StitchRecord)
             .where(
                 StitchRecord.id == stitch_id,
-                StitchRecord.tenant_id.in_((tenant_id, "*")),
+                StitchRecord.tenant_id.in_((tenant_id, PLATFORM_TENANT_ID)),
             )
             .order_by(case((StitchRecord.tenant_id == tenant_id, 0), else_=1))
             .limit(1)
@@ -170,13 +170,13 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
     ) -> Stitch | None:
         """Retrieve a Stitch by ID across all tenants for cross-tenant collision detection.
 
-        Prioritizes concrete tenant records over wildcard '*' so collisions against
+        Prioritizes concrete tenant records over PLATFORM_TENANT_ID so collisions against
         concrete tenants are always detected.
         """
         stmt = (
             select(StitchRecord)
             .where(StitchRecord.id == stitch_id)
-            .order_by(case((StitchRecord.tenant_id != "*", 0), else_=1))
+            .order_by(case((StitchRecord.tenant_id != PLATFORM_TENANT_ID, 0), else_=1))
             .limit(1)
         )
         result = await self.session.execute(stmt)
@@ -190,10 +190,10 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         *,
         tenant_id: str,
     ) -> list[Stitch]:
-        """List all Stitches visible to a tenant (tenant-specific and wildcard '*')."""
+        """List all Stitches visible to a tenant (tenant-specific and PLATFORM_TENANT_ID)."""
         stmt = (
             select(StitchRecord)
-            .where(StitchRecord.tenant_id.in_((tenant_id, "*")))
+            .where(StitchRecord.tenant_id.in_((tenant_id, PLATFORM_TENANT_ID)))
             .order_by(StitchRecord.id.asc())
         )
         result = await self.session.execute(stmt)
@@ -210,10 +210,10 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         tenant_id: str,
         canonical_event_type: str,
     ) -> list[Stitch]:
-        """List all active Stitches matching a tenant (or '*') and canonical_event_type."""
+        """List all active Stitches matching a tenant (or PLATFORM_TENANT_ID) and canonical_event_type."""
         stmt = (
             select(StitchRecord)
-            .where(StitchRecord.tenant_id.in_((tenant_id, "*")))
+            .where(StitchRecord.tenant_id.in_((tenant_id, PLATFORM_TENANT_ID)))
             .order_by(StitchRecord.id.asc())
         )
         result = await self.session.execute(stmt)
@@ -238,7 +238,7 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         stmt = (
             select(StitchRecord)
             .where(
-                StitchRecord.tenant_id.in_((tenant_id, "*")),
+                StitchRecord.tenant_id.in_((tenant_id, PLATFORM_TENANT_ID)),
                 StitchRecord.mapping_spec_id == mapping_spec_id,
             )
             .order_by(StitchRecord.id.asc())
@@ -270,7 +270,6 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
             action=ConfigChangeAction.DELETE.value,
             checksum=compute_payload_checksum(tombstone),
             payload=dict(tombstone),
-            notify_channel=ConfigSyncChannel.CONFIG_CHANGELOG_NOTIFY.value,
         )
 
 

@@ -20,39 +20,42 @@ logger = structlog.get_logger(__name__)
 
 def create_config_watch_gateway_app(
     *,
-    database_url: str,
     changelog_repo: ConfigChangelogRepositoryPort,
     providers: Iterable[ConfigCatalogProviderPort],
     internal_token: str | None = None,
     auth_strategy: ConfigWatchAuthStrategyPort | None = None,
     broadcaster: ConfigBroadcasterPort | None = None,
+    poll_interval_seconds: float = 0.15,
+    batch_size: int = 500,
     on_shutdown: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     """Creates a dedicated Watch Gateway ASGI app isolated from the web API container.
 
-    Runs `PostgresNotifyConfigBroadcasterBridge` (`LISTEN config_sync_changelog`) in its
-    lifespan so thousands of Data Plane shards receive `<5ms` zero-poll SSE delta pushes
-    across horizontally scaled gateway replicas, while keeping `unified-api` 100% pure HTTP.
+    Runs `ChangelogCursorBroadcasterBridge` (linearizable `xid8` Drain-Until-Empty tailer)
+    in its lifespan so thousands of Data Plane shards receive sub-150ms SSE delta pushes
+    across horizontally scaled gateway replicas with zero `AsyncQueueLock` contention,
+    full PgBouncer/RDS-Proxy compatibility, and a 100% pure stateless `unified-api`.
     """
     resolved_broadcaster = broadcaster or ConfigSyncProvider.create_broadcaster()
     stream_use_case = ConfigSyncProvider.create_stream_use_case(
         providers=providers,
         broadcaster=resolved_broadcaster,
     )
-    notify_bridge = ConfigSyncProvider.create_notify_bridge(
-        database_url=database_url,
+    cursor_bridge = ConfigSyncProvider.create_cursor_broadcaster_bridge(
         changelog_repo=changelog_repo,
         broadcaster=resolved_broadcaster,
+        poll_interval_seconds=poll_interval_seconds,
+        batch_size=batch_size,
     )
 
     @asynccontextmanager
     async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
         logger.info("config_watch_gateway_starting")
-        notify_bridge.start()
+        cursor_bridge.start()
         try:
             yield
         finally:
-            await notify_bridge.stop()
+            await cursor_bridge.stop()
             if on_shutdown is not None:
                 await on_shutdown()
             logger.info("config_watch_gateway_stopped")

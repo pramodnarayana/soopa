@@ -33,7 +33,7 @@ def fake_uow(tenant_id: str, app_id: str) -> FakeUcpUnitOfWork:
         id=tenant_id,
         name="Test Tenant",
         slug="test-tenant",
-        idp_tenant_id="idp_org_123",
+        idp_realm_name="soopa-global",
         status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),

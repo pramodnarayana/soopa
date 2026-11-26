@@ -1,6 +1,7 @@
 from functools import lru_cache
 
-from pydantic import Field, computed_field
+from pubsub.config import PlatformPubSubSettings
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import SettingsConfigDict
 from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
@@ -24,6 +25,12 @@ class AppSettings(CleanBaseSettings):
     database: PlatformDatabaseSettings = Field(default_factory=lambda: PlatformDatabaseSettings())
     aws: PlatformAwsSettings = Field(default_factory=lambda: PlatformAwsSettings())
     sqs: SqsSettings = Field(default_factory=lambda: SqsSettings())
+    pubsub: PlatformPubSubSettings = Field(default_factory=lambda: PlatformPubSubSettings())
+
+    @model_validator(mode="after")
+    def validate_pubsub_transport_uris(self) -> "AppSettings":
+        self.pubsub.validate_uris({"SQS_NOTIFICATION_QUEUE_URL": self.sqs.notification_queue_url})
+        return self
 
     @computed_field
     @property
@@ -37,8 +44,13 @@ class AppSettings(CleanBaseSettings):
 
     @computed_field
     @property
+    def pubsub_transport(self) -> str | None:
+        return self.pubsub.transport
+
+    @computed_field
+    @property
     def aws_endpoint_url(self) -> str | None:
-        return self.aws.endpoint_url
+        return self.pubsub.effective_aws_endpoint_url(self.aws.endpoint_url)
 
     @computed_field
     @property

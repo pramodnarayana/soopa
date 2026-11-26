@@ -92,7 +92,10 @@ class WorkerContainer:
                 orchestrator_queue_url=self.settings.sqs.orchestrator_queue_url,
                 deliver_queue_url=self.settings.sqs.deliver_queue_url,
                 region_name=self.settings.aws.resolved_region,
-                endpoint_url=self.settings.aws.endpoint_url,
+                endpoint_url=self.settings.effective_aws_endpoint_url(
+                    self.settings.aws.endpoint_url
+                ),
+                transport=self.settings.pubsub_transport,
             )
             self._wire_outbox_relay(sharded_drain_repo, publisher)
             sweeper_strategy = OutboxSweeperUseCase(
@@ -159,7 +162,8 @@ class WorkerContainer:
             source_uri=self.settings.sqs.data_plane_jobs_queue_url,
             handler=dp_dispatcher.dispatch,
             region_name=self.settings.aws.resolved_region,
-            endpoint_url=self.settings.aws.endpoint_url,
+            endpoint_url=self.settings.effective_aws_endpoint_url(self.settings.aws.endpoint_url),
+            transport=self.settings.pubsub_transport,
             session_factory=self.db_router.global_session_scope,
             database_url=self.settings.database.global_url,
         )

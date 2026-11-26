@@ -16,17 +16,20 @@ class TenantProvisionedPayload(BaseModel):
 
 
 class TenantNameUpdatedPayload(BaseModel):
-    org_id: str
+    tenant_id: str
     name: str
+    idp_realm_name: str | None = None
 
 
 class TenantStatusToggledPayload(BaseModel):
-    org_id: str
+    tenant_id: str
     active: bool
+    idp_realm_name: str | None = None
 
 
 class TenantDeletedPayload(BaseModel):
-    org_id: str
+    tenant_id: str
+    idp_realm_name: str | None = None
 
 
 class AppSubscribedPayload(BaseModel):
@@ -86,15 +89,15 @@ class IdentityEventHandlers:
 
     async def on_tenant_name_updated(self, event: IdentityEventMessage) -> None:
         payload = TenantNameUpdatedPayload.model_validate(event.payload)
-        await self._service.handle_tenant_name_updated(payload.org_id, payload.name)
+        await self._service.handle_tenant_name_updated(payload.tenant_id, payload.name)
 
     async def on_tenant_status_toggled(self, event: IdentityEventMessage) -> None:
         payload = TenantStatusToggledPayload.model_validate(event.payload)
-        await self._service.handle_tenant_status_toggled(payload.org_id, payload.active)
+        await self._service.handle_tenant_status_toggled(payload.tenant_id, payload.active)
 
     async def on_tenant_deleted(self, event: IdentityEventMessage) -> None:
         payload = TenantDeletedPayload.model_validate(event.payload)
-        await self._service.handle_tenant_deleted(payload.org_id)
+        await self._service.handle_tenant_deleted(payload.tenant_id)
 
     async def on_app_subscribed(self, event: IdentityEventMessage) -> None:
         payload = AppSubscribedPayload.model_validate(event.payload)

@@ -77,6 +77,7 @@ def _queue_or_noop(
         destination_uri=queue_url,
         region_name=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
+        transport=settings.pubsub_transport,
         session_factory=session_factory,
         database_url=settings.global_database_url,
     )
@@ -94,6 +95,7 @@ def _topic_or_noop(
         destination_uri=topic_arn,
         region_name=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
+        transport=settings.pubsub_transport,
         session_factory=session_factory,
         database_url=settings.global_database_url,
     )

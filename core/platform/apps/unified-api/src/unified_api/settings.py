@@ -4,20 +4,29 @@ from typing import Literal, cast
 from identity import PlatformIdentitySettings
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import SettingsConfigDict
+from secret_store import PlatformSecretStoreSettings
 from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
     PlatformDatabaseSettings,
     PlatformOtelSettings,
 )
+from storage import PlatformStorageSettings
+
+_ENV_ALIAS_MAP: dict[str, str] = {
+    "dev": "development",
+    "local": "development",
+    "test": "development",
+    "stage": "staging",
+    "prod": "production",
+}
 
 
-class PlatformSecretsSettings(CleanBaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
-
-    mount_path: str = Field(validation_alias="SECRETS_MOUNT_PATH", default="/mnt/secrets")
-    sync_interval_seconds: int = Field(
-        validation_alias="SECRETS_SYNC_INTERVAL_SECONDS", default=300
-    )
+def normalize_env_alias(value: object) -> object:
+    """Normalizes shorthand environment names (`dev`, `stage`, `prod`) into canonical values."""
+    if not isinstance(value, str):
+        return value
+    normalized = value.strip().lower()
+    return _ENV_ALIAS_MAP.get(normalized, normalized)
 
 
 class ApiSettings(CleanBaseSettings):
@@ -30,17 +39,7 @@ class ApiSettings(CleanBaseSettings):
     @field_validator("env", mode="before")
     @classmethod
     def _normalize_env_alias(cls, value: object) -> object:
-        if not isinstance(value, str):
-            return value
-        normalized = value.strip().lower()
-        alias_map = {
-            "dev": "development",
-            "local": "development",
-            "test": "development",
-            "stage": "staging",
-            "prod": "production",
-        }
-        return alias_map.get(normalized, normalized)
+        return normalize_env_alias(value)
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         validation_alias="LOG_LEVEL", default="INFO"
@@ -54,7 +53,8 @@ class ApiSettings(CleanBaseSettings):
     identity: PlatformIdentitySettings = Field(
         default_factory=lambda: cast(PlatformIdentitySettings, {})
     )
-    secrets: PlatformSecretsSettings = Field(default_factory=PlatformSecretsSettings)
+    secrets: PlatformSecretStoreSettings = Field(default_factory=PlatformSecretStoreSettings)
+    storage: PlatformStorageSettings = Field(default_factory=PlatformStorageSettings)
     cors_allowed_origins: list[str] = Field(validation_alias="CORS_ALLOWED_ORIGINS")
     enabled_apps: str = Field(
         default="edi,ip",

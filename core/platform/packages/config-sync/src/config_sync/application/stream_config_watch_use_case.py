@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import structlog
@@ -13,6 +13,7 @@ from seedwork.domain.types import JsonDict, JsonValue
 
 from config_sync.application.config_catalog_registry import ConfigCatalogRegistry
 from config_sync.domain.dtos import (
+    ConfigCursor,
     ConfigDeltaEvent,
     ConfigSnapshot,
     ConfigSyncError,
@@ -31,7 +32,7 @@ class StreamConfigWatchQuery:
 
     app_id: str
     tenant_id: str
-    since_version: int = 0
+    since_cursor: ConfigCursor = field(default_factory=ConfigCursor.zero)
     chunk_size: int = 100
     heartbeat_interval_seconds: float = 15.0
     max_events: int | None = None
@@ -45,7 +46,9 @@ def _delta_to_payload(delta: ConfigDeltaEvent) -> JsonDict:
         "entity_type": delta.entity_type,
         "entity_id": delta.entity_id,
         "action": delta.action.value,
+        "txid": delta.txid,
         "version": delta.version,
+        "cursor": delta.cursor.encode(),
         "checksum": delta.checksum,
         "payload": delta.payload,
     }
@@ -59,6 +62,7 @@ def _snapshot_frames(snapshot: ConfigSnapshot, chunk_size: int) -> list[ConfigWa
             data={
                 "app_id": snapshot.app_id,
                 "tenant_id": snapshot.tenant_id,
+                "base_txid": snapshot.txid,
                 "base_version": snapshot.version,
                 "total_entities": len(snapshot.entities),
             },
@@ -88,9 +92,12 @@ def _snapshot_frames(snapshot: ConfigSnapshot, chunk_size: int) -> list[ConfigWa
             data={
                 "app_id": snapshot.app_id,
                 "tenant_id": snapshot.tenant_id,
+                "final_txid": snapshot.txid,
                 "final_version": snapshot.version,
+                "cursor": snapshot.cursor.encode(),
                 "checksum": snapshot.checksum,
             },
+            frame_id=snapshot.cursor.encode(),
         )
     )
     return frames
@@ -124,46 +131,48 @@ class StreamConfigWatchUseCase:
         self,
         provider: ConfigCatalogProviderPort,
         query: StreamConfigWatchQuery,
-    ) -> tuple[list[ConfigWatchFrame], int]:
-        if query.since_version <= 0:
+    ) -> tuple[list[ConfigWatchFrame], ConfigCursor]:
+        if query.since_cursor.is_zero:
             snapshot = await provider.get_tenant_snapshot(tenant_id=query.tenant_id)
-            return _snapshot_frames(snapshot, query.chunk_size), snapshot.version
+            return _snapshot_frames(snapshot, query.chunk_size), snapshot.cursor
 
         buffered = self._broadcaster.get_buffered_deltas_since(
             app_id=provider.app_id,
             tenant_id=query.tenant_id,
-            since_version=query.since_version,
+            since_cursor=query.since_cursor,
         )
         if buffered is not None:
             frames = [
                 ConfigWatchFrame(
                     event=ConfigWatchEventType.DELTA.value,
                     data=_delta_to_payload(delta),
+                    frame_id=delta.cursor.encode(),
                 )
                 for delta in buffered
             ]
-            last_version = buffered[-1].version if buffered else query.since_version
-            return frames, last_version
+            last_cursor = buffered[-1].cursor if buffered else query.since_cursor
+            return frames, last_cursor
 
         db_deltas = await provider.get_deltas_since(
             tenant_id=query.tenant_id,
-            since_version=query.since_version,
+            since_cursor=query.since_cursor,
         )
         if db_deltas:
             frames = [
                 ConfigWatchFrame(
                     event=ConfigWatchEventType.DELTA.value,
                     data=_delta_to_payload(delta),
+                    frame_id=delta.cursor.encode(),
                 )
                 for delta in db_deltas
             ]
-            return frames, db_deltas[-1].version
+            return frames, db_deltas[-1].cursor
 
-        # Either already up-to-date or evicted beyond DB retention: check snapshot version
+        # Either already up-to-date or evicted beyond DB retention: check snapshot cursor
         snapshot = await provider.get_tenant_snapshot(tenant_id=query.tenant_id)
-        if snapshot.version <= query.since_version:
-            return [], query.since_version
-        return _snapshot_frames(snapshot, query.chunk_size), snapshot.version
+        if snapshot.cursor <= query.since_cursor:
+            return [], query.since_cursor
+        return _snapshot_frames(snapshot, query.chunk_size), snapshot.cursor
 
     async def stream(
         self,
@@ -174,7 +183,7 @@ class StreamConfigWatchUseCase:
         bound = logger.bind(
             app_id=provider.app_id,
             tenant_id=query.tenant_id,
-            since_version=query.since_version,
+            since_cursor=query.since_cursor.encode(),
         )
         bound.info("config_watch_stream_started")
         emitted = 0
@@ -183,7 +192,7 @@ class StreamConfigWatchUseCase:
             app_id=provider.app_id,
             tenant_id=query.tenant_id,
         ) as live_iter:
-            initial_frames, last_version = await self._initial_sync_frames(provider, query)
+            initial_frames, last_cursor = await self._initial_sync_frames(provider, query)
             for frame in initial_frames:
                 yield frame
                 emitted += 1
@@ -200,15 +209,16 @@ class StreamConfigWatchUseCase:
                 except TimeoutError:
                     missed_deltas = await provider.get_deltas_since(
                         tenant_id=query.tenant_id,
-                        since_version=last_version,
+                        since_cursor=last_cursor,
                     )
                     for missed in missed_deltas:
-                        if missed.version <= last_version:
+                        if missed.cursor <= last_cursor:
                             continue
-                        last_version = missed.version
+                        last_cursor = missed.cursor
                         yield ConfigWatchFrame(
                             event=ConfigWatchEventType.DELTA.value,
                             data=_delta_to_payload(missed),
+                            frame_id=missed.cursor.encode(),
                         )
                         emitted += 1
                         if query.max_events is not None and emitted >= query.max_events:
@@ -218,7 +228,9 @@ class StreamConfigWatchUseCase:
                         data={
                             "app_id": provider.app_id,
                             "tenant_id": query.tenant_id,
-                            "latest_version": last_version,
+                            "latest_txid": last_cursor.txid,
+                            "latest_version": last_cursor.version,
+                            "latest_cursor": last_cursor.encode(),
                             "timestamp": datetime.now(UTC).isoformat(),
                         },
                     )
@@ -227,17 +239,22 @@ class StreamConfigWatchUseCase:
                 except StopAsyncIteration:
                     break
 
-                if delta.version <= last_version:
+                if delta.cursor <= last_cursor:
                     continue
 
-                last_version = delta.version
+                last_cursor = delta.cursor
                 yield ConfigWatchFrame(
                     event=ConfigWatchEventType.DELTA.value,
                     data=_delta_to_payload(delta),
+                    frame_id=delta.cursor.encode(),
                 )
                 emitted += 1
 
-        bound.info("config_watch_stream_ended", last_version=last_version, emitted_frames=emitted)
+        bound.info(
+            "config_watch_stream_ended",
+            last_cursor=last_cursor.encode(),
+            emitted_frames=emitted,
+        )
 
 
 __all__ = ["StreamConfigWatchQuery", "StreamConfigWatchUseCase"]

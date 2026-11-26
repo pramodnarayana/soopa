@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from config_sync.domain.dtos import ConfigDeltaEvent, ConfigSnapshot
+from config_sync.domain.dtos import ConfigCursor, ConfigDeltaEvent, ConfigSnapshot
 
 
 @runtime_checkable
@@ -21,9 +21,9 @@ class ConfigCatalogProviderPort(Protocol):
         ...
 
     async def get_deltas_since(
-        self, *, tenant_id: str, since_version: int
+        self, *, tenant_id: str, since_cursor: ConfigCursor
     ) -> list[ConfigDeltaEvent]:
-        """Returns ordered incremental delta events strictly newer than `since_version`."""
+        """Returns ordered incremental delta events strictly newer than `since_cursor`."""
         ...
 
 

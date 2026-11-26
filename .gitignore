@@ -88,4 +88,7 @@ terraform-admin-key.json
 pat.json
 
 # OpenAS2 runtime data
+
+# Local dev sovereign secrets & payload storage
+.local/
 tools/openas2/data

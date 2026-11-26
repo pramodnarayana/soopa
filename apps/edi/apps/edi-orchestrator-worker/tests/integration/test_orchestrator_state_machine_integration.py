@@ -37,7 +37,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
 
     await db_router.global_conn.execute(
         text(
-            "INSERT INTO identity.tenants (id, name, slug, status, idp_tenant_id, created_at, updated_at) VALUES (:id, 'Test', :slug, 'active', 'idp_123', NOW(), NOW())"
+            "INSERT INTO identity.tenants (id, name, slug, status, idp_realm_name, created_at, updated_at) VALUES (:id, 'Test', :slug, 'active', 'soopa-global', NOW(), NOW())"
         ),
         {"id": tenant_id, "slug": f"orch-{generate_random_hex(6)}"},
     )
@@ -270,8 +270,8 @@ async def test_outbound_routing_state_machine_transition(
 
     await db_router.global_conn.execute(
         text(
-            "INSERT INTO identity.tenants (id, name, slug, status, idp_tenant_id, created_at, updated_at) "
-            "VALUES (:id, 'OutboundTest', :slug, 'active', 'idp_ob', NOW(), NOW())"
+            "INSERT INTO identity.tenants (id, name, slug, status, idp_realm_name, created_at, updated_at) "
+            "VALUES (:id, 'OutboundTest', :slug, 'active', 'soopa-global', NOW(), NOW())"
         ),
         {"id": tenant_id, "slug": f"ob-{generate_random_hex(6)}"},
     )

@@ -18,7 +18,7 @@ class TenantSummary:
 
     id: str
     slug: str
-    idp_tenant_id: str | None
+    idp_realm_name: str | None
     name: str
 
 

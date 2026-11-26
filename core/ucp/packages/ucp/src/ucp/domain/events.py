@@ -85,40 +85,43 @@ class AppUnsubscribedEvent(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class TenantNameUpdatedEvent(DomainEvent):
-    org_id: str
+    tenant_id: str
     name: str
+    idp_realm_name: str | None = None
 
     @property
     def event_name(self) -> str:
         return UcpEventType.TENANT_NAME_UPDATED.value
 
     def get_routing_tenant_id(self) -> str | None:
-        return self.org_id
+        return self.tenant_id
 
 
 @dataclass(frozen=True, kw_only=True)
 class TenantStatusToggledEvent(DomainEvent):
-    org_id: str
+    tenant_id: str
     active: bool
+    idp_realm_name: str | None = None
 
     @property
     def event_name(self) -> str:
         return UcpEventType.TENANT_STATUS_TOGGLED.value
 
     def get_routing_tenant_id(self) -> str | None:
-        return self.org_id
+        return self.tenant_id
 
 
 @dataclass(frozen=True, kw_only=True)
 class TenantDeletedEvent(DomainEvent):
-    org_id: str
+    tenant_id: str
+    idp_realm_name: str | None = None
 
     @property
     def event_name(self) -> str:
         return UcpEventType.TENANT_DELETED.value
 
     def get_routing_tenant_id(self) -> str | None:
-        return self.org_id
+        return self.tenant_id
 
 
 @dataclass(frozen=True, kw_only=True)

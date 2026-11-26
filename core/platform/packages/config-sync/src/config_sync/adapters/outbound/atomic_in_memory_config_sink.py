@@ -12,7 +12,12 @@ from types import MappingProxyType
 import structlog
 
 from config_sync.domain.checksum import compute_snapshot_checksum
-from config_sync.domain.dtos import ConfigDeltaEvent, ConfigEntityRecord, ConfigSnapshot
+from config_sync.domain.dtos import (
+    ConfigCursor,
+    ConfigDeltaEvent,
+    ConfigEntityRecord,
+    ConfigSnapshot,
+)
 from config_sync.domain.monotonic_guard import EntityKey, MonotonicCatalogState
 from config_sync.ports.config_apply_sink_port import ConfigApplySinkPort
 
@@ -35,6 +40,10 @@ class AtomicInMemoryConfigSink(ConfigApplySinkPort):
             self._load_lkg_sync()
 
     @property
+    def current_cursor(self) -> ConfigCursor:
+        return self._state.current_cursor
+
+    @property
     def current_version(self) -> int:
         return self._state.current_version
 
@@ -50,9 +59,9 @@ class AtomicInMemoryConfigSink(ConfigApplySinkPort):
     ) -> ConfigEntityRecord | None:
         return self._state.get_entity(entity_type, tenant_id, entity_id)
 
-    async def get_current_version(self, *, app_id: str, tenant_id: str) -> int:
+    async def get_current_cursor(self, *, app_id: str, tenant_id: str) -> ConfigCursor:
         del app_id, tenant_id
-        return self._state.current_version
+        return self._state.current_cursor
 
     async def apply_snapshot(self, snapshot: ConfigSnapshot) -> None:
         decision = self._state.apply_snapshot(snapshot)
@@ -91,6 +100,7 @@ class AtomicInMemoryConfigSink(ConfigApplySinkPort):
                 app_id=str(raw.get("app_id", self._state.app_id)),
                 tenant_id=str(raw.get("tenant_id", self._state.tenant_id)),
                 version=int(raw.get("version", 0)),
+                txid=int(raw.get("txid", 0)),
                 entities=tuple(entities),
                 checksum=str(raw.get("checksum", "")),
             )
@@ -99,7 +109,7 @@ class AtomicInMemoryConfigSink(ConfigApplySinkPort):
                 "config_sync_lkg_loaded",
                 app_id=self._state.app_id,
                 tenant_id=self._state.tenant_id,
-                version=decision.version,
+                cursor=decision.cursor.encode(),
                 applied=decision.applied,
             )
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
@@ -116,7 +126,8 @@ class AtomicInMemoryConfigSink(ConfigApplySinkPort):
         payload = {
             "app_id": self._state.app_id,
             "tenant_id": self._state.tenant_id,
-            "version": self._state.current_version,
+            "txid": self._state.current_cursor.txid,
+            "version": self._state.current_cursor.version,
             "checksum": compute_snapshot_checksum(entities),
             "entities": [
                 {

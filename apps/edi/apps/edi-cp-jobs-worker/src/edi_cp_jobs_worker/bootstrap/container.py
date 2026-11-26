@@ -55,7 +55,8 @@ class WorkerContainer:
         self.cp_outbox_publisher = PubSubProvider.create_outbox_publisher(
             destination_uri=self.settings.aws.sns_topic_arn,
             region_name=self.settings.aws.resolved_region,
-            endpoint_url=self.settings.aws.endpoint_url,
+            endpoint_url=self.settings.effective_aws_endpoint_url(self.settings.aws.endpoint_url),
+            transport=self.settings.pubsub_transport,
             session_factory=self.db_router.global_session_scope,
             database_url=self.settings.database.global_url,
         )
@@ -112,7 +113,8 @@ class WorkerContainer:
             source_uri=self.settings.sqs.control_plane_jobs_queue_url,
             handler=cp_dispatcher.dispatch,
             region_name=self.settings.aws.resolved_region,
-            endpoint_url=self.settings.aws.endpoint_url,
+            endpoint_url=self.settings.effective_aws_endpoint_url(self.settings.aws.endpoint_url),
+            transport=self.settings.pubsub_transport,
             session_factory=self.db_router.global_session_scope,
             database_url=self.settings.database.global_url,
         )

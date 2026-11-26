@@ -1,21 +1,29 @@
-import uuid
-from typing import Literal
+"""Unit tests for the provider-agnostic `IdentitySyncService` using `IdentityProviderAdminPort`."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+from types import TracebackType
 
 import pytest
+from identity.domain.constants import TenantIsolationMode
+from identity.domain.dtos import EnterpriseSsoConfigDTO, ExternalIdentityRef, RealmRef
+from identity.domain.exceptions import IdentityError, IdentityErrorCode
+from identity.ports.outbound.identity_provider_admin_port import IdentityProviderAdminPort
 from identity_worker.application.use_cases.identity_sync_service import (
+    IdentityProvisioningError,
     IdentitySyncService,
     StateConflictError,
 )
-from identity_worker.domain.exceptions import IdentityProviderPortError
 from identity_worker.ports.outbound.identity_sync_repository_port import (
     IdentitySyncRepositoryPort,
     IdentitySyncUnitOfWorkPort,
     SyncTenant,
     SyncUser,
 )
-from identity_worker.ports.outbound.organization_provider_port import OrganizationProviderPort
-from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 from seedwork import generate_id
+from seedwork.domain.exceptions import Result
 
 pytestmark = [pytest.mark.asyncio]
 
@@ -24,17 +32,29 @@ class FakeIdentitySyncRepository(IdentitySyncRepositoryPort):
     def __init__(self, tenants: dict[str, SyncTenant], users: dict[str, SyncUser]) -> None:
         self.tenants = tenants
         self.users = users
+        self.external_identities: list[tuple[str, str, str, str | None]] = []
+        self.fail_on_upsert_external_identity = False
 
     async def get_tenant(self, tenant_id: str) -> SyncTenant | None:
         return self.tenants.get(tenant_id)
 
-    async def update_tenant_idp_mapping(self, tenant_id: str, idp_tenant_id: str) -> None:
+    async def update_tenant_idp_realm(self, tenant_id: str, idp_realm_name: str) -> None:
         existing = self.tenants.get(tenant_id)
         if existing is not None:
+            if existing.isolation_mode == TenantIsolationMode.DEDICATED_IDP_ORG.value:
+                for other_id, other in self.tenants.items():
+                    if (
+                        other_id != tenant_id
+                        and other.isolation_mode == TenantIsolationMode.DEDICATED_IDP_ORG.value
+                        and other.idp_realm_name == idp_realm_name
+                    ):
+                        raise RuntimeError(f"Duplicate dedicated idp_realm_name '{idp_realm_name}'")
             self.tenants[tenant_id] = SyncTenant(
                 id=existing.id,
                 name=existing.name,
-                idp_tenant_id=idp_tenant_id,
+                idp_realm_name=idp_realm_name,
+                slug=existing.slug,
+                isolation_mode=existing.isolation_mode,
             )
 
     async def get_user(self, user_id: str) -> SyncUser | None:
@@ -47,6 +67,24 @@ class FakeIdentitySyncRepository(IdentitySyncRepositoryPort):
         if user_id in self.users:
             self.users[user_id] = SyncUser(id=user_id, idp_user_id=idp_user_id)
 
+    async def upsert_external_identity(
+        self,
+        *,
+        user_id: str,
+        idp_issuer: str,
+        idp_subject: str,
+        idp_realm_name: str | None = None,
+    ) -> None:
+        if self.fail_on_upsert_external_identity:
+            raise RuntimeError("Simulated DB failure while persisting external identity link")
+        self.external_identities.append((user_id, idp_issuer, idp_subject, idp_realm_name))
+
+    async def find_external_identity_realm(self, idp_subject: str) -> str | None:
+        for _, _, subj, realm in self.external_identities:
+            if subj == idp_subject:
+                return realm
+        return None
+
 
 class FakeIdentitySyncUnitOfWork(IdentitySyncUnitOfWorkPort):
     def __init__(self, repo: FakeIdentitySyncRepository) -> None:
@@ -58,10 +96,15 @@ class FakeIdentitySyncUnitOfWork(IdentitySyncUnitOfWorkPort):
     def repo(self) -> FakeIdentitySyncRepository:
         return self._repo
 
-    async def __aenter__(self) -> "FakeIdentitySyncUnitOfWork":
+    async def __aenter__(self) -> FakeIdentitySyncUnitOfWork:
         return self
 
-    async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         pass
 
     async def commit(self) -> None:
@@ -71,334 +114,352 @@ class FakeIdentitySyncUnitOfWork(IdentitySyncUnitOfWorkPort):
         self.rolled_back = True
 
 
-class FakeOrganizationProvider(OrganizationProviderPort):
+class FakeIdentityProviderAdmin(IdentityProviderAdminPort):
     def __init__(self) -> None:
-        self.created_orgs: dict[str, str] = {}
-        self.granted_projects: list[tuple[str, str]] = []
-        self.fail_create_org = False
-
-    async def create_organization(self, tenant_id: str, name: str) -> str:
-        if self.fail_create_org:
-            raise IdentityProviderPortError("Failed to create organization in IdP")
-        org_id = f"idp_org_{tenant_id}"
-        self.created_orgs[tenant_id] = name
-        return org_id
-
-    async def update_organization_name(self, org_id: str, name: str) -> None:
-        pass
-
-    async def toggle_organization_status(self, org_id: str, active: bool) -> None:
-        pass
-
-    async def delete_organization(self, org_id: str) -> None:
-        pass
-
-    async def grant_project_to_organization(self, org_id: str, project_id: str) -> None:
-        self.granted_projects.append((org_id, project_id))
-
-    async def revoke_project_from_organization(self, org_id: str, project_id: str) -> None:
-        pass
-
-
-class FakeUserIdentityProvider(UserIdentityProviderPort):
-    def __init__(self) -> None:
-        self.users: dict[str, dict[str, str]] = {}
-        self.user_roles: dict[str, str] = {}
-        self.user_status: dict[str, str] = {}
-        self.fail_role_assignment = False
+        self.created_realms: dict[str, str] = {}
+        self.users: dict[str, dict[str, object]] = {}
+        self.deleted_subjects: list[tuple[str, str]] = []
+        self.fail_realm_provisioning = False
+        self.fail_create_user = False
 
     async def create_user(
         self,
-        org_id: str,
-        user_id: str,
+        *,
+        realm: str,
         email: str,
-        first_name: str,
-        last_name: str,
-    ) -> tuple[str, bool]:
-        self.users[user_id] = {
-            "org_id": org_id,
+        display_name: str,
+        initial_password: str | None = None,
+    ) -> Result[ExternalIdentityRef, IdentityError]:
+        if self.fail_create_user:
+            return Result.fail(
+                IdentityError(code=IdentityErrorCode.IDP_ADMIN_ERROR, message="IdP create failed")
+            )
+        subject = generate_id("idp_sub")
+        self.users[subject] = {
+            "realm": realm,
             "email": email,
-            "first_name": first_name,
-            "last_name": last_name,
+            "display_name": display_name,
+            "active": True,
         }
-        self.user_status[user_id] = "active"
-        return user_id, True
+        return Result.ok(
+            ExternalIdentityRef(
+                idp_issuer="http://localhost:8080",
+                idp_subject=subject,
+                idp_realm_name=realm,
+                created=True,
+            )
+        )
 
-    async def get_user_by_email(self, org_id: str, email: str) -> str | None:
-        for u_id, data in self.users.items():
-            if data.get("email") == email:
-                return u_id
-        return None
-
-    async def assign_tenant_role(
-        self, user_id: str, org_id: str, role: str, project_id: str | None = None
-    ) -> None:
-        if self.fail_role_assignment:
-            raise RuntimeError("role assignment failed")
-        self.user_roles[user_id] = role
-
-    async def update_tenant_role(
-        self, user_id: str, org_id: str, role: str, project_id: str | None = None
-    ) -> None:
-        self.user_roles[user_id] = role
-
-    async def remove_tenant_role(
-        self, user_id: str, org_id: str, project_id: str | None = None
-    ) -> None:
-        if user_id in self.user_roles:
-            del self.user_roles[user_id]
-
-    async def update_user_profile(
+    async def update_user(
         self,
-        user_id: str,
-        org_id: str,
-        first_name: str,
-        last_name: str,
-    ) -> None:
-        if user_id in self.users:
-            self.users[user_id]["first_name"] = first_name
-            self.users[user_id]["last_name"] = last_name
+        *,
+        realm: str,
+        external_subject: str,
+        display_name: str | None = None,
+        email: str | None = None,
+    ) -> Result[None, IdentityError]:
+        if external_subject in self.users:
+            if display_name is not None:
+                self.users[external_subject]["display_name"] = display_name
+            if email is not None:
+                self.users[external_subject]["email"] = email
+        return Result.ok(None)
 
-    async def delete_user(self, user_id: str) -> None:
-        if user_id in self.users:
-            del self.users[user_id]
-
-    async def toggle_user_status(
+    async def set_user_active(
         self,
-        user_id: str,
-        org_id: str,
-        action: Literal["activate", "deactivate"],
-    ) -> None:
-        self.user_status[user_id] = action
+        *,
+        realm: str,
+        external_subject: str,
+        active: bool,
+    ) -> Result[None, IdentityError]:
+        if external_subject in self.users:
+            self.users[external_subject]["active"] = active
+        return Result.ok(None)
+
+    async def delete_user(
+        self,
+        *,
+        realm: str,
+        external_subject: str,
+    ) -> Result[None, IdentityError]:
+        self.users.pop(external_subject, None)
+        self.deleted_subjects.append((realm, external_subject))
+        return Result.ok(None)
+
+    async def provision_dedicated_enterprise_realm(
+        self,
+        *,
+        slug: str,
+        display_name: str,
+        sso_config: EnterpriseSsoConfigDTO | None = None,
+    ) -> Result[RealmRef, IdentityError]:
+        if self.fail_realm_provisioning:
+            return Result.fail(
+                IdentityError(
+                    code=IdentityErrorCode.IDP_ADMIN_ERROR,
+                    message="Dedicated enterprise realm creation failed",
+                )
+            )
+        realm_name = f"org_{slug}"
+        self.created_realms[slug] = realm_name
+        return Result.ok(
+            RealmRef(
+                idp_issuer="http://localhost:8080",
+                realm_name=realm_name,
+                display_name=display_name,
+            )
+        )
 
 
-@pytest.fixture
-def fakes() -> tuple[FakeOrganizationProvider, FakeUserIdentityProvider]:
-    return FakeOrganizationProvider(), FakeUserIdentityProvider()
+def _make_uow_factory(
+    tenants: dict[str, SyncTenant] | None = None,
+    users: dict[str, SyncUser] | None = None,
+) -> tuple[
+    FakeIdentitySyncRepository,
+    FakeIdentitySyncUnitOfWork,
+    Callable[[], AbstractAsyncContextManager[IdentitySyncUnitOfWorkPort]],
+]:
+    repo = FakeIdentitySyncRepository(tenants=tenants or {}, users=users or {})
+    uow = FakeIdentitySyncUnitOfWork(repo)
+    return repo, uow, (lambda: uow)
 
 
-@pytest.fixture
-def test_data() -> dict[str, object]:
-    tenant_id = generate_id("id")
-    idp_tenant_id = f"idp_org_{uuid.uuid4()}"
-    unprovisioned_tenant_id = generate_id("id")
-    user_id = generate_id("id")
-
-    tenants = {
-        tenant_id: SyncTenant(id=tenant_id, name="Provisioned Org", idp_tenant_id=idp_tenant_id),
-        unprovisioned_tenant_id: SyncTenant(
-            id=unprovisioned_tenant_id, name="Pending Org", idp_tenant_id=None
-        ),
-    }
-    users = {
-        user_id: SyncUser(id=user_id, idp_user_id=None),
-    }
-    return {
-        "tenant_id": tenant_id,
-        "idp_tenant_id": idp_tenant_id,
-        "unprovisioned_tenant_id": unprovisioned_tenant_id,
-        "user_id": user_id,
-        "tenants": tenants,
-        "users": users,
-    }
-
-
-@pytest.fixture
-def uow_factory(test_data):
-    repo = FakeIdentitySyncRepository(tenants=test_data["tenants"], users=test_data["users"])
-    return lambda: FakeIdentitySyncUnitOfWork(repo)
-
-
-async def test_handle_tenant_provisioned(fakes, uow_factory, test_data) -> None:
-    org_idp, user_idp = fakes
-    service = IdentitySyncService(
-        org_idp, user_idp, uow_factory, control_plane_project_id="proj_cp_1"
+async def test_handle_tenant_provisioned_pooled_uses_global_realm() -> None:
+    tenant_1 = generate_id("ten")
+    tenant_2 = generate_id("ten")
+    repo, uow, uow_factory = _make_uow_factory(
+        tenants={
+            tenant_1: SyncTenant(
+                id=tenant_1,
+                name="Acme SMB",
+                idp_realm_name=None,
+                slug="acme-smb",
+                isolation_mode=TenantIsolationMode.POOLED_REALM.value,
+            ),
+            tenant_2: SyncTenant(
+                id=tenant_2,
+                name="Beta SMB",
+                idp_realm_name=None,
+                slug="beta-smb",
+                isolation_mode=TenantIsolationMode.POOLED_REALM.value,
+            ),
+        }
     )
+    admin = FakeIdentityProviderAdmin()
+    service = IdentitySyncService(idp_admin=admin, uow_factory=uow_factory)
 
-    unprovisioned_id = test_data["unprovisioned_tenant_id"]
-    await service.handle_tenant_provisioned(unprovisioned_id)
+    await service.handle_tenant_provisioned(tenant_1)
+    await service.handle_tenant_provisioned(tenant_2)
 
-    assert org_idp.created_orgs[unprovisioned_id] == "Pending Org"
-    assert test_data["tenants"][unprovisioned_id].idp_tenant_id == f"idp_org_{unprovisioned_id}"
-    assert (f"idp_org_{unprovisioned_id}", "proj_cp_1") in org_idp.granted_projects
-
-
-async def test_handle_tenant_provisioned_idempotent_when_already_synced(
-    fakes, uow_factory, test_data
-) -> None:
-    org_idp, user_idp = fakes
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
-
-    await service.handle_tenant_provisioned(test_data["tenant_id"])
-
-    assert org_idp.created_orgs == {}
+    assert admin.created_realms == {}
+    assert repo.tenants[tenant_1].idp_realm_name == "soopa-global"
+    assert repo.tenants[tenant_2].idp_realm_name == "soopa-global"
+    assert uow.committed is True
 
 
-async def test_handle_tenant_provisioned_raises_when_org_creation_fails(
-    fakes, uow_factory, test_data
-) -> None:
-    org_idp, user_idp = fakes
-    org_idp.fail_create_org = True
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
+async def test_handle_tenant_provisioned_dedicated_enterprise_creates_realm() -> None:
+    tenant_id = generate_id("ten")
+    repo, uow, uow_factory = _make_uow_factory(
+        tenants={
+            tenant_id: SyncTenant(
+                id=tenant_id,
+                name="Acme Enterprise",
+                idp_realm_name=None,
+                slug="acme_ent",
+                isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            )
+        }
+    )
+    admin = FakeIdentityProviderAdmin()
+    service = IdentitySyncService(idp_admin=admin, uow_factory=uow_factory)
 
-    unprovisioned_id = test_data["unprovisioned_tenant_id"]
-    with pytest.raises(IdentityProviderPortError, match="Failed to create organization in IdP"):
-        await service.handle_tenant_provisioned(unprovisioned_id)
+    await service.handle_tenant_provisioned(tenant_id)
 
-    assert test_data["tenants"][unprovisioned_id].idp_tenant_id is None
+    assert admin.created_realms == {"acme_ent": "org_acme_ent"}
+    assert repo.tenants[tenant_id].idp_realm_name == "org_acme_ent"
+    assert uow.committed is True
 
 
-async def test_handle_user_created(fakes, uow_factory, test_data) -> None:
-    org_idp, user_idp = fakes
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
+async def test_handle_tenant_provisioned_idempotent_when_already_synced() -> None:
+    tenant_id = generate_id("ten")
+    _, uow, uow_factory = _make_uow_factory(
+        tenants={
+            tenant_id: SyncTenant(
+                id=tenant_id,
+                name="Acme",
+                idp_realm_name="org_acme",
+                slug="acme",
+                isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            )
+        }
+    )
+    admin = FakeIdentityProviderAdmin()
+    service = IdentitySyncService(idp_admin=admin, uow_factory=uow_factory)
 
-    user_id = test_data["user_id"]
-    tenant_id = test_data["tenant_id"]
+    await service.handle_tenant_provisioned(tenant_id)
+
+    assert admin.created_realms == {}
+    assert uow.committed is False
+
+
+async def test_handle_tenant_provisioned_raises_when_dedicated_realm_fails() -> None:
+    tenant_id = generate_id("ten")
+    _, _, uow_factory = _make_uow_factory(
+        tenants={
+            tenant_id: SyncTenant(
+                id=tenant_id,
+                name="Acme Ent",
+                idp_realm_name=None,
+                slug="acme_ent",
+                isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            )
+        }
+    )
+    admin = FakeIdentityProviderAdmin()
+    admin.fail_realm_provisioning = True
+    service = IdentitySyncService(idp_admin=admin, uow_factory=uow_factory)
+
+    with pytest.raises(IdentityProvisioningError):
+        await service.handle_tenant_provisioned(tenant_id)
+
+
+async def test_handle_user_created_creates_in_idp_and_links_external_identity() -> None:
+    tenant_id = generate_id("ten")
+    user_id = generate_id("iam_usr")
+    repo, uow, uow_factory = _make_uow_factory(
+        tenants={
+            tenant_id: SyncTenant(
+                id=tenant_id,
+                name="Acme",
+                idp_realm_name="soopa-global",
+                slug="acme",
+                isolation_mode=TenantIsolationMode.POOLED_REALM.value,
+            )
+        },
+        users={user_id: SyncUser(id=user_id, idp_user_id=None)},
+    )
+    admin = FakeIdentityProviderAdmin()
+    service = IdentitySyncService(idp_admin=admin, uow_factory=uow_factory)
 
     await service.handle_user_created(
         user_id=user_id,
         tenant_id=tenant_id,
-        email="john@test.com",
-        first_name="John",
-        last_name="Doe",
-        role="admin",
+        email="alice@acme.com",
+        first_name="Alice",
+        last_name="Smith",
+        role="TenantAdmin",
     )
 
-    assert len(user_idp.users) == 1
-    created_idp_user_id = next(iter(user_idp.users.keys()))
+    assert uow.committed is True
+    assert repo.users[user_id].idp_user_id is not None
+    assert len(repo.external_identities) == 1
+    linked_user, issuer, subject, realm = repo.external_identities[0]
+    assert linked_user == user_id
+    assert issuer == "http://localhost:8080"
+    assert subject == repo.users[user_id].idp_user_id
+    assert realm == "soopa-global"
 
-    assert user_idp.users[created_idp_user_id]["email"] == "john@test.com"
-    assert user_idp.user_roles[created_idp_user_id] == "admin"
-    assert test_data["users"][user_id].idp_user_id == created_idp_user_id
 
-
-async def test_handle_user_created_unprovisioned_tenant(fakes, uow_factory, test_data) -> None:
-    org_idp, user_idp = fakes
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
-
-    user_id = test_data["user_id"]
-    unprovisioned_tenant_id = test_data["unprovisioned_tenant_id"]
+async def test_handle_user_created_raises_conflict_for_unprovisioned_enterprise_tenant() -> None:
+    tenant_id = generate_id("ten")
+    user_id = generate_id("iam_usr")
+    _, _, uow_factory = _make_uow_factory(
+        tenants={
+            tenant_id: SyncTenant(
+                id=tenant_id,
+                name="Acme Ent",
+                idp_realm_name=None,
+                slug="acme_ent",
+                isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            )
+        },
+        users={user_id: SyncUser(id=user_id, idp_user_id=None)},
+    )
+    admin = FakeIdentityProviderAdmin()
+    service = IdentitySyncService(idp_admin=admin, uow_factory=uow_factory)
 
     with pytest.raises(StateConflictError):
         await service.handle_user_created(
             user_id=user_id,
-            tenant_id=unprovisioned_tenant_id,
-            email="john@test.com",
-            first_name="John",
-            last_name="Doe",
-            role="admin",
+            tenant_id=tenant_id,
+            email="alice@acme.com",
+            first_name="Alice",
+            last_name="Smith",
+            role="TenantAdmin",
         )
 
 
-async def test_handle_user_created_missing_local_user_has_no_external_side_effects(
-    fakes, uow_factory, test_data
-) -> None:
-    org_idp, user_idp = fakes
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
-
-    await service.handle_user_created(
-        user_id=generate_id("id"),
-        tenant_id=test_data["tenant_id"],
-        email="missing@test.com",
-        first_name="Missing",
-        last_name="User",
-        role="admin",
+async def test_handle_user_created_compensates_by_deleting_idp_user_on_db_failure() -> None:
+    tenant_id = generate_id("ten")
+    user_id = generate_id("iam_usr")
+    repo, uow, uow_factory = _make_uow_factory(
+        tenants={
+            tenant_id: SyncTenant(
+                id=tenant_id,
+                name="Acme",
+                idp_realm_name="soopa-global",
+                slug="acme",
+            )
+        },
+        users={user_id: SyncUser(id=user_id, idp_user_id=None)},
     )
+    repo.fail_on_upsert_external_identity = True
+    admin = FakeIdentityProviderAdmin()
+    service = IdentitySyncService(idp_admin=admin, uow_factory=uow_factory)
 
-    assert user_idp.users == {}
-    assert user_idp.user_roles == {}
-
-
-async def test_handle_user_created_reconciles_existing_idp_user(
-    fakes, uow_factory, test_data
-) -> None:
-    org_idp, user_idp = fakes
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
-    existing_idp_user_id = "idp_existing"
-
-    test_data["users"][test_data["user_id"]] = SyncUser(
-        id=test_data["user_id"], idp_user_id=existing_idp_user_id
-    )
-
-    await service.handle_user_created(
-        user_id=test_data["user_id"],
-        tenant_id=test_data["tenant_id"],
-        email="john@test.com",
-        first_name="John",
-        last_name="Doe",
-        role="admin",
-    )
-
-    assert user_idp.users == {}
-    assert user_idp.user_roles[existing_idp_user_id] == "admin"
-
-
-async def test_handle_user_created_compensates_failed_role_assignment(
-    fakes, uow_factory, test_data
-) -> None:
-    org_idp, user_idp = fakes
-    user_idp.fail_role_assignment = True
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
-
-    with pytest.raises(RuntimeError, match="role assignment failed"):
+    with pytest.raises(RuntimeError, match="Simulated DB failure"):
         await service.handle_user_created(
-            user_id=test_data["user_id"],
-            tenant_id=test_data["tenant_id"],
-            email="john@test.com",
-            first_name="John",
-            last_name="Doe",
-            role="admin",
+            user_id=user_id,
+            tenant_id=tenant_id,
+            email="alice@acme.com",
+            first_name="Alice",
+            last_name="Smith",
+            role="TenantAdmin",
         )
 
-    assert user_idp.users == {}
-    assert test_data["users"][test_data["user_id"]].idp_user_id is None
+    assert uow.rolled_back is True
+    assert len(admin.deleted_subjects) == 1
+    assert admin.users == {}
 
 
-async def test_handle_user_updated(fakes, uow_factory, test_data) -> None:
-    org_idp, user_idp = fakes
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
-
-    idp_user_id, _ = await user_idp.create_user(
-        test_data["idp_tenant_id"], f"idp_{uuid.uuid4()}", "old@test.com", "Old", "Name"
+async def test_handle_user_update_toggle_and_delete() -> None:
+    tenant_id = generate_id("ten")
+    _, _, uow_factory = _make_uow_factory(
+        tenants={
+            tenant_id: SyncTenant(
+                id=tenant_id,
+                name="Acme",
+                idp_realm_name="soopa-global",
+                slug="acme",
+            )
+        }
     )
+    admin = FakeIdentityProviderAdmin()
+    admin.users["idp_sub_1"] = {
+        "realm": "soopa-global",
+        "email": "bob@acme.com",
+        "display_name": "Bob Old",
+        "active": True,
+    }
+    service = IdentitySyncService(idp_admin=admin, uow_factory=uow_factory)
 
-    await service.handle_user_updated(
-        idp_user_id=idp_user_id,
-        tenant_id=test_data["tenant_id"],
-        first_name="New",
-        last_name="Name",
-        role="member",
+    await service.handle_user_updated("idp_sub_1", tenant_id, "Bob", "New", "TenantUser")
+    assert admin.users["idp_sub_1"]["display_name"] == "Bob New"
+
+    await service.handle_user_status_toggled("idp_sub_1", tenant_id, "deactivate")
+    assert admin.users["idp_sub_1"]["active"] is False
+
+    await service.handle_user_deleted("idp_sub_1")
+    assert ("soopa-global", "idp_sub_1") in admin.deleted_subjects
+
+
+async def test_handle_user_deleted_resolves_dedicated_enterprise_realm() -> None:
+    repo, _, uow_factory = _make_uow_factory()
+    repo.external_identities.append(
+        ("iam_usr_ent1", "http://localhost:8080", "idp_sub_ent1", "org_acme_enterprise")
     )
+    admin = FakeIdentityProviderAdmin()
+    service = IdentitySyncService(idp_admin=admin, uow_factory=uow_factory)
 
-    assert user_idp.users[idp_user_id]["first_name"] == "New"
-    assert user_idp.user_roles[idp_user_id] == "member"
-
-
-async def test_handle_user_status_toggled(fakes, uow_factory, test_data) -> None:
-    org_idp, user_idp = fakes
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
-
-    idp_user_id, _ = await user_idp.create_user(
-        test_data["idp_tenant_id"], f"idp_{uuid.uuid4()}", "test@test.com", "F", "L"
-    )
-    assert user_idp.user_status[idp_user_id] == "active"
-
-    await service.handle_user_status_toggled(
-        idp_user_id=idp_user_id, tenant_id=test_data["tenant_id"], action="deactivate"
-    )
-
-    assert user_idp.user_status[idp_user_id] == "deactivate"
-
-
-async def test_handle_user_deleted(fakes, uow_factory, test_data) -> None:
-    org_idp, user_idp = fakes
-    service = IdentitySyncService(org_idp, user_idp, uow_factory)
-
-    idp_user_id, _ = await user_idp.create_user(
-        test_data["idp_tenant_id"], f"idp_{uuid.uuid4()}", "test@test.com", "F", "L"
-    )
-    assert idp_user_id in user_idp.users
-
-    await service.handle_user_deleted(idp_user_id=idp_user_id)
-
-    assert idp_user_id not in user_idp.users
+    await service.handle_user_deleted("idp_sub_ent1")
+    assert admin.deleted_subjects == [("org_acme_enterprise", "idp_sub_ent1")]

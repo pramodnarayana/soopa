@@ -28,11 +28,11 @@ async def verify_platform_tenant_idp_alignment(
     db_provider: SessionProviderPort,
     expected_platform_org_id: str,
 ) -> bool:
-    """Verify that ``ten_000000000000000000000000.idp_tenant_id`` matches ``IDENTITY_PLATFORM_ORG_ID``.
+    """Verify that ``ten_000000000000000000000000.idp_realm_name`` matches ``IDENTITY_PLATFORM_ORG_ID``.
 
     Emits a structured error log with exact remediation steps if the database
-    record is missing, lacks an IdP mapping, or holds a stale IdP organization
-    ID, rather than failing opaquely on the first authenticated HTTP request.
+    record is missing, lacks an IdP realm mapping, or holds a stale IdP realm
+    name, rather than failing opaquely on the first authenticated HTTP request.
     """
     normalized_expected = expected_platform_org_id.strip()
     if not normalized_expected:
@@ -41,7 +41,7 @@ async def verify_platform_tenant_idp_alignment(
     try:
         async with db_provider.session() as session:
             result = await session.execute(
-                select(TenantORM.id, TenantORM.idp_tenant_id).where(
+                select(TenantORM.id, TenantORM.idp_realm_name).where(
                     TenantORM.id == PLATFORM_TENANT_ID,
                     TenantORM.deleted_at.is_(None),
                 )

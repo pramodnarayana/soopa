@@ -49,7 +49,6 @@ class EdiComputeWorkerModule(LaunchableWorker):
         logger.info("compute_worker_initialization_started")
         settings = get_settings()
         aws_endpoint = settings.aws.endpoint_url
-        s3_bucket = settings.s3.bucket
 
         self.db_router = DatabaseRouter(
             global_db_url=settings.database.global_url,
@@ -73,8 +72,8 @@ class EdiComputeWorkerModule(LaunchableWorker):
         uow_provider = create_edi_tenant_uow_provider(
             resolver=resolver,
             db_router=self.db_router,
-            s3_bucket=s3_bucket,
-            aws_endpoint=aws_endpoint,
+            storage_settings=settings.storage,
+            aws_settings=settings.aws,
         )
 
         compute_uri = settings.sqs.compute_queue_url or "db://edi-compute"
@@ -126,7 +125,8 @@ class EdiComputeWorkerModule(LaunchableWorker):
             source_uri=compute_uri,
             handler=dispatcher.dispatch_raw,
             region_name=settings.aws.resolved_region,
-            endpoint_url=aws_endpoint,
+            endpoint_url=settings.effective_aws_endpoint_url(aws_endpoint),
+            transport=settings.pubsub_transport,
             shard_drain_repo=compute_shard_repo,
         )
         assert self.manager is not None

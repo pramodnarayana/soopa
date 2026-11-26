@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
@@ -30,7 +31,9 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
     ) -> Sequence[Stitch]:
         by_id: dict[str, Stitch] = {}
         for s in self._stitches:
-            if s.tenant_id in (tenant_id, "*") and (s.id not in by_id or s.tenant_id == tenant_id):
+            if s.tenant_id in (tenant_id, PLATFORM_TENANT_ID) and (
+                s.id not in by_id or s.tenant_id == tenant_id
+            ):
                 by_id[s.id] = s
         return tuple(
             s
@@ -43,7 +46,7 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
         *,
         tenant_id: str,
     ) -> Sequence[Stitch]:
-        matching = [s for s in self._stitches if s.tenant_id in (tenant_id, "*")]
+        matching = [s for s in self._stitches if s.tenant_id in (tenant_id, PLATFORM_TENANT_ID)]
         by_id: dict[str, Stitch] = {}
         for s in matching:
             if s.id not in by_id or s.tenant_id == tenant_id:
@@ -56,12 +59,12 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
         tenant_id: str,
         stitch_id: str,
     ) -> Stitch | None:
-        # Prioritize exact tenant match before wildcard fallback
+        # Prioritize exact tenant match before platform-shared fallback
         for stitch in self._stitches:
             if stitch.id == stitch_id and stitch.tenant_id == tenant_id:
                 return stitch
         for stitch in self._stitches:
-            if stitch.id == stitch_id and stitch.tenant_id == "*":
+            if stitch.id == stitch_id and stitch.tenant_id == PLATFORM_TENANT_ID:
                 return stitch
         return None
 
@@ -71,10 +74,10 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
         stitch_id: str,
     ) -> Stitch | None:
         for stitch in self._stitches:
-            if stitch.id == stitch_id and stitch.tenant_id != "*":
+            if stitch.id == stitch_id and stitch.tenant_id != PLATFORM_TENANT_ID:
                 return stitch
         for stitch in self._stitches:
-            if stitch.id == stitch_id and stitch.tenant_id == "*":
+            if stitch.id == stitch_id and stitch.tenant_id == PLATFORM_TENANT_ID:
                 return stitch
         return None
 

@@ -9,10 +9,10 @@ from pathlib import Path
 
 import httpx
 import pytest
-from config_sync.adapters.inbound.fastapi_watch_router import create_config_sync_router
-from config_sync.adapters.inbound.postgres_notify_broadcaster_bridge import (
-    PostgresNotifyConfigBroadcasterBridge,
+from config_sync.adapters.inbound.changelog_cursor_broadcaster_bridge import (
+    ChangelogCursorBroadcasterBridge,
 )
+from config_sync.adapters.inbound.fastapi_watch_router import create_config_sync_router
 from config_sync.adapters.outbound.atomic_in_memory_config_sink import AtomicInMemoryConfigSink
 from config_sync.adapters.outbound.httpx_sse_config_watch_client import HttpxSseConfigWatchClient
 from config_sync.adapters.outbound.in_memory_ring_buffer_broadcaster import (
@@ -30,6 +30,7 @@ from config_sync.application.sync_config_watch_loop_use_case import (
 )
 from config_sync.domain.checksum import compute_payload_checksum, compute_snapshot_checksum
 from config_sync.domain.dtos import (
+    ConfigCursor,
     ConfigDeltaEvent,
     ConfigEntityRecord,
     ConfigSnapshot,
@@ -49,6 +50,7 @@ from config_sync.testing.fakes import (
 )
 from config_sync_worker.provision.settings import WorkerSettings
 from fastapi import FastAPI
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from ip.engine.adapters.outbound.config_sync.ip_stitch_catalog_sink import IpStitchCatalogSink
 from ip.engine.adapters.outbound.stitches.stitch_catalog_registry import (
     InMemoryStitchCatalogRegistry,
@@ -91,6 +93,7 @@ def _make_delta(
     entity_id: str = "st_1",
     action: ConfigChangeAction = ConfigChangeAction.UPSERT,
     version: int = 1,
+    txid: int | None = None,
     payload: JsonDict | None = None,
 ) -> ConfigDeltaEvent:
     body: JsonDict = payload or {
@@ -109,6 +112,7 @@ def _make_delta(
         entity_id=entity_id,
         action=action,
         version=version,
+        txid=txid if txid is not None else version,
         checksum=compute_payload_checksum(body),
         payload=body,
     )
@@ -121,6 +125,7 @@ def test_monotonic_catalog_state_enforces_checksum_atomic_swap_and_monotonic_gua
         app_id="ip",
         tenant_id="ten_1",
         version=5,
+        txid=5,
         entities=(rec1,),
         checksum=compute_snapshot_checksum((rec1,)),
     )
@@ -130,15 +135,22 @@ def test_monotonic_catalog_state_enforces_checksum_atomic_swap_and_monotonic_gua
     before_view = state.entities
     assert ("STITCH", "ten_1", "st_1") in before_view
 
-    stale_delta = _make_delta(entity_id="st_1", version=5)
+    stale_delta = _make_delta(entity_id="st_1", version=5, txid=5)
     assert state.apply_delta(stale_delta).applied is False
     assert state.current_version == 5
 
-    fresh_delta = _make_delta(entity_id="st_2", version=6)
+    fresh_delta = _make_delta(entity_id="st_2", version=6, txid=6)
     assert state.apply_delta(fresh_delta).applied is True
     assert state.current_version == 6
     assert ("STITCH", "ten_1", "st_2") in state.entities
     assert ("STITCH", "ten_1", "st_2") not in before_view
+
+    # Prove B1: a later transaction (txid=7) with an earlier sequence number (version=5)
+    # is strictly greater under (txid, version) total order and MUST be accepted!
+    interleaved_delta = _make_delta(entity_id="st_interleaved", version=5, txid=7)
+    assert state.apply_delta(interleaved_delta).applied is True
+    assert state.current_cursor == ConfigCursor(txid=7, version=5)
+    assert state.get_entity("STITCH", "ten_1", "st_interleaved") is not None
 
     bad_delta = ConfigDeltaEvent(
         event_id="evt_bad",
@@ -147,67 +159,126 @@ def test_monotonic_catalog_state_enforces_checksum_atomic_swap_and_monotonic_gua
         entity_type="STITCH",
         entity_id="st_3",
         action=ConfigChangeAction.UPSERT,
-        version=7,
+        version=8,
+        txid=8,
         checksum="0" * 64,
         payload={"id": "st_3"},
     )
     assert state.apply_delta(bad_delta).applied is False
-    assert state.current_version == 6
+    assert state.current_cursor == ConfigCursor(txid=7, version=5)
 
-    del_delta = _make_delta(entity_id="st_1", action=ConfigChangeAction.DELETE, version=8)
+    del_delta = _make_delta(entity_id="st_1", action=ConfigChangeAction.DELETE, version=9, txid=9)
     assert state.apply_delta(del_delta).applied is True
-    assert state.current_version == 8
+    assert state.current_version == 9
     assert state.get_entity("STITCH", "ten_1", "st_1") is None
     assert state.get_entity("STITCH", "ten_1", "st_2") is not None
 
 
-async def test_ring_buffer_broadcaster_handles_catchup_eviction_and_wildcard_fanout() -> None:
+async def test_ring_buffer_broadcaster_handles_catchup_eviction_and_shared_platform_fanout() -> (
+    None
+):
     broadcaster = InMemoryRingBufferBroadcaster(
         ring_buffer_size=3,
         subscriber_queue_maxsize=2,
-        broadcast_tenant_ids=("*", "ten_000000000000000000000000"),
+        broadcast_tenant_ids=(PLATFORM_TENANT_ID,),
     )
 
     for ver in (1, 2, 3):
         await broadcaster.publish_delta(
-            _make_delta(tenant_id="ten_1", entity_id=f"st_{ver}", version=ver)
+            _make_delta(tenant_id="ten_1", entity_id=f"st_{ver}", version=ver, txid=ver)
         )
 
     caught_up = broadcaster.get_buffered_deltas_since(
-        app_id="ip", tenant_id="ten_1", since_version=1
+        app_id="ip",
+        tenant_id="ten_1",
+        since_cursor=ConfigCursor(txid=1, version=1),
     )
     assert caught_up is not None
     assert [d.version for d in caught_up] == [2, 3]
 
     for ver in (4, 5):
         await broadcaster.publish_delta(
-            _make_delta(tenant_id="ten_1", entity_id=f"st_{ver}", version=ver)
+            _make_delta(tenant_id="ten_1", entity_id=f"st_{ver}", version=ver, txid=ver)
         )
 
     assert (
-        broadcaster.get_buffered_deltas_since(app_id="ip", tenant_id="ten_1", since_version=1)
+        broadcaster.get_buffered_deltas_since(
+            app_id="ip",
+            tenant_id="ten_1",
+            since_cursor=ConfigCursor(txid=1, version=1),
+        )
         is None
     )
-    recent = broadcaster.get_buffered_deltas_since(app_id="ip", tenant_id="ten_1", since_version=3)
+    recent = broadcaster.get_buffered_deltas_since(
+        app_id="ip",
+        tenant_id="ten_1",
+        since_cursor=ConfigCursor(txid=3, version=3),
+    )
     assert recent is not None
     assert [d.version for d in recent] == [4, 5]
 
     async with broadcaster.subscribe(app_id="ip", tenant_id="ten_1") as sub:
-        wildcard_delta = _make_delta(tenant_id="*", entity_id="st_shared", version=6)
-        await broadcaster.publish_delta(wildcard_delta)
-        received = await asyncio.wait_for(sub.__aiter__().__anext__(), timeout=1.0)
-        assert received.version == 6
-        assert received.tenant_id == "*"
-
         platform_delta = _make_delta(
-            tenant_id="ten_000000000000000000000000", entity_id="st_plat", version=7
+            tenant_id=PLATFORM_TENANT_ID, entity_id="st_plat", version=6, txid=6
         )
         await broadcaster.publish_delta(platform_delta)
         received_plat = await asyncio.wait_for(sub.__aiter__().__anext__(), timeout=1.0)
-        assert received_plat.version == 7
+        assert received_plat.version == 6
+        assert received_plat.tenant_id == PLATFORM_TENANT_ID
+
+    # Prove B3: a disconnected tenant reconnecting after a shared PLATFORM_TENANT_ID delta
+    # NEVER silently skips the shared delta (it is either merged or triggers DB catch-up)!
+    broadcaster_b3 = InMemoryRingBufferBroadcaster(
+        ring_buffer_size=10,
+        broadcast_tenant_ids=(PLATFORM_TENANT_ID,),
+    )
+    await broadcaster_b3.publish_delta(
+        _make_delta(tenant_id="ten_b", entity_id="st_1", version=1, txid=1)
+    )
+    await broadcaster_b3.publish_delta(
+        _make_delta(tenant_id=PLATFORM_TENANT_ID, entity_id="st_shared_missed", version=2, txid=2)
+    )
+    await broadcaster_b3.publish_delta(
+        _make_delta(tenant_id="ten_b", entity_id="st_3", version=3, txid=3)
+    )
+    reconnected = broadcaster_b3.get_buffered_deltas_since(
+        app_id="ip",
+        tenant_id="ten_b",
+        since_cursor=ConfigCursor(txid=1, version=1),
+    )
+    # Shared buffer starts at (2,2) > since_cursor (1,1), so ring buffer safely returns None -> DB fallback!
+    assert reconnected is None
+
+    # When shared buffer already covers <= since_cursor, shared deltas are merged in exact order!
+    broadcaster_b3_full = InMemoryRingBufferBroadcaster(
+        ring_buffer_size=10,
+        broadcast_tenant_ids=(PLATFORM_TENANT_ID,),
+    )
+    await broadcaster_b3_full.publish_delta(
+        _make_delta(tenant_id=PLATFORM_TENANT_ID, entity_id="st_shared_0", version=1, txid=1)
+    )
+    await broadcaster_b3_full.publish_delta(
+        _make_delta(tenant_id="ten_b", entity_id="st_1", version=2, txid=2)
+    )
+    await broadcaster_b3_full.publish_delta(
+        _make_delta(tenant_id=PLATFORM_TENANT_ID, entity_id="st_shared_3", version=3, txid=3)
+    )
+    await broadcaster_b3_full.publish_delta(
+        _make_delta(tenant_id="ten_b", entity_id="st_4", version=4, txid=4)
+    )
+    merged = broadcaster_b3_full.get_buffered_deltas_since(
+        app_id="ip",
+        tenant_id="ten_b",
+        since_cursor=ConfigCursor(txid=2, version=2),
+    )
+    assert merged is not None
+    assert [(d.version, d.entity_id) for d in merged] == [
+        (3, "st_shared_3"),
+        (4, "st_4"),
+    ]
 
 
-async def test_notify_bridge_catch_up_replays_missed_entries_after_overflow_or_disconnect() -> None:
+async def test_cursor_bridge_drain_until_empty_publishes_batches_and_advances_cursor() -> None:
     changelog = FakeConfigChangelogRepository()
     broadcaster = InMemoryRingBufferBroadcaster()
     d1 = await changelog.append_change(
@@ -226,21 +297,86 @@ async def test_notify_bridge_catch_up_replays_missed_entries_after_overflow_or_d
         action=ConfigChangeAction.UPSERT,
         payload={"id": "st_2"},
     )
-    bridge = PostgresNotifyConfigBroadcasterBridge(
-        database_url="postgresql+asyncpg://u:p@localhost:5432/db",
+    d3 = await changelog.append_change(
+        app_id="ip",
+        tenant_id="ten_1",
+        entity_type="STITCH",
+        entity_id="st_3",
+        action=ConfigChangeAction.UPSERT,
+        payload={"id": "st_3"},
+    )
+    bridge = ChangelogCursorBroadcasterBridge(
         changelog_repo=changelog,
         broadcaster=broadcaster,
+        batch_size=2,
+        initial_cursor=ConfigCursor.zero(),
     )
 
     async with broadcaster.subscribe(app_id="ip", tenant_id="ten_1") as sub:
-        replayed = await bridge.catch_up_missed_entries()
-        assert replayed == 2
-        assert bridge.last_dispatched_version == d2.version
+        drained = await bridge.drain_until_empty()
+        assert drained == 3
+        assert bridge.last_dispatched_cursor == d3.cursor
 
         it = sub.__aiter__()
         first = await asyncio.wait_for(it.__anext__(), timeout=1.0)
         second = await asyncio.wait_for(it.__anext__(), timeout=1.0)
-        assert [first.version, second.version] == [d1.version, d2.version]
+        third = await asyncio.wait_for(it.__anext__(), timeout=1.0)
+        assert [first.version, second.version, third.version] == [
+            d1.version,
+            d2.version,
+            d3.version,
+        ]
+
+
+async def test_cursor_bridge_visibility_lag_tracks_stall_and_recovers() -> None:
+    changelog = FakeConfigChangelogRepository()
+    broadcaster = InMemoryRingBufferBroadcaster()
+    now_holder = [100.0]
+
+    d1 = await changelog.append_change(
+        app_id="edi",
+        tenant_id="ten_1",
+        entity_type="as2_partner",
+        entity_id="p_1",
+        action=ConfigChangeAction.UPSERT,
+        payload={"id": "p_1"},
+    )
+    d2 = await changelog.append_change(
+        app_id="edi",
+        tenant_id="ten_1",
+        entity_type="as2_partner",
+        entity_id="p_2",
+        action=ConfigChangeAction.UPSERT,
+        payload={"id": "p_2"},
+    )
+    # Simulate an active uncommitted transaction holding back pg_snapshot_xmin at d1.cursor
+    changelog.visible_cursor_cap = d1.cursor
+
+    bridge = ChangelogCursorBroadcasterBridge(
+        changelog_repo=changelog,
+        broadcaster=broadcaster,
+        visibility_lag_alert_seconds=5.0,
+        clock=lambda: now_holder[0],
+    )
+    initialized = await bridge.initialize_cursor()
+    assert initialized == d1.cursor
+
+    wm_initial = await bridge.check_visibility_lag()
+    assert wm_initial.safe_cursor == d1.cursor
+    assert wm_initial.raw_max_cursor == d2.cursor
+    assert wm_initial.is_lagged is True
+
+    # Advance monotonic clock past alert threshold -> lag persists
+    now_holder[0] = 106.5
+    wm_stalled = await bridge.check_visibility_lag()
+    assert wm_stalled.is_lagged is True
+
+    # Commit finishes -> visibility barrier advances and drain picks up d2
+    changelog.visible_cursor_cap = None
+    wm_recovered = await bridge.check_visibility_lag()
+    assert wm_recovered.is_lagged is False
+    assert await bridge.drain_until_empty() == 1
+    assert bridge.last_dispatched_cursor == d2.cursor
 
 
 async def test_stream_watch_use_case_streams_chunked_snapshot_dedups_and_catches_up() -> None:
@@ -282,7 +418,7 @@ async def test_stream_watch_use_case_streams_chunked_snapshot_dedups_and_catches
         StreamConfigWatchQuery(
             app_id="ip",
             tenant_id="ten_1",
-            since_version=0,
+            since_cursor=ConfigCursor.zero(),
             chunk_size=2,
             max_events=5,
         ),
@@ -314,7 +450,7 @@ async def test_stream_watch_use_case_streams_chunked_snapshot_dedups_and_catches
         StreamConfigWatchQuery(
             app_id="ip",
             tenant_id="ten_1",
-            since_version=5,
+            since_cursor=ConfigCursor(txid=5, version=5),
             max_events=1,
         ),
     ):
@@ -347,12 +483,12 @@ async def test_atomic_in_memory_sink_lkg_survivability_and_cross_tenant_wildcard
     assert lkg_path.exists()
     assert stat.S_IMODE(os.stat(lkg_path).st_mode) == 0o600
 
-    # Pre-seed a global wildcard '*' stitch that belongs to all tenants
+    # Pre-seed a platform-shared stitch that belongs to all tenants
     registry = InMemoryStitchCatalogRegistry()
     registry.register_stitch(
         Stitch(
             id="st_global_shared",
-            tenant_id="*",
+            tenant_id=PLATFORM_TENANT_ID,
             canonical_event_type="order.created",
             target_workflow_id="wf_global",
             name="Global Stitch",
@@ -371,10 +507,10 @@ async def test_atomic_in_memory_sink_lkg_survivability_and_cross_tenant_wildcard
         tenant_id="ten_1",
     )
     assert registry.get_stitch(tenant_id="ten_1", stitch_id="st_lkg") is not None
-    # Global wildcard stitch MUST NOT be deleted by ten_1's snapshot hydration!
+    # Platform-shared stitch MUST NOT be deleted by ten_1's snapshot hydration!
     assert registry.get_stitch(tenant_id="ten_other", stitch_id="st_global_shared") is not None
 
-    # Concrete tenant override + delete MUST NOT delete the global wildcard stitch for other tenants!
+    # Concrete tenant override + delete MUST NOT delete the platform-shared stitch for other tenants!
     await ip_sink.apply_delta(
         _make_delta(entity_id="st_global_shared", tenant_id="ten_1", version=13)
     )
@@ -537,6 +673,7 @@ async def test_sync_watch_loop_converges_handles_errors_and_rejects_corrupted_fr
         app_id="ip",
         tenant_id="ten_loop",
         version=5,
+        txid=5,
         entities=(rec,),
         checksum=compute_snapshot_checksum((rec,)),
     )
@@ -548,6 +685,7 @@ async def test_sync_watch_loop_converges_handles_errors_and_rejects_corrupted_fr
         entity_id="st_bad",
         action=ConfigChangeAction.UPSERT,
         version=6,
+        txid=6,
         checksum="0" * 64,
         payload={"id": "st_bad"},
     )
@@ -568,8 +706,8 @@ async def test_sync_watch_loop_converges_handles_errors_and_rejects_corrupted_fr
         config=WatchLoopConfig(app_id="ip", tenant_id="ten_loop"),
     )
 
-    final_version = await loop.sync_once()
-    assert final_version == 7
+    final_cursor = await loop.sync_once()
+    assert final_cursor == ConfigCursor(txid=7, version=7)
     assert sink.current_version == 7
     assert sink.get_entity("STITCH", "ten_loop", "st_ok") is not None
     assert sink.get_entity("STITCH", "ten_loop", "st_fresh") is not None

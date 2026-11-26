@@ -292,7 +292,8 @@ depends_on = [
     "sharding.application",
     "sharding.provider",
     "config_sync.domain",
-    "config_sync.ports"
+    "config_sync.ports",
+    "identity.domain"
 ]
 
 [[modules]]
@@ -441,8 +442,41 @@ path = "shttp"
 depends_on = []
 
 [[modules]]
+path = "identity.domain"
+depends_on = []
+
+[[modules]]
+path = "identity.ports"
+depends_on = [
+    "identity.domain"
+]
+
+[[modules]]
+path = "identity.application"
+depends_on = [
+    "identity.domain",
+    "identity.ports"
+]
+
+[[modules]]
+path = "identity.adapters"
+depends_on = [
+    "identity.domain",
+    "identity.ports",
+    "identity.application",
+    "database.models",
+    "shttp",
+    "config_sync.domain",
+    "config_sync.ports"
+]
+
+[[modules]]
 path = "identity"
 depends_on = [
+    "identity.domain",
+    "identity.ports",
+    "identity.application",
+    "identity.adapters",
     "shttp"
 ]
 
@@ -472,7 +506,9 @@ depends_on = [
 
 [[modules]]
 path = "ucp.domain"
-depends_on = []
+depends_on = [
+    "identity.domain"
+]
 
 [[modules]]
 path = "ucp.application"

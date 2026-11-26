@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 import pytest
 from database.models.identity import Tenant as TenantORM
 from database.types import GlobalSession
-from identity.domain.constants import IdentityIdPrefix
+from identity.domain.constants import IdentityIdPrefix, TenantIsolationMode
 from ip.engine.adapters.outbound.database.control_plane.tenant_repository import (
     SessionScopedTenantRepository,
     SqlAlchemyTenantRepository,
@@ -36,7 +36,8 @@ async def test_tenant_repository_excludes_soft_deleted_tenants(
             name="Acme Active Tenant",
             slug=active_slug,
             status=LifecycleStatus.ACTIVE,
-            idp_tenant_id=active_idp,
+            isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            idp_realm_name=active_idp,
         )
     )
 
@@ -49,25 +50,26 @@ async def test_tenant_repository_excludes_soft_deleted_tenants(
             name="Acme Soft Deleted Tenant",
             slug=deleted_slug,
             status=LifecycleStatus.INACTIVE,
-            idp_tenant_id=deleted_idp,
+            isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            idp_realm_name=deleted_idp,
             deleted_at=datetime.now(UTC),
         )
     )
     await global_session.flush()
 
-    by_idp = await repo.get_by_idp_tenant_id(f"  {active_idp}  ")
+    by_idp = await repo.get_by_idp_realm(f"  {active_idp}  ")
     assert by_idp is not None
     assert by_idp.id == active_id
     assert by_idp.slug == active_slug
-    assert by_idp.idp_tenant_id == active_idp
+    assert by_idp.idp_realm_name == active_idp
 
     by_slug = await repo.get_by_slug(f"  {active_slug.upper()}  ")
     assert by_slug is not None
     assert by_slug.id == active_id
 
-    assert await repo.get_by_idp_tenant_id(deleted_idp) is None
+    assert await repo.get_by_idp_realm(deleted_idp) is None
     assert await repo.get_by_slug(deleted_slug) is None
-    assert await repo.get_by_idp_tenant_id("   ") is None
+    assert await repo.get_by_idp_realm("   ") is None
     assert await repo.get_by_slug("   ") is None
 
 
@@ -96,7 +98,8 @@ async def test_session_scoped_tenant_repository_closes_each_read_scope(
             name="Scoped Tenant",
             slug=slug,
             status=LifecycleStatus.ACTIVE,
-            idp_tenant_id=idp_id,
+            isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG.value,
+            idp_realm_name=idp_id,
         )
     )
     await global_session.flush()
@@ -105,7 +108,7 @@ async def test_session_scoped_tenant_repository_closes_each_read_scope(
         session_scope=_session_scope,
         repository_factory=SqlAlchemyTenantRepository,
     )
-    by_idp = await scoped_repo.get_by_idp_tenant_id(idp_id)
+    by_idp = await scoped_repo.get_by_idp_realm(idp_id)
     assert by_idp is not None
     assert by_idp.id == tenant_id
     assert entered_count == 1

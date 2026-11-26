@@ -19,6 +19,7 @@ from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStorageResultDTO,
 )
 from seedwork.domain.types import JsonValue
+from storage.config import DEFAULT_STORAGE_BUCKET, PlatformStorageSettings
 from storage.domain.exceptions import StorageError
 from storage.ports.payload_storage_port import PayloadStoragePort
 from storage.provider import StorageProvider
@@ -26,6 +27,16 @@ from storage.provider import StorageProvider
 logger = structlog.get_logger(__name__)
 
 DEFAULT_IP_PAYLOAD_BUCKET = "ip-payloads"
+
+
+def create_ip_payload_storage(
+    storage_settings: PlatformStorageSettings | None = None,
+) -> PayloadStoragePort:
+    """Builds the IP PayloadStoragePort from centralized PlatformStorageSettings."""
+    settings = storage_settings or PlatformStorageSettings()
+    if settings.bucket == DEFAULT_STORAGE_BUCKET:
+        settings = settings.model_copy(update={"bucket": DEFAULT_IP_PAYLOAD_BUCKET})
+    return StorageProvider.from_settings(settings)
 
 
 class TieredStorageAdapter(TieredStoragePort):
@@ -37,9 +48,7 @@ class TieredStorageAdapter(TieredStoragePort):
         threshold_bytes: int = DEFAULT_INLINE_THRESHOLD_BYTES,
     ) -> None:
         self._storage_client: PayloadStoragePort = (
-            storage_client
-            if storage_client is not None
-            else StorageProvider.create_payload_storage(bucket=DEFAULT_IP_PAYLOAD_BUCKET)
+            storage_client if storage_client is not None else create_ip_payload_storage()
         )
         self._threshold_bytes = threshold_bytes
 

@@ -98,12 +98,12 @@ async def test_identity_sync_service_tenant_provisioned(
             id=tenant_id,
             name="Test Sync Service Org",
             slug=f"sync-org-{tenant_id[:8]}",
-            idp_tenant_id=None,
+            idp_realm_name=None,
         )
         session.add(tenant)
         await session.commit()
 
-    idp_tenant_id = None
+    idp_realm_name = None
     try:
         # 2. Invoke the service
         await identity_sync_service.handle_tenant_provisioned(tenant_id)
@@ -112,13 +112,13 @@ async def test_identity_sync_service_tenant_provisioned(
         async with db_session_factory() as session:
             updated_tenant = await session.get(DbTenant, tenant_id)
             assert updated_tenant is not None
-            assert updated_tenant.idp_tenant_id is not None
-            idp_tenant_id = updated_tenant.idp_tenant_id
+            assert updated_tenant.idp_realm_name is not None
+            idp_realm_name = updated_tenant.idp_realm_name
 
     finally:
         # 4. Clean up the actual Zitadel Organization so it doesn't pollute the environment
-        if idp_tenant_id:
-            await zitadel_orgs_adapter.delete_organization(idp_tenant_id)
+        if idp_realm_name:
+            await zitadel_orgs_adapter.delete_organization(idp_realm_name)
 
 
 async def test_identity_sync_service_user_created(
@@ -141,7 +141,7 @@ async def test_identity_sync_service_user_created(
                 id=tenant_id,
                 name="Test Sync Service User Org",
                 slug=f"sync-usr-{tenant_id[:8]}",
-                idp_tenant_id=org_id,
+                idp_realm_name=org_id,
             )
             session.add(tenant)
 
@@ -197,7 +197,7 @@ async def test_identity_sync_service_app_subscribed_and_unsubscribed(
                 id=tenant_id,
                 name="Test Sync App Sub Org",
                 slug=f"sync-app-{tenant_id[:8]}",
-                idp_tenant_id=org_id,
+                idp_realm_name=org_id,
             )
             session.add(tenant)
             await session.commit()

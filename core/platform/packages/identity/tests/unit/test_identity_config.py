@@ -10,6 +10,7 @@ pytestmark = pytest.mark.unit
 def test_platform_identity_settings_pure_instantiation() -> None:
     settings = PlatformIdentitySettings(
         oauth_client_id="client_web_3",
+        platform_admin_client_id="",
         raw_audiences="api-gateway, extra_aud_1 , extra_aud_2",
         issuer="https://idp.example.com",
     )
@@ -40,6 +41,7 @@ def test_platform_identity_settings_alias_choices_resolution() -> None:
 def test_accepted_audiences_deduplicates_and_ignores_empty() -> None:
     settings = PlatformIdentitySettings(
         oauth_client_id="proj_common",
+        platform_admin_client_id="",
         raw_audiences="proj_common, ,  ",
     )
 

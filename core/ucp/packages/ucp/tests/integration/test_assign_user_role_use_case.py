@@ -33,7 +33,7 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
         id=tenant_id,
         name=f"Test Tenant {generate_random_hex(6)}",
         slug=f"test-tenant-{generate_random_hex(6)}",
-        idp_tenant_id=None,
+        idp_realm_name=None,
     ).unwrap()
     await uow.tenant_repo.save(tenant)
 
@@ -44,18 +44,8 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
         name="Integration Test User",
     ).unwrap()
     await uow.user_repo.save(user)
-
-    seed_role_id = generate_id(DomainIdPrefix.ROLE)
-    seed_role = Role.create(
-        id=seed_role_id,
-        tenant_id=tenant_id,
-        name="Viewer",
-        description="Seed role for test scaffolding",
-        capabilities=["users:read"],
-    )
-    await uow.role_repo.save(seed_role)
+    await uow.user_repo.upsert_tenant_membership(tenant_id=tenant_id, user_id=user_id)
     await db_session.flush()
-    await uow.role_repo.assign_user_role(tenant_id=tenant_id, user_id=user_id, role_id=seed_role_id)
 
     role = Role.create(
         id=role_id,
@@ -108,7 +98,7 @@ async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None
         id=tenant_id,
         name=f"Tenant {tenant_id}",
         slug=f"tenant-{tenant_id}",
-        idp_tenant_id=None,
+        idp_realm_name=None,
     ).unwrap()
     await uow.tenant_repo.save(tenant)
 
@@ -116,20 +106,7 @@ async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None
         id=user_id, idp_user_id=None, email=f"{user_id}@test.com", name="Test User"
     ).unwrap()
     await uow.user_repo.save(user)
-
-    seed_role_id2 = generate_id(DomainIdPrefix.ROLE)
-    seed_role2 = Role.create(
-        id=seed_role_id2,
-        tenant_id=tenant_id,
-        name="Viewer",
-        description="Seed role for test scaffolding",
-        capabilities=["users:read"],
-    )
-    await uow.role_repo.save(seed_role2)
-    await db_session.flush()
-    await uow.role_repo.assign_user_role(
-        tenant_id=tenant_id, user_id=user_id, role_id=seed_role_id2
-    )
+    await uow.user_repo.upsert_tenant_membership(tenant_id=tenant_id, user_id=user_id)
     await db_session.flush()
 
     request = AssignUserRoleCommand(user_id=user_id, role_id=role_id)

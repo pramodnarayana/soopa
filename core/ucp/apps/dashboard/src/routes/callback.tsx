@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { useAuth } from 'react-oidc-context';
+import { clearActiveAuthTarget, writeAuthCallbackError } from '@/lib/hrd';
 
 export const Route = createFileRoute('/callback')({
   component: CallbackComponent,
@@ -14,7 +15,10 @@ function CallbackComponent() {
     if (auth.isAuthenticated) {
       void navigate({ to: '/', replace: true });
     } else if (auth.error) {
-      console.error('OIDC Auth Error:', auth.error);
+      clearActiveAuthTarget();
+      writeAuthCallbackError(
+        auth.error.message || 'Sign-in could not be completed. Please try again.',
+      );
       void navigate({ to: '/', replace: true });
     }
   }, [auth.isAuthenticated, auth.error, navigate]);

@@ -38,7 +38,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger=StructlogLogger(name="edi", log_level=settings.log_level),
     )
 
-    s3_storage = StorageProvider.create_payload_storage()
+    settings.secrets.validate_against_aws(settings.aws)
+    s3_storage = StorageProvider.from_settings(settings.storage, aws_settings=settings.aws)
     app.state.s3_storage = s3_storage
     app.state.crypto_service = SmimeCryptoService()
 

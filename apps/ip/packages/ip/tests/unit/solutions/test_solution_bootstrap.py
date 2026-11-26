@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from ip.engine.adapters.inbound.api.dependencies import (
     get_catalog_registry,
     get_connectors,
@@ -71,4 +72,4 @@ def test_outer_ip_api_module_exposes_registered_solution_plugins() -> None:
     assert "http" in list(connectors)
     assert len(get_transformer_registry(req).list_transformers()) >= 6
     assert len(get_workflow_definition_registry(req).list_definitions()) >= 3
-    assert len(get_stitch_catalog_registry(req).list_stitches(tenant_id="*")) >= 2
+    assert len(get_stitch_catalog_registry(req).list_stitches(tenant_id=PLATFORM_TENANT_ID)) >= 2

@@ -74,8 +74,8 @@ async def require_tenant_member(
     # Platform Admins bypass all tenant-level ACL checks.
     # But we still need to normalize the tenant_id if it's an IdP Org ID.
     if identity.is_platform_admin:
-        # Try to resolve as IdP tenant ID first to get canonical UCP ID
-        resolved = await tenant_repo.find_by_idp_tenant_id(tenant_id)
+        # Try to resolve as dedicated IdP realm first to get canonical UCP ID
+        resolved = await tenant_repo.find_by_idp_realm(tenant_id)
         canonical_tenant_id = resolved.id if resolved else tenant_id
 
         # Load capabilities for this specific tenant, as the user might be accessing it cross-tenant

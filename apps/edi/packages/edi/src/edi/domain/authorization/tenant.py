@@ -17,7 +17,7 @@ class TenantSummary:
     """Read-only projection of a global tenant identity."""
 
     id: str
-    idp_tenant_id: str | None
+    idp_realm_name: str | None
     name: str
 
 

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from database.models.identity import Tenant
 from database.router import DatabaseRouterPort
@@ -6,12 +8,13 @@ from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResol
 from edi.bootstrap.container import create_edi_tenant_uow_provider
 from seedwork import generate_id
 from sqlalchemy import select, text
+from storage import PlatformStorageSettings, StorageBackend
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
 
 @pytest.mark.integration
-async def test_tenant_uow_provider_success(db_router: DatabaseRouterPort) -> None:
+async def test_tenant_uow_provider_success(db_router: DatabaseRouterPort, tmp_path: Path) -> None:
     """Test that TenantUowProvider resolves tenant and yields a DataPlaneUnitOfWorkPort."""
     test_tenant_id = generate_id("t")
     shard_name = f"shard_{test_tenant_id}"
@@ -52,8 +55,10 @@ async def test_tenant_uow_provider_success(db_router: DatabaseRouterPort) -> Non
     provider = create_edi_tenant_uow_provider(
         resolver=real_resolver,
         db_router=db_router,
-        s3_bucket="fake-bucket",
-        aws_endpoint=None,
+        storage_settings=PlatformStorageSettings(
+            backend=StorageBackend.FILE,
+            file_path=str(tmp_path),
+        ),
     )
 
     # 3. Execute

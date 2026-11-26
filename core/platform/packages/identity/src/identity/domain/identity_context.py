@@ -11,6 +11,15 @@ class TokenClaims:
     aud: str | list[str]
     exp: int
     iat: int | None = None
+    jti: str | None = None
+    email: str | None = None
+    email_verified: bool = False
+    idp_realm: str | None = None
+    acr: str | None = None
+    amr: tuple[str, ...] = ()
+    impersonator_subject: str | None = None
+    impersonation_ticket_id: str | None = None
+    token_scopes: frozenset[str] | None = None
     tenant_id: str | None = None
     organization_id: str | None = None
     authorized_tenants: set[str] = field(default_factory=set)
@@ -23,6 +32,7 @@ class TokenClaims:
 
 # The canonical tenant ID used to represent the global platform administrator scope.
 PLATFORM_TENANT_ID = "ten_000000000000000000000000"
+PLATFORM_ADMIN_CAPABILITY = "platform:admin"
 
 M2M_API_KEY_PREFIX = "sp_api_"
 M2M_CLIENT_ID_PREFIX = "cli_"
@@ -44,9 +54,13 @@ class IdentityContext:
 
     @property
     def is_platform_admin(self) -> bool:
-        """True when the identity has an admin role explicitly assigned to the platform-admin sentinel tenant ID."""
+        """True ONLY when the principal is an authorized member of PLATFORM_TENANT_ID and holds
+        either the DB-authoritative `platform:admin` capability or a mapped platform admin role."""
         if PLATFORM_TENANT_ID not in self.authorized_tenants:
             return False
+
+        if PLATFORM_ADMIN_CAPABILITY in self.capabilities:
+            return True
 
         for org_id, roles in self.tenant_roles.items():
             if any(r.lower() in ("admin", "platform-admin", "platformadmin") for r in roles) and (

@@ -9,7 +9,7 @@ Environment variable injection is driven directly from ``topology.json`` via
 zero AWS SQS/SNS). Adding a new queue or topic to topology.json is sufficient to make it
 available in every worker container.
 
-Depends on: platform, foundation, data, zitadel.
+Depends on: platform, foundation, data, casdoor.
 """
 
 import json
@@ -31,23 +31,23 @@ config = pulumi.Config()
 edi_environment = config.get("edi_environment") or "T"
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
-
-zitadel_stack_ref = config.get("zitadel_stack") or f"organization/zitadel-infrastructure/{_env}"
-zitadel = pulumi.StackReference(zitadel_stack_ref)
-identity_platform_org_id = zitadel.require_output("platform_org_id")
-identity_ucp_project_id = zitadel.require_output("ucp_project_id")
-identity_oauth_client_id = zitadel.require_output("ucp_web_client_id")
-identity_platform_admin_id = zitadel.require_output("platform_admin_id")
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
-aws_zitadel_stack_ref = config.get("aws_zitadel_stack") or f"organization/zitadel/{_env}"
+identity_stack_ref = config.get("identity_stack") or f"organization/casdoor/{_env}"
 obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
-aws_zitadel = pulumi.StackReference(aws_zitadel_stack_ref)
+identity_stack = pulumi.StackReference(identity_stack_ref)
 obs = pulumi.StackReference(obs_stack_ref)
-machinekey_secret_arn = aws_zitadel.require_output("machinekey_secret_arn")
+
+identity_platform_realm = identity_stack.get_output("platform_realm").apply(
+    lambda value: value or "soopa-platform"
+)
+identity_global_realm = identity_stack.get_output("global_realm").apply(
+    lambda value: value or "soopa-global"
+)
+identity_admin_oauth_secret_arn = identity_stack.require_output("admin_oauth_secret_arn")
 
 # ── Infrastructure Inputs ─────────────────────────────────────────────────────
 private_subnets = [
@@ -106,7 +106,7 @@ aws.iam.RolePolicy(
         edi_shard_db_secret_arn,
         global_db_secret_arn,
         app_defaults_secret_arn,
-        machinekey_secret_arn,
+        identity_admin_oauth_secret_arn,
         obs_user_arn,
         obs_pass_arn,
     ).apply(
@@ -117,21 +117,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [
-                            arn
-                            for arn in [
-                                args[0],
-                                args[1],
-                                args[2],
-                                args[3],
-                                args[4],
-                                args[5],
-                            ]
-                            if arn
-                        ]
-                        + [
-                            f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:identity/{_prefix}iam-manager-sa-key-*",
-                        ],
+                        "Resource": [arn for arn in args if arn],
                     },
                     {
                         "Effect": "Allow",
@@ -147,21 +133,6 @@ aws.iam.RolePolicyAttachment(
     f"{_prefix}ecs-exec-role-attach",
     role=execution_role.name,
     policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
-)
-
-# ── IAM Manager Secret ────────────────────────────────────────────────────────
-secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
-iam_manager_sa_secret = aws.secretsmanager.Secret(
-    f"{_prefix}iam-manager-sa-key",
-    name_prefix=f"identity/{_prefix}iam-manager-sa-key-",
-    recovery_window_in_days=secret_recovery_window_days,
-    tags=_TAGS,
-)
-
-aws.secretsmanager.SecretVersion(
-    f"{_prefix}iam-manager-sa-key-val",
-    secret_id=iam_manager_sa_secret.id,
-    secret_string=zitadel.require_output("iam_manager_sa_key"),
 )
 
 # ── EDI Secrets Sidecar ───────────────────────────────────────────────────────
@@ -217,19 +188,14 @@ app_depends_on = [{"containerName": "edi-secrets-sidecar", "condition": "START"}
 volumes = [aws.ecs.TaskDefinitionVolumeArgs(name="secrets")]
 
 # ── Environment Variables — Topology-Driven (PostgreSQL Pub/Sub) ──────────────
-# Built directly from topology.json via build_database_pubsub_env_vars():
-# { "PUBSUB_TRANSPORT": "db", "SQS_*": "db://...", "SNS_*": "db://topic/..." }.
-# This is the enterprise SSOT pattern: adding a queue or topic to topology.json
-# with an env_var is sufficient — no changes to any compute stack and zero AWS SQS/SNS.
-
 base_env_vars: pulumi.Output = pulumi.Output.all(
     global_db_host=global_db_endpoint,
     edi_db_host=edi_shard_db_endpoint,
     public_base_url=pulumi.Output.concat("https://api.", staging_domain),
     identity_issuer=pulumi.Output.concat("https://identity.", staging_domain),
     identity_api_url=pulumi.Output.concat("https://identity.", staging_domain),
-    identity_ucp_project_id=identity_ucp_project_id,
-    identity_platform_org_id=identity_platform_org_id,
+    identity_platform_realm=identity_platform_realm,
+    identity_global_realm=identity_global_realm,
 ).apply(
     lambda args: queue_env_vars_to_ecs_format(
         queue_env_vars=all_queue_env_vars,
@@ -241,10 +207,12 @@ base_env_vars: pulumi.Output = pulumi.Output.all(
             "EDI_DB_HOST": args["edi_db_host"],
             "PUBLIC_BASE_URL": args["public_base_url"],
             "CONFIG_WATCH_BASE_URL": args["public_base_url"],
+            "IDENTITY_PROVIDER": "casdoor",
             "IDENTITY_ISSUER": args["identity_issuer"],
             "IDENTITY_API_URL": args["identity_api_url"],
-            "IDENTITY_UCP_PROJECT_ID": args["identity_ucp_project_id"],
-            "IDENTITY_PLATFORM_ORG_ID": args["identity_platform_org_id"],
+            "IDENTITY_PLATFORM_REALM": args["identity_platform_realm"],
+            "IDENTITY_GLOBAL_REALM": args["identity_global_realm"],
+            "IDENTITY_PLATFORM_ORG_ID": args["identity_platform_realm"],
         },
     )
 )
@@ -302,8 +270,16 @@ for group in worker_groups:
                 ),
             },
             {
-                "name": "IDENTITY_MACHINE_KEY",
-                "valueFrom": iam_manager_sa_secret.arn,
+                "name": "IDENTITY_ADMIN_CLIENT_ID",
+                "valueFrom": pulumi.Output.concat(
+                    identity_admin_oauth_secret_arn, ":admin_client_id::"
+                ),
+            },
+            {
+                "name": "IDENTITY_ADMIN_CLIENT_SECRET",
+                "valueFrom": pulumi.Output.concat(
+                    identity_admin_oauth_secret_arn, ":admin_client_secret::"
+                ),
             },
             {
                 "name": "CONFIG_SYNC_INTERNAL_TOKEN",

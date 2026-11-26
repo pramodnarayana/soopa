@@ -12,7 +12,22 @@ from .core import (
     UcpRegistry,
 )
 from .idempotency import IdempotencyResult
-from .identity import ApiKey, ApiToken, Capability, Role, Tenant, TenantUser, User, UserRole
+from .identity import (
+    ApiKey,
+    ApiToken,
+    Capability,
+    EmailDomainRoute,
+    ExternalIdentity,
+    Ltree,
+    PolicyRule,
+    ResourceGrant,
+    Role,
+    Tenant,
+    TenantUser,
+    TrustedIssuer,
+    User,
+    UserRole,
+)
 from .notifications import NotificationOutbox, NotificationTemplate, UserNotificationPreference
 from .observability import SystemAuditLog
 from .pubsub import PlatformQueueMessage, PlatformTopicSubscription
@@ -30,8 +45,11 @@ __all__ = [
     "ConfigChangelogEntry",
     "ConfigSyncBase",
     "DatabaseShard",
+    "EmailDomainRoute",
+    "ExternalIdentity",
     "IdempotencyResult",
     "IdentityBase",
+    "Ltree",
     "NotificationBase",
     "NotificationOutbox",
     "NotificationTemplate",
@@ -40,7 +58,9 @@ __all__ = [
     "PlatformQueueMessage",
     "PlatformRegistry",
     "PlatformTopicSubscription",
+    "PolicyRule",
     "PubSubBase",
+    "ResourceGrant",
     "Role",
     "ScheduledJob",
     "SchedulingBase",
@@ -50,6 +70,7 @@ __all__ = [
     "Tenant",
     "TenantUser",
     "TimestampMixin",
+    "TrustedIssuer",
     "UcpBase",
     "UcpRegistry",
     "User",

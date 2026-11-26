@@ -141,6 +141,7 @@ def build_mdn(
     disposition: str,
     mic: str | None = None,
     sign_fn: Callable[[bytes], bytes] | None = None,
+    human_readable_text: str | None = None,
 ) -> MDNResponse:
     """Constructs a serialized AS2 MDN HTTP response body and headers.
 
@@ -149,13 +150,18 @@ def build_mdn(
     supplies this callable from the injected CryptoServicePort.
     """
     boundary = f"----=_Part_{generate_random_hex(6)}"
+    body_text = (
+        human_readable_text.encode("ascii", errors="replace").decode("ascii")
+        if human_readable_text
+        else "The AS2 message has been received successfully."
+    )
 
     lines = []
     lines.append(f"--{boundary}")
     lines.append("Content-Type: text/plain; charset=us-ascii")
     lines.append("Content-Transfer-Encoding: 7bit")
     lines.append("")
-    lines.append("The AS2 message has been received successfully.")
+    lines.append(body_text)
     lines.append("")
     lines.append(f"--{boundary}")
     lines.append("Content-Type: message/disposition-notification")

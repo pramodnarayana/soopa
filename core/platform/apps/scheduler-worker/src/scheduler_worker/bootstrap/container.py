@@ -7,7 +7,8 @@ from pubsub.adapters.database.sqlalchemy_database_queue_repository import (
     SessionScopeFactory,
     SqlAlchemyDatabaseQueueRepository,
 )
-from pubsub.domain.enums import PubSubJobName, is_database_queue_uri
+from pubsub.domain.enums import BrokerType, PubSubJobName, is_database_queue_uri
+from pubsub.provider import PubSubProvider
 from scheduler.adapters.outbound.messaging.database_job_dispatcher import DatabaseJobDispatcher
 from scheduler.adapters.outbound.messaging.sqs_job_dispatcher import SQSJobDispatcher
 from scheduler.application.job_executor_use_case import JobExecutorUseCase
@@ -26,10 +27,21 @@ def create_job_dispatcher(
     queue_url_map: Mapping[str, str],
     endpoint_url: str | None = None,
     region: str = "us-east-1",
+    transport: str | None = None,
 ) -> JobDispatcherPort:
-    """Composition root factory selecting DatabaseJobDispatcher for `db://` queues or SQSJobDispatcher for AWS."""
+    """Composition root factory selecting DatabaseJobDispatcher or SQSJobDispatcher via transport policy."""
+    registry = PubSubProvider.default_registry()
+    normalized_transport = registry.normalize_transport(transport)
     urls = list(queue_url_map.values())
-    if not urls or any(is_database_queue_uri(u) for u in urls):
+    for url in urls:
+        registry.enforce_policy(url, transport=normalized_transport)
+
+    use_database_dispatcher = (
+        normalized_transport == BrokerType.DB.value
+        if normalized_transport is not None
+        else (not urls or any(is_database_queue_uri(u) for u in urls))
+    )
+    if use_database_dispatcher:
         queue_repo = SqlAlchemyDatabaseQueueRepository(session_factory=session_factory)
         changelog_repo = ConfigSyncProvider.create_changelog_repository(
             session_factory=session_factory
@@ -81,6 +93,7 @@ class Container(containers.DeclarativeContainer):
         queue_url_map=config.sqs_queue_url_map,
         endpoint_url=config.aws_endpoint_url,
         region=config.aws_region,
+        transport=config.pubsub_transport,
     )
 
     sweep_use_case = providers.Factory(
