@@ -35,9 +35,8 @@ class NotificationOutboxSource(StrEnum):
 
 
 class NotificationOutboxChannel(StrEnum):
-    """Canonical PostgreSQL LISTEN/NOTIFY channel names for Notification real-time relays."""
+    """Canonical PostgreSQL channel names for in-app notification delivery."""
 
-    DELIVERY_WAKEUP = "notification_delivery_outbox_wakeup"
     IN_APP_NOTIFICATIONS = "in_app_notifications"
 
 

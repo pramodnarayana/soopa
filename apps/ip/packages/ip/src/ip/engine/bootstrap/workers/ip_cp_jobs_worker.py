@@ -24,10 +24,7 @@ from ip.engine.bootstrap.container import (
     create_ip_cp_outbox_components,
     create_ip_cp_outbox_relay,
 )
-from ip.engine.domain.enums import (
-    IpJobName,
-    IpOutboxChannel,
-)
+from ip.engine.domain.enums import IpJobName
 from ip.engine.settings import IpEngineSettings, get_ip_engine_settings
 
 logger = structlog.get_logger(__name__)
@@ -103,9 +100,8 @@ class IpCpJobsWorkerModule(LaunchableWorker):
 
         self.cp_outbox_relay = create_ip_cp_outbox_relay(
             processor=self.cp_processor,
-            database_url=self.settings.global_database_url,
-            listen_channel=IpOutboxChannel.CONTROL_PLANE.value,
-            fallback_poll_interval=max(1, int(self.settings.outbox_fallback_poll_sec)),
+            poll_interval_seconds=self.settings.outbox_poll_interval_sec,
+            max_idle_poll_interval_seconds=self.settings.outbox_max_idle_poll_sec,
         )
         self.cp_outbox_relay.start()
 

@@ -5,7 +5,7 @@ from typing import cast
 
 import structlog
 from observability import ObservabilityProvider
-from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
+from outbox.ports.outbox_relay_port import OutboxRelayPort
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
@@ -18,7 +18,7 @@ logger = structlog.get_logger(__name__)
 class NotificationJobsWorkerModule(LaunchableWorker):
     def __init__(self) -> None:
         self.container = Container()
-        self.outbox_listener: NotifyOutboxRelay | None = None
+        self.outbox_relay: OutboxRelayPort | None = None
         self.jobs_consumer: ConsumerManagerPort | None = None
 
     async def start(self) -> None:
@@ -37,12 +37,12 @@ class NotificationJobsWorkerModule(LaunchableWorker):
 
         await cast(Awaitable[None], self.container.init_resources())
 
-        self.outbox_listener = self.container.outbox_listener()
-        while inspect.isawaitable(self.outbox_listener):
-            self.outbox_listener = await self.outbox_listener
+        self.outbox_relay = self.container.outbox_relay()
+        while inspect.isawaitable(self.outbox_relay):
+            self.outbox_relay = await self.outbox_relay
 
-        assert self.outbox_listener is not None
-        self.outbox_listener.start()
+        assert self.outbox_relay is not None
+        self.outbox_relay.start()
         logger.info("notification_jobs_worker_relay_started")
 
         self.jobs_consumer = self.container.jobs_consumer()
@@ -54,8 +54,8 @@ class NotificationJobsWorkerModule(LaunchableWorker):
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:
         tasks: list[asyncio.Task[object]] = []
-        if self.outbox_listener is not None:
-            tasks.extend(self.outbox_listener.background_tasks())
+        if self.outbox_relay is not None:
+            tasks.extend(self.outbox_relay.background_tasks())
 
         if self.jobs_consumer is not None:
             tasks.extend(self.jobs_consumer.background_tasks())
@@ -68,11 +68,11 @@ class NotificationJobsWorkerModule(LaunchableWorker):
                 await self.jobs_consumer.stop()
             except Exception:
                 logger.exception("notification_jobs_consumer_stop_failed")
-        if self.outbox_listener:
+        if self.outbox_relay:
             try:
-                await self.outbox_listener.stop()
+                await self.outbox_relay.stop()
             except Exception:
-                logger.exception("notification_outbox_listener_stop_failed")
+                logger.exception("notification_outbox_relay_stop_failed")
         await cast(Awaitable[None], self.container.shutdown_resources())
 
 

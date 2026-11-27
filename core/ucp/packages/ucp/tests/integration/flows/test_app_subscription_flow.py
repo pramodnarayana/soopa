@@ -1,11 +1,10 @@
 import asyncio
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
-from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
+from outbox.adapters.inbound.outbox_drain_relay import OutboxDrainRelay
 from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
     SqlAlchemyGlobalOutboxRepository,
 )
@@ -104,15 +103,13 @@ async def test_app_subscription_flow(
     )
 
     event_bus = InMemoryEventBus()
-    db_url = os.environ["DATABASE_URL"]
     outbox_processor = OutboxProcessorUseCase(
         repository=outbox_repo,
         publisher=event_bus,
     )
-    relay = NotifyOutboxRelay(
+    relay = OutboxDrainRelay(
         processor=outbox_processor,
-        database_url=db_url,
-        listen_channel="ucp_outbox_wakeup",
+        relay_name=UcpOutboxSource.UCP.value,
     )
 
     dispatcher = UcpEventDispatcher()

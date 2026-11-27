@@ -1,9 +1,9 @@
 """
 Enterprise Database Provider
 
-Centralized capability for provisioning SQLAlchemy AsyncEngines and LISTEN/NOTIFY
-connections across the monorepo. Guarantees identical infrastructure tuning,
-connection pool strategies, PgBouncer transaction-mode safety, and URL normalization.
+Centralized capability for provisioning SQLAlchemy AsyncEngines across the monorepo.
+Guarantees identical infrastructure tuning, connection pool strategies, PgBouncer
+transaction-mode safety, and URL normalization.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from database.exceptions import DatabaseConfigurationError
-from database.listener import NotifyListenerConnectionPort, connect_notify_listener
 from database.utils import normalize_to_asyncpg
 
 logger = structlog.get_logger(__name__)
@@ -128,8 +127,8 @@ class DatabaseProvider:
     """
     Enterprise Database Provider.
 
-    Provides a centralized connection pool (AsyncEngine), session factory, and
-    LISTEN/NOTIFY connection factory for the entire application lifecycle.
+    Provides a centralized connection pool (AsyncEngine) and session factory
+    for the entire application lifecycle.
     """
 
     def __init__(self, engine: AsyncEngine) -> None:
@@ -162,11 +161,6 @@ class DatabaseProvider:
             statement_cache_size=statement_cache_size,
         )
         return cls(engine=engine)
-
-    @staticmethod
-    async def connect_listener(url: str) -> NotifyListenerConnectionPort:
-        """Opens a dedicated PostgreSQL LISTEN/NOTIFY connection."""
-        return await connect_notify_listener(url)
 
     @contextlib.asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:

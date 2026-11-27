@@ -13,13 +13,14 @@ from database.provider import DatabaseProvider
 from seedwork.domain.types import JsonDict
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
 from identity.adapters.outbound.database.capability_repository import (
     SqlAlchemyCapabilityRepository,
 )
 from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
+from identity.adapters.outbound.database.uow import SqlAlchemyIdentityUnitOfWork
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
 from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
     ZitadelTokenVerifierAdapter,
@@ -262,3 +263,36 @@ def test_capability_repository_mapper() -> None:
     assert domain_model.display_name == "View Canonical Records"
     assert domain_model.description == "Allows inspecting canonical L3 normalized records."
     assert domain_model.is_sensitive is False
+
+
+@pytest.mark.asyncio
+async def test_identity_uow_pre_commit_emits_no_notify_sql() -> None:
+    provider = DatabaseProvider.from_url("sqlite+aiosqlite:///:memory:")
+    executed_statements: list[str] = []
+
+    def _capture_do_execute(
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+    ) -> bool | None:
+        del cursor, parameters, context
+        executed_statements.append(statement)
+        return None
+
+    event.listen(provider.engine.sync_engine, "do_execute", _capture_do_execute, retval=True)
+    try:
+        async with provider.session_factory() as session:
+            uow = SqlAlchemyIdentityUnitOfWork(
+                session=session,
+                user_repo=SqlAlchemyUserRepository(session),
+                role_repo=SqlAlchemyRoleRepository(session),
+                api_token_repo=SqlAlchemyApiTokenRepository(session),
+                capability_repo=SqlAlchemyCapabilityRepository(session),
+            )
+            await uow._pre_commit()
+    finally:
+        event.remove(provider.engine.sync_engine, "do_execute", _capture_do_execute)
+        await provider.engine.dispose()
+
+    assert executed_statements == []

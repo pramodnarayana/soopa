@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 
-from database.provider import DatabaseProvider
 from database.router import DatabaseRouterPort
 from dependency_injector import containers, providers
 from orchestration.application.services import InMemoryWorkflowDefinitionRegistry
@@ -20,7 +19,7 @@ from orchestration.ports.inbound.step_handler_port import (
 )
 from orchestration.ports.outbound import WorkflowUnitOfWorkPort
 from outbox.adapters.inbound.multi_shard_outbox_drain_relay import MultiShardOutboxDrainRelay
-from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
+from outbox.adapters.inbound.outbox_drain_relay import OutboxDrainRelay
 from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
     SqlAlchemyGlobalOutboxRepository,
 )
@@ -602,17 +601,15 @@ def create_ip_cp_outbox_components(
 def create_ip_cp_outbox_relay(
     *,
     processor: OutboxProcessorUseCase,
-    database_url: str,
-    listen_channel: str,
-    fallback_poll_interval: int,
+    poll_interval_seconds: float = 0.25,
+    max_idle_poll_interval_seconds: float = 1.0,
 ) -> OutboxRelayPort:
-    """Composition root factory assembling NotifyOutboxRelay for IP Control Plane."""
-    return NotifyOutboxRelay(
+    """Composition root factory assembling OutboxDrainRelay for IP Control Plane."""
+    return OutboxDrainRelay(
         processor=processor,
-        database_url=database_url,
-        listen_channel=listen_channel,
-        fallback_poll_interval=fallback_poll_interval,
-        listener_connector=DatabaseProvider.connect_listener,
+        relay_name=IpOutboxSource.CONTROL_PLANE.value,
+        poll_interval_seconds=poll_interval_seconds,
+        max_idle_poll_interval_seconds=max_idle_poll_interval_seconds,
     )
 
 

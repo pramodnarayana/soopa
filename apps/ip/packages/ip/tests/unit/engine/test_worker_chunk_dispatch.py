@@ -36,6 +36,7 @@ from ip.engine.application.use_cases.normalization.auto_bind_default_transformat
 from ip.engine.application.use_cases.normalization.process_inbound_range_use_case import (
     CanonicalChangeItemDTO,
 )
+from ip.engine.bootstrap.container import create_ip_cp_outbox_relay
 from ip.engine.bootstrap.publisher_factory import (
     build_ip_cp_outbox_router,
     build_ip_dp_outbox_router,
@@ -47,17 +48,20 @@ from ip.engine.bootstrap.workers import (
     IpOrchestratorWorkerModule,
 )
 from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
-from ip.engine.domain.enums import IpEventType, IpJobName
+from ip.engine.domain.enums import IpEventType, IpJobName, IpOutboxSource
 from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.domain.normalization.enums import NormalizationOutcome
 from ip.engine.domain.normalization.normalized_record import NormalizedRecord
 from ip.engine.domain.replication.enums import IngestionMode, SyncRunStatus
 from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.settings import IpEngineSettings
+from outbox.adapters.inbound.outbox_drain_relay import OutboxDrainRelay
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
+from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.enums import ConsumerAction, ConsumerDecision
 from pubsub.envelope_dispatcher import EventEnvelopeDispatcher
+from pydantic import ValidationError
 from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.events import EventEnvelope, EventProcessingLane
 from strace.application.clean_trace_retention_use_case import CleanTraceRetentionUseCase
@@ -739,6 +743,33 @@ def test_unified_worker_registry_resolves_all_four_ip_workers() -> None:
     assert isinstance(get_worker_instance("ip-delivery-worker"), IpDeliveryWorkerModule)
     assert isinstance(get_worker_instance("ip-cp-jobs-worker"), IpCpJobsWorkerModule)
     assert isinstance(get_worker_instance("ip-dp-jobs-worker"), IpDpJobsWorkerModule)
+
+
+def test_ip_engine_settings_validates_outbox_polling_bounds() -> None:
+    with pytest.raises(ValidationError):
+        IpEngineSettings(outbox_poll_interval_sec=0.0)
+
+    with pytest.raises(ValidationError):
+        IpEngineSettings(outbox_max_idle_poll_sec=0.0)
+
+    with pytest.raises(ValidationError, match="IP_OUTBOX_MAX_IDLE_POLL_SEC"):
+        IpEngineSettings(outbox_poll_interval_sec=2.0, outbox_max_idle_poll_sec=1.0)
+
+
+def test_create_ip_cp_outbox_relay_wires_outbox_drain_relay() -> None:
+    processor = OutboxProcessorUseCase(
+        repository=FakeOutboxRepository(),
+        publisher=FakeOutboxPublisher(),
+    )
+    relay = create_ip_cp_outbox_relay(
+        processor=processor,
+        poll_interval_seconds=0.3,
+        max_idle_poll_interval_seconds=1.5,
+    )
+    assert isinstance(relay, OutboxDrainRelay)
+    assert relay.relay_name == IpOutboxSource.CONTROL_PLANE.value
+    assert relay.poll_interval_seconds == 0.3
+    assert relay.max_idle_poll_interval_seconds == 1.5
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,6 @@ from enum import StrEnum
 
 
 class EdiConstants(StrEnum):
-    OUTBOX_CHANNEL = "edi_outbox_channel"
     EDI_APP_SLUG = "edi"
 
 
