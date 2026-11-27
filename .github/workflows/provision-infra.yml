@@ -181,6 +181,14 @@ jobs:
           stack-name: ${{ env.TARGET_ENV }}
           refresh: ${{ env.REFRESH_STATE }}
 
+      - name: Bootstrap Casdoor Identity Provider
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          uv run python infra/cloud/aws/casdoor/bootstrap.py \
+            --env "${{ env.TARGET_ENV }}" \
+            --region "${{ env.AWS_REGION }}"
+
       # Step 5: Tools, Dashboard Infra & Global Routing
       - name: Deploy OpenAS2 Partner Server
         uses: ./.github/actions/pulumi-stack-up

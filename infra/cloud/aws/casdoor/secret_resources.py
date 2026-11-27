@@ -15,6 +15,7 @@ class CasdoorSecretsBundle:
     """Strongly typed bundle of Secrets Manager resources provisioned for Casdoor."""
 
     admin_password_secret: aws.secretsmanager.Secret
+    platform_admin_password_secret: aws.secretsmanager.Secret
     db_password_secret: aws.secretsmanager.Secret
     dsn_secret: aws.secretsmanager.Secret
     admin_oauth_secret: aws.secretsmanager.Secret
@@ -71,6 +72,26 @@ def provision_secrets(
         secret_string=casdoor_admin_password.result,
     )
 
+    # Separate credential for human platform operators (`soopa-platform/platform_admin`),
+    # strictly isolated from the IdP infrastructure root (`built-in/admin`) password above.
+    platform_admin_password = random.RandomPassword(
+        "casdoor-platform-admin-password",
+        length=32,
+        special=True,
+        override_special="!@#$%^&*()-_=+",
+    )
+    platform_admin_password_secret = aws.secretsmanager.Secret(
+        f"{prefix}casdoor-platform-admin-password-secret",
+        name_prefix=f"platform/{prefix}casdoor-platform-admin-password-",
+        recovery_window_in_days=secret_recovery_window_days,
+        tags=tags,
+    )
+    aws.secretsmanager.SecretVersion(
+        f"{prefix}casdoor-platform-admin-password-secret-val",
+        secret_id=platform_admin_password_secret.id,
+        secret_string=platform_admin_password.result,
+    )
+
     # Dedicated least-privilege PostgreSQL password for `casdoor_app` (never RDS master password).
     # Special characters exclude spaces/quotes/backslashes so libpq key=value DSN stays safe.
     casdoor_db_password = random.RandomPassword(
@@ -117,6 +138,7 @@ def provision_secrets(
 
     return CasdoorSecretsBundle(
         admin_password_secret=admin_password_secret,
+        platform_admin_password_secret=platform_admin_password_secret,
         db_password_secret=db_password_secret,
         dsn_secret=dsn_secret,
         admin_oauth_secret=admin_oauth_secret,

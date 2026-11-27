@@ -51,7 +51,6 @@ def build_casdoor_container_definitions(
     region_name: str,
     ecr_repo_url: str,
     image_tag: str,
-    admin_pwd_arn: str,
     dns_domain: str,
     firelens_endpoint: str = "",
     obs_user_arn: str = "",
@@ -122,7 +121,6 @@ def build_casdoor_container_definitions(
             ],
             "secrets": [
                 {"name": "dataSourceName", "valueFrom": dsn_arn},
-                {"name": "initAdminPassword", "valueFrom": admin_pwd_arn},
             ],
             "logConfiguration": main_log_config,
         },
@@ -149,7 +147,6 @@ def provision_ecs(
     db_password_secret_arn: pulumi.Input[str],
     global_db_secret_arn: pulumi.Input[str],
     casdoor_ecr_repo_url: pulumi.Input[str],
-    admin_password_secret_arn: pulumi.Input[str],
     ecs_task_role_arn: pulumi.Input[str],
     ecs_execution_role_arn: pulumi.Input[str],
     region_name: str,
@@ -202,11 +199,10 @@ def provision_ecs(
                 region_name=region_name,
                 ecr_repo_url=args[3],
                 image_tag=image_tag,
-                admin_pwd_arn=args[4],
-                dns_domain=args[5],
-                firelens_endpoint=args[6],
-                obs_user_arn=args[7],
-                obs_pass_arn=args[8],
+                dns_domain=args[4],
+                firelens_endpoint=args[5],
+                obs_user_arn=args[6],
+                obs_pass_arn=args[7],
             )
         )
 
@@ -224,7 +220,6 @@ def provision_ecs(
             db_password_secret_arn,
             global_db_secret_arn,
             casdoor_ecr_repo_url,
-            admin_password_secret_arn,
             staging_domain,
             firelens_endpoint or "",
             obs_user_secret_arn or "",

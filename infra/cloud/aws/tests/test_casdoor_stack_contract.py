@@ -98,7 +98,6 @@ def test_casdoor_container_defs_wire_least_privilege_db_init_and_firelens_sideca
         region_name="us-east-1",
         ecr_repo_url="123456789012.dkr.ecr.us-east-1.amazonaws.com/staging-casdoor-image",
         image_tag="v4.30.0",
-        admin_pwd_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:platform/staging-casdoor-pwd",
         dns_domain="staging.flowwolf.io",
         firelens_endpoint="openobserve.staging.local:5080",
         obs_user_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:platform/staging-obs-user",
@@ -142,7 +141,8 @@ def test_casdoor_container_defs_wire_least_privilege_db_init_and_firelens_sideca
     app_env = {e["name"]: e["value"] for e in app_c["environment"]}
     assert app_env["BEEGO_RUNMODE"] == "prod"
     assert "httpport" not in app_env
-    assert {s["name"] for s in app_c["secrets"]} == {"dataSourceName", "initAdminPassword"}
+    # Zero-Trust: Casdoor container must NEVER hold plaintext root IdP password in env memory
+    assert {s["name"] for s in app_c["secrets"]} == {"dataSourceName"}
     assert app_c["logConfiguration"]["logDriver"] == "awsfirelens"
 
 
@@ -155,7 +155,6 @@ def test_casdoor_container_defs_fall_back_to_awslogs_without_firelens() -> None:
         region_name="us-east-1",
         ecr_repo_url="123456789012.dkr.ecr.us-east-1.amazonaws.com/staging-casdoor-image",
         image_tag="v4.30.0",
-        admin_pwd_arn="arn:pwd",
         dns_domain="staging.flowwolf.io",
     )
     by_name = {c["name"]: c for c in containers}
@@ -172,7 +171,6 @@ def test_casdoor_roles_enforce_scoped_logs_least_privilege_secrets_and_optional_
             {"Environment": "staging"},
             dsn_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:casdoor-dsn",
             db_password_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:casdoor-db-pwd",
-            admin_password_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:casdoor-pwd",
             global_db_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:global-db",
             region_name="us-east-1",
             account_id="123456789012",
@@ -209,7 +207,6 @@ def test_casdoor_roles_enforce_scoped_logs_least_privilege_secrets_and_optional_
     assert secret_stmt["Resource"] == [
         "arn:aws:secretsmanager:us-east-1:123456789012:secret:casdoor-dsn",
         "arn:aws:secretsmanager:us-east-1:123456789012:secret:casdoor-db-pwd",
-        "arn:aws:secretsmanager:us-east-1:123456789012:secret:casdoor-pwd",
         "arn:aws:secretsmanager:us-east-1:123456789012:secret:global-db",
         "arn:aws:secretsmanager:us-east-1:123456789012:secret:obs-user",
         "arn:aws:secretsmanager:us-east-1:123456789012:secret:obs-pass",
@@ -239,7 +236,6 @@ def test_casdoor_ecs_service_enforces_steady_state_circuit_breaker_and_log_group
             db_password_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:db-pwd",
             global_db_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:global-db",
             casdoor_ecr_repo_url="123456789012.dkr.ecr.us-east-1.amazonaws.com/staging-casdoor-image",
-            admin_password_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:admin-pwd",
             ecs_task_role_arn="arn:aws:iam::123456789012:role/task",
             ecs_execution_role_arn="arn:aws:iam::123456789012:role/exec",
             region_name="us-east-1",

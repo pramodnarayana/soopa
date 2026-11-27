@@ -86,7 +86,6 @@ ecs_task_role, ecs_execution_role = provision_roles(
     _TAGS,
     dsn_secret_arn=secrets_bundle.dsn_secret.arn,
     db_password_secret_arn=secrets_bundle.db_password_secret.arn,
-    admin_password_secret_arn=secrets_bundle.admin_password_secret.arn,
     global_db_secret_arn=global_db_secret_arn,
     region_name=_region.name,
     account_id=_identity.account_id,
@@ -109,7 +108,6 @@ casdoor_svc = provision_ecs(
     db_password_secret_arn=secrets_bundle.db_password_secret.arn,
     global_db_secret_arn=global_db_secret_arn,
     casdoor_ecr_repo_url=casdoor_ecr_repo_url,
-    admin_password_secret_arn=secrets_bundle.admin_password_secret.arn,
     ecs_task_role_arn=ecs_task_role.arn,
     ecs_execution_role_arn=ecs_execution_role.arn,
     region_name=_region.name,
@@ -141,6 +139,10 @@ identity_dns_record = aws.route53.Record(
 pulumi.export("ecr_repository_url", casdoor_ecr_repo_url)
 pulumi.export("identity_service_name", casdoor_svc.name)
 pulumi.export("admin_password_secret_arn", secrets_bundle.admin_password_secret.arn)
+pulumi.export(
+    "platform_admin_password_secret_arn",
+    secrets_bundle.platform_admin_password_secret.arn,
+)
 pulumi.export("admin_oauth_secret_arn", secrets_bundle.admin_oauth_secret.arn)
 pulumi.export("platform_realm", CasdoorConstants.PLATFORM_REALM)
 pulumi.export("global_realm", CasdoorConstants.GLOBAL_REALM)
