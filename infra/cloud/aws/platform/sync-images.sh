@@ -20,11 +20,6 @@ set -a
 source "$SCRIPT_DIR/../../../../versions.env"
 set +a
 
-if [ -z "$IDENTITY_VERSION" ]; then
-    echo "ERROR: IDENTITY_VERSION is unset in versions.env"
-    exit 1
-fi
-
 if [ -z "$CASDOOR_VERSION" ]; then
     echo "ERROR: CASDOOR_VERSION is unset in versions.env"
     exit 1
@@ -36,7 +31,6 @@ if [ -z "$OPENOBSERVE_VERSION" ]; then
 fi
 # Define images to sync. Format: "source_image|target_ecr_repo"
 IMAGES=(
-  "ghcr.io/zitadel/zitadel:${IDENTITY_VERSION}|${TARGET_ENV}-zitadel-image"
   "casbin/casdoor:${CASDOOR_VERSION}|${TARGET_ENV}-casdoor-image"
   "public.ecr.aws/zinclabs/openobserve:${OPENOBSERVE_VERSION}|${TARGET_ENV}-openobserve-image"
 )
