@@ -10,10 +10,8 @@ import json
 
 import pulumi
 import pulumi_aws as aws
-from infra_seedwork.messaging import (
-    build_database_pubsub_env_vars,
-    queue_env_vars_to_ecs_format,
-)
+from infra_seedwork.env import queue_env_vars_to_ecs_format
+from infra_seedwork.messaging import build_database_pubsub_env_vars
 from infra_seedwork.topology import load_topology
 
 _env = pulumi.get_stack()

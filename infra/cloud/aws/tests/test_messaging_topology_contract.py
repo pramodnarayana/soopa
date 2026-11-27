@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import importlib
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -481,3 +483,45 @@ def test_platform_migrator_topic_and_api_casdoor_audience_contracts() -> None:
 
     staging_cfg = (AWS_ROOT / "apps" / "api" / "Pulumi.staging.yaml").read_text(encoding="utf-8")
     assert "api:platform_admin_domains: flowwolf.io" in staging_cfg
+
+
+def test_all_aws_stacks_import_existing_infra_seedwork_symbols() -> None:
+    """Verify every `from infra_seedwork.* import ...` across all AWS stacks resolves cleanly."""
+    excluded_dirs = {
+        ".venv",
+        "venv",
+        ".pytest_cache",
+        "__pycache__",
+        "packages",
+        "tests",
+        "node_modules",
+    }
+    stack_files: list[Path] = []
+    for root, dirs, files in os.walk(AWS_ROOT):
+        root_path = Path(root)
+        dirs[:] = sorted(
+            d
+            for d in dirs
+            if d not in excluded_dirs
+            and not d.startswith(".")
+            and not d.endswith(".egg-info")
+            and not (root_path / d / "pyvenv.cfg").exists()
+        )
+        for filename in sorted(files):
+            if filename.endswith(".py"):
+                stack_files.append(root_path / filename)
+
+    assert stack_files
+    for stack_file in stack_files:
+        tree = ast.parse(stack_file.read_text(encoding="utf-8"), filename=str(stack_file))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+            if not node.module.startswith("infra_seedwork"):
+                continue
+            mod = importlib.import_module(node.module)
+            for alias in node.names:
+                assert hasattr(mod, alias.name), (
+                    f"{stack_file.relative_to(AWS_ROOT)} imports missing symbol "
+                    f"'{alias.name}' from '{node.module}'"
+                )
