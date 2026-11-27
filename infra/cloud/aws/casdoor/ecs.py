@@ -114,7 +114,7 @@ def build_casdoor_container_definitions(
             ],
             "environment": [
                 {"name": "RUNNING_IN_DOCKER", "value": "true"},
-                {"name": "httpport", "value": str(CasdoorConstants.PORT)},
+                {"name": "BEEGO_RUNMODE", "value": "prod"},
                 {"name": "driverName", "value": "postgres"},
                 {"name": "dbName", "value": CasdoorConstants.DB_NAME},
                 {"name": "origin", "value": f"https://identity.{dns_domain}"},

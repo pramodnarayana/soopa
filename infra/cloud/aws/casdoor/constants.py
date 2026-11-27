@@ -24,7 +24,7 @@ class CasdoorConstants:
     DB_INIT_IMAGE: str = "public.ecr.aws/docker/library/postgres:15.10-alpine"
     CONTAINER_NAME: str = "casdoor"
     DB_INIT_CONTAINER_NAME: str = "casdoor-db-init"
-    PORT: int = 8080
+    PORT: int = 8000
     DEFAULT_CPU: str = "256"
     DEFAULT_MEMORY: str = "512"
     DEFAULT_DESIRED_COUNT: int = 1
