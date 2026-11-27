@@ -291,14 +291,15 @@ endpoints_sg = aws.ec2.SecurityGroup(
 )
 
 # ── AWS PrivateLink Interface Endpoints (Cost Optimization) ───────────────────
-# Interface endpoints cost ~$7.20/month base each ($28.80/mo total for 4).
+# Interface endpoints cost ~$7.20/month base each (~$14.40/mo total for 2).
+# SNS and SQS endpoints are retired following the Queue-Free PostgreSQL Outbox transition.
 # In non-production, traffic routes through the existing NAT Gateway for pennies.
 # In production, Interface Endpoints provide dedicated private intra-AWS routing.
 config = pulumi.Config()
 enable_interface_endpoints = config.get_bool("enable_interface_endpoints") or False
 
 if enable_interface_endpoints:
-    for service in ["sns", "sqs", "logs", "secretsmanager"]:
+    for service in ["logs", "secretsmanager"]:
         aws.ec2.VpcEndpoint(
             f"{_prefix}{service}-endpoint",
             vpc_id=vpc.id,

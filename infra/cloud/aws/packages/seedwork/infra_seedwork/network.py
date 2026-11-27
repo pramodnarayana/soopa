@@ -113,6 +113,7 @@ def provision_target_group_and_rule(
     http_header_name: str = None,
     http_header_values: list = None,
     health_check_matcher: str = "200",
+    deregistration_delay: int | None = None,
 ) -> aws.lb.TargetGroup:
     """
     Provisions a Target Group for ECS Fargate and attaches it to the Listener with a path rule.
@@ -124,6 +125,7 @@ def provision_target_group_and_rule(
         protocol_version=protocol_version,
         vpc_id=vpc_id,
         target_type="ip",
+        deregistration_delay=deregistration_delay,
         health_check=aws.lb.TargetGroupHealthCheckArgs(
             path=health_check_path,
             interval=30,
