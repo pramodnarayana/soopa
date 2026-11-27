@@ -25,7 +25,7 @@ DB_INIT_SHELL_COMMAND: str = (
     "printf '%s\\n' "
     "\"SELECT format('CREATE ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE', :'db_user', :'db_pass') "
     "WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'db_user')\\gexec\" "
-    "\"SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE', :'db_user', :'db_pass')\\gexec\" "
+    "\"SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L NOCREATEDB NOCREATEROLE', :'db_user', :'db_pass')\\gexec\" "
     "\"SELECT format('GRANT %I TO %I', :'db_user', current_user)\\gexec\" "
     "\"SELECT format('CREATE DATABASE %I OWNER %I', :'db_name', :'db_user') "
     "WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'db_name')\\gexec\" "
@@ -253,6 +253,7 @@ def provision_ecs(
         desired_count=desired_count,
         launch_type=EcsConstants.CAPACITY_PROVIDER,
         enable_execute_command=enable_execute_command,
+        wait_for_steady_state=True,
         health_check_grace_period_seconds=CasdoorConstants.HEALTH_CHECK_GRACE_PERIOD_SECONDS,
         deployment_circuit_breaker=aws.ecs.ServiceDeploymentCircuitBreakerArgs(
             enable=True,
