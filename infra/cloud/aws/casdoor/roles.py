@@ -14,7 +14,6 @@ def provision_roles(
     *,
     dsn_secret_arn: pulumi.Input[str],
     db_password_secret_arn: pulumi.Input[str],
-    admin_password_secret_arn: pulumi.Input[str],
     global_db_secret_arn: pulumi.Input[str],
     region_name: str,
     account_id: str,
@@ -83,7 +82,6 @@ def provision_roles(
         policy=pulumi.Output.all(
             dsn_secret_arn,
             db_password_secret_arn,
-            admin_password_secret_arn,
             global_db_secret_arn,
             obs_user_secret_arn,
             obs_password_secret_arn,
