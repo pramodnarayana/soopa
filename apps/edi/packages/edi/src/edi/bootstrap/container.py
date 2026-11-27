@@ -7,9 +7,11 @@ from outbox.adapters.outbound.sqlalchemy_sharded_outbox_repository import (
     SqlAlchemyShardedOutboxRepository,
 )
 from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
-from secret_store import SecretStoreProvider
+from secret_store import PlatformSecretStoreSettings, SecretStoreProvider
 from security.provider import SecurityProvider
+from seedwork.infra.config_models import PlatformAwsSettings
 from sqlalchemy.ext.asyncio import AsyncSession
+from storage import PlatformStorageSettings, StorageProvider
 from strace.adapters import SqlAlchemyTraceRepository
 
 from edi.adapters.outbound.database.control_plane.as2_partner_repository import (
@@ -86,7 +88,7 @@ from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResol
 from edi.adapters.outbound.database.tenant_uow_provider import SqlAlchemyTenantUoWProvider
 from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
-from edi.adapters.outbound.pipeline.storage import S3StorageClient
+from edi.adapters.outbound.pipeline.storage import PlatformStorageAdapter
 from edi.adapters.outbound.security.certificates import CryptographyCertificateGeneratorAdapter
 from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from edi.adapters.outbound.sftp.paramiko_sftp_tester import ParamikoSftpTesterAdapter
@@ -180,11 +182,14 @@ def create_edi_tenant_uow_provider(
     *,
     resolver: TenantPort,
     db_router: DatabaseRouterPort,
-    s3_bucket: str,
-    aws_endpoint: str | None = None,
+    storage_settings: PlatformStorageSettings,
+    aws_settings: PlatformAwsSettings | None = None,
 ) -> SqlAlchemyTenantUoWProvider:
-    """Composition root factory assembling SqlAlchemyTenantUoWProvider with S3 storage and Data Plane UoW builder."""
-    storage = S3StorageClient(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
+    """Composition root factory assembling SqlAlchemyTenantUoWProvider with centralized platform storage."""
+    storage = PlatformStorageAdapter.from_settings(
+        storage_settings,
+        aws_settings=aws_settings,
+    )
     return SqlAlchemyTenantUoWProvider(
         resolver=resolver,
         db_router=db_router,
@@ -224,15 +229,23 @@ class Container(containers.DeclarativeContainer):
         allow_private_ips=config.allow_private_ips,
         crypto_service=crypto_service,
     )
+    secrets_settings = providers.Dependency(instance_of=PlatformSecretStoreSettings)
+    storage_settings = providers.Dependency(instance_of=PlatformStorageSettings)
+    aws_settings = providers.Dependency(instance_of=PlatformAwsSettings)
+
     vault_port = providers.Singleton(
-        SecretStoreProvider.get_secret_store,
-        secrets_mount_path=config.secrets.mount_path,
+        SecretStoreProvider.from_settings,
+        settings=secrets_settings,
+        aws_settings=aws_settings,
+    )
+    payload_storage = providers.Singleton(
+        StorageProvider.from_settings,
+        settings=storage_settings,
+        aws_settings=aws_settings,
     )
     storage = providers.Singleton(
-        S3StorageClient,
-        bucket_name=config.s3.bucket,
-        endpoint_url=config.s3.endpoint_url,
-        region=config.s3.region,
+        PlatformStorageAdapter,
+        payload_storage=payload_storage,
     )
 
     # -----------------------------------------------------------------------

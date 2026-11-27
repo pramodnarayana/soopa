@@ -1,9 +1,10 @@
 from functools import lru_cache
 
 from identity.config import PlatformIdentitySettings
-from pydantic import Field, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infra.config import load_settings_safely
+from pubsub.config import PlatformPubSubSettings
+from pydantic import Field, computed_field, model_validator
+from pydantic_settings import SettingsConfigDict
+from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
@@ -49,12 +50,12 @@ class PlatformIdentityProvisioningSettings(PlatformIdentitySettings):
     )
 
 
-class SqsSettings(BaseSettings):
+class SqsSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
     identity_sync_queue_url: str = Field(validation_alias="SQS_IDENTITY_SYNC_QUEUE_URL", default="")
 
 
-class AppSettings(BaseSettings):
+class AppSettings(CleanBaseSettings):
     model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
 
     app_env: str = Field(validation_alias="ENV", default="production")
@@ -62,9 +63,20 @@ class AppSettings(BaseSettings):
     database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
     aws: IdentityAwsSettings = Field(default_factory=IdentityAwsSettings)
     sqs: SqsSettings = Field(default_factory=SqsSettings)
+    pubsub: PlatformPubSubSettings = Field(default_factory=PlatformPubSubSettings)
     identity: PlatformIdentityProvisioningSettings = Field(
         default_factory=PlatformIdentityProvisioningSettings
     )
+
+    @model_validator(mode="after")
+    def validate_pubsub_transport_uris(self) -> "AppSettings":
+        self.pubsub.validate_uris(
+            {
+                "SNS_PLATFORM_EVENTS_TOPIC_ARN": self.aws.sns_identity_events_topic_arn,
+                "SQS_IDENTITY_SYNC_QUEUE_URL": self.sqs.identity_sync_queue_url,
+            }
+        )
+        return self
 
     @computed_field
     @property
@@ -83,8 +95,13 @@ class AppSettings(BaseSettings):
 
     @computed_field
     @property
+    def pubsub_transport(self) -> str | None:
+        return self.pubsub.transport
+
+    @computed_field
+    @property
     def aws_endpoint_url(self) -> str | None:
-        return self.aws.endpoint_url
+        return self.pubsub.effective_aws_endpoint_url(self.aws.endpoint_url)
 
     @computed_field
     @property

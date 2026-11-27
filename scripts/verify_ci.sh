@@ -65,7 +65,7 @@ echo "🔄 Ensuring local infrastructure containers are healthy (non-destructive
 INFRA_SERVICES=()
 while IFS= read -r svc; do
   case "$svc" in
-    postgres_global|*_postgres_shard|localstack|sftp)
+    postgres_global|*_postgres_shard|sftp)
       INFRA_SERVICES+=("$svc")
       ;;
   esac
@@ -129,7 +129,6 @@ if [[ "$RESOLVED_MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]]; then
     --filter="!@soopa/pubsub"
     --filter="!@soopa/orchestration"
     --filter="!@soopa/edi-secrets-sidecar"
-    --filter="!@soopa/unified-api"
     --filter="!@soopa/dummy-pykcs11"
   )
 
@@ -142,7 +141,15 @@ if [[ "$RESOLVED_MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]]; then
   COVERAGE_FILE=.coverage.integration CI=true \
     uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
     pnpm turbo run test:integration --env-mode=loose --concurrency="${TURBO_CONCURRENCY}" "$AFFECTED_FILTER" \
-      --filter="!@soopa/pubsub"
+      --filter="!@soopa/pubsub" --filter="!@soopa/config-sync"
+
+  # @soopa/config-sync asserts on PostgreSQL cluster-wide pg_snapshot_xmin (xid8 visibility barrier),
+  # so it MUST run serially with no concurrent SAVEPOINT transactions open on the same Postgres instance.
+  if pnpm turbo run test:integration --dry=json "$AFFECTED_FILTER" | grep -q '"@soopa/config-sync"'; then
+    COVERAGE_FILE=.coverage.integration CI=true \
+      uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
+      pnpm turbo run test:integration --env-mode=loose --concurrency=1 --filter="@soopa/config-sync"
+  fi
 else
   echo "✅ Running Full Typechecks & Lints..."
   pnpm turbo run typecheck --concurrency="${TURBO_CONCURRENCY}"
@@ -161,7 +168,13 @@ else
   COVERAGE_FILE=.coverage.integration CI=true \
     uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
     pnpm turbo run test:integration --env-mode=loose --concurrency="${TURBO_CONCURRENCY}" \
-      --filter="!@soopa/pubsub"
+      --filter="!@soopa/pubsub" --filter="!@soopa/config-sync"
+
+  # @soopa/config-sync asserts on PostgreSQL cluster-wide pg_snapshot_xmin (xid8 visibility barrier),
+  # so it MUST run serially with no concurrent SAVEPOINT transactions open on the same Postgres instance.
+  COVERAGE_FILE=.coverage.integration CI=true \
+    uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
+    pnpm turbo run test:integration --env-mode=loose --concurrency=1 --filter="@soopa/config-sync"
 fi
 
 echo "✅ Aggregating Coverage and Enforcing Thresholds..."

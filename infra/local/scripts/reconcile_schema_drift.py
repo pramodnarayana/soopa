@@ -20,10 +20,12 @@ from database.shard_discovery import (
     collect_prefixed_shard_overrides,
     fetch_prefixed_shard_urls,
 )
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
-from sqlalchemy import text
+from sqlalchemy import Column, Index, MetaData, String, Table, column, literal, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.schema import CreateIndex
 
 logger = structlog.get_logger(__name__)
 
@@ -59,12 +61,16 @@ async def _execute_chunked_mutation(
     statement_sql: str,
     *,
     batch_size: int = RECONCILE_BATCH_SIZE,
+    params: Mapping[str, object] | None = None,
 ) -> int:
     """Executes a bounded CTE UPDATE/DELETE loop, committing and yielding after every batch."""
     total_affected = 0
     stmt = text(statement_sql)
+    bind_params: dict[str, object] = {"batch_size": batch_size}
+    if params is not None:
+        bind_params.update(params)
     while True:
-        res = await session.execute(stmt, {"batch_size": batch_size})
+        res = await session.execute(stmt, bind_params)
         affected = len(res.all())
         await session.commit()
         if affected == 0:
@@ -91,6 +97,250 @@ async def resolve_ip_shard_urls(
         global_url,
         overrides,
         shard_prefix=IP_SHARD_PREFIX,
+    )
+
+
+async def _reconcile_identity_gold_standard_schema(session: AsyncSession) -> None:
+    """Idempotently reconciles IdP-agnostic Identity & Multi-Tier Authorization schema upgrades."""
+    await session.execute(text("CREATE EXTENSION IF NOT EXISTS ltree;"))
+    await session.execute(
+        text(
+            """
+            ALTER TABLE identity.tenants
+                ADD COLUMN IF NOT EXISTS parent_tenant_id VARCHAR(128) REFERENCES identity.tenants(id) ON DELETE RESTRICT,
+                ADD COLUMN IF NOT EXISTS hierarchy_path ltree,
+                ADD COLUMN IF NOT EXISTS tier_type VARCHAR(32) NOT NULL DEFAULT 'ORGANIZATION',
+                ADD COLUMN IF NOT EXISTS isolation_mode VARCHAR(32) NOT NULL DEFAULT 'POOLED_REALM',
+                ADD COLUMN IF NOT EXISTS idp_realm_name VARCHAR(128),
+                ADD COLUMN IF NOT EXISTS block_parent_inheritance BOOLEAN NOT NULL DEFAULT false,
+                ADD COLUMN IF NOT EXISTS tokens_valid_after TIMESTAMPTZ NOT NULL DEFAULT '1970-01-01T00:00:00Z'::timestamptz,
+                DROP COLUMN IF EXISTS idp_tenant_id;
+            """
+        )
+    )
+    await session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_tenants_parent_status ON identity.tenants (parent_tenant_id, status);"
+        )
+    )
+    await session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_tenants_hierarchy_path_gist ON identity.tenants USING gist (hierarchy_path);"
+        )
+    )
+    await session.execute(text("DROP INDEX IF EXISTS identity.uq_tenants_dedicated_idp_realm;"))
+    await session.execute(
+        text(
+            """
+            CREATE UNIQUE INDEX uq_tenants_dedicated_idp_realm
+            ON identity.tenants (idp_realm_name)
+            WHERE isolation_mode = 'DEDICATED_IDP_ORG'
+              AND idp_realm_name IS NOT NULL
+              AND deleted_at IS NULL;
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            ALTER TABLE identity.users
+                ADD COLUMN IF NOT EXISTS tokens_valid_after TIMESTAMPTZ NOT NULL DEFAULT '1970-01-01T00:00:00Z'::timestamptz,
+                ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            ALTER TABLE identity.tenant_users
+                ADD COLUMN IF NOT EXISTS scope VARCHAR(16) NOT NULL DEFAULT 'DIRECT',
+                ADD COLUMN IF NOT EXISTS status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+                ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ,
+                ALTER COLUMN updated_at SET DEFAULT now(),
+                DROP COLUMN IF EXISTS role;
+            """
+        )
+    )
+    await session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_tenant_users_tenant_status ON identity.tenant_users (tenant_id, status);"
+        )
+    )
+    await session.execute(
+        text(
+            """
+            ALTER TABLE identity.roles
+                ADD COLUMN IF NOT EXISTS deny_capabilities VARCHAR[] NOT NULL DEFAULT '{}'::varchar[],
+                ADD COLUMN IF NOT EXISTS is_system BOOLEAN NOT NULL DEFAULT false;
+            """
+        )
+    )
+    await session.execute(
+        text("ALTER TABLE identity.user_roles ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;")
+    )
+    await session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_user_roles_user_tenant_covering
+            ON identity.user_roles (user_id, tenant_id) INCLUDE (role_id, expires_at);
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            ALTER TABLE identity.capabilities
+                ADD COLUMN IF NOT EXISTS requires_mfa BOOLEAN NOT NULL DEFAULT false,
+                ADD COLUMN IF NOT EXISTS machine_allowed BOOLEAN NOT NULL DEFAULT true,
+                ADD COLUMN IF NOT EXISTS tier_scope VARCHAR(32) NOT NULL DEFAULT 'TENANT';
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS identity.external_identities (
+                id VARCHAR(128) NOT NULL PRIMARY KEY,
+                user_id VARCHAR(128) NOT NULL REFERENCES identity.users(id) ON DELETE CASCADE,
+                idp_issuer VARCHAR(255) NOT NULL,
+                idp_subject VARCHAR(255) NOT NULL,
+                idp_realm_name VARCHAR(128),
+                linked_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            """
+        )
+    )
+    await session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_identity_external_identities_user_id ON identity.external_identities (user_id);"
+        )
+    )
+    await session.execute(
+        text(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_external_identities_issuer_subject
+            ON identity.external_identities (idp_issuer, idp_subject) INCLUDE (user_id);
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS identity.trusted_issuers (
+                issuer VARCHAR(255) NOT NULL PRIMARY KEY,
+                jwks_uri VARCHAR(512) NOT NULL,
+                jwks_host_header VARCHAR(255),
+                allowed_audiences VARCHAR[] NOT NULL DEFAULT '{}'::varchar[],
+                is_active BOOLEAN NOT NULL DEFAULT true,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS identity.email_domain_routes (
+                domain VARCHAR(255) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(128) NOT NULL REFERENCES identity.tenants(id) ON DELETE CASCADE,
+                idp_issuer VARCHAR(255) NOT NULL,
+                idp_realm_name VARCHAR(128) NOT NULL,
+                sso_enforced BOOLEAN NOT NULL DEFAULT false,
+                verified_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            """
+        )
+    )
+    await session.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_identity_email_domain_routes_tenant_id ON identity.email_domain_routes (tenant_id);"
+        )
+    )
+    await session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS identity.resource_grants (
+                id VARCHAR(128) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(128) NOT NULL REFERENCES identity.tenants(id) ON DELETE CASCADE,
+                resource_type VARCHAR(128) NOT NULL,
+                resource_id VARCHAR(255) NOT NULL,
+                relation VARCHAR(64) NOT NULL,
+                subject_type VARCHAR(32) NOT NULL,
+                subject_id VARCHAR(255) NOT NULL,
+                effect VARCHAR(16) NOT NULL DEFAULT 'ALLOW',
+                expires_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_resource_grants_lookup_covering
+            ON identity.resource_grants (tenant_id, resource_type, resource_id, subject_type, subject_id)
+            INCLUDE (relation, effect, expires_at);
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS identity.policy_rules (
+                id VARCHAR(128) NOT NULL PRIMARY KEY,
+                tenant_id VARCHAR(128) NOT NULL REFERENCES identity.tenants(id) ON DELETE CASCADE,
+                engine_type VARCHAR(16) NOT NULL DEFAULT 'ABAC',
+                effect VARCHAR(16) NOT NULL DEFAULT 'ALLOW',
+                subject_expr VARCHAR(255) NOT NULL,
+                resource_type VARCHAR(128) NOT NULL,
+                action_pattern VARCHAR(128) NOT NULL,
+                condition_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                priority INTEGER NOT NULL DEFAULT 100,
+                is_active BOOLEAN NOT NULL DEFAULT true,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_policy_rules_tenant_active_priority
+            ON identity.policy_rules (tenant_id, is_active, priority);
+            """
+        )
+    )
+    await session.commit()
+
+    # Chunked backfill of ltree hierarchy_path for existing tenants
+    await _execute_chunked_mutation(
+        session,
+        """
+        WITH batch AS (
+            SELECT id
+            FROM identity.tenants
+            WHERE hierarchy_path IS NULL
+            LIMIT :batch_size
+            FOR UPDATE SKIP LOCKED
+        )
+        UPDATE identity.tenants AS target
+        SET hierarchy_path = CASE
+            WHEN target.id = :platform_tenant_id THEN target.id::ltree
+            ELSE (:platform_tenant_id || '.' || regexp_replace(target.id, '[^A-Za-z0-9_]', '_', 'g'))::ltree
+        END,
+        tier_type = CASE
+            WHEN target.id = :platform_tenant_id THEN 'PLATFORM'
+            ELSE target.tier_type
+        END
+        FROM batch
+        WHERE target.id = batch.id
+        RETURNING target.id;
+        """,
+        params={"platform_tenant_id": PLATFORM_TENANT_ID},
     )
 
 
@@ -235,6 +485,7 @@ async def _reconcile_config_sync_schema(session: AsyncSession) -> None:
             """
             CREATE TABLE IF NOT EXISTS config_sync.config_changelog (
                 version BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                txid xid8 NOT NULL DEFAULT pg_current_xact_id(),
                 event_id VARCHAR(128) NOT NULL UNIQUE,
                 app_id VARCHAR(64) NOT NULL,
                 tenant_id VARCHAR(128) NOT NULL,
@@ -251,8 +502,27 @@ async def _reconcile_config_sync_schema(session: AsyncSession) -> None:
     await session.execute(
         text(
             """
+            ALTER TABLE config_sync.config_changelog
+            ADD COLUMN IF NOT EXISTS txid xid8 NOT NULL DEFAULT pg_current_xact_id();
+            """
+        )
+    )
+    await session.execute(
+        text(
+            """
             CREATE INDEX IF NOT EXISTS ix_config_changelog_app_tenant_version
             ON config_sync.config_changelog (app_id, tenant_id, version);
+            """
+        )
+    )
+    await session.execute(
+        text("DROP INDEX IF EXISTS config_sync.ix_config_changelog_version_txid;")
+    )
+    await session.execute(
+        text(
+            """
+            CREATE INDEX IF NOT EXISTS ix_config_changelog_txid_version
+            ON config_sync.config_changelog (txid, version);
             """
         )
     )
@@ -264,6 +534,45 @@ async def _reconcile_config_sync_schema(session: AsyncSession) -> None:
             """
         )
     )
+    # Retire dead `edi_outbox_channel` pg_notify trigger if present on legacy global_db instances
+    await session.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+                IF to_regclass('edi.outbox') IS NOT NULL THEN
+                    EXECUTE 'DROP TRIGGER IF EXISTS trg_edi_outbox_notify ON edi.outbox';
+                END IF;
+            END $$;
+            """
+        )
+    )
+    await session.execute(text("DROP FUNCTION IF EXISTS edi_outbox_notify();"))
+    await session.commit()
+    migrated_changelog = await _execute_chunked_mutation(
+        session,
+        """
+        WITH batch AS (
+            SELECT version
+            FROM config_sync.config_changelog
+            WHERE tenant_id = '*'
+            LIMIT :batch_size
+            FOR UPDATE SKIP LOCKED
+        )
+        UPDATE config_sync.config_changelog AS target
+        SET tenant_id = :platform_tenant_id
+        FROM batch
+        WHERE target.version = batch.version
+        RETURNING target.version;
+        """,
+        params={"platform_tenant_id": PLATFORM_TENANT_ID},
+    )
+    if migrated_changelog > 0:
+        logger.info(
+            "reconciled_config_changelog_platform_tenant_id",
+            migrated_count=migrated_changelog,
+            platform_tenant_id=PLATFORM_TENANT_ID,
+        )
 
 
 async def _reconcile_ip_shard(shard_url: str) -> None:
@@ -1050,6 +1359,94 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                         "ALTER TABLE ip.stitches ADD COLUMN IF NOT EXISTS filter_conditions JSONB NOT NULL DEFAULT '{}'::jsonb;"
                     )
                 )
+                await session.commit()
+
+                # Retire legacy '*' tenant sentinel on ip.stitches in favor of canonical PLATFORM_TENANT_ID
+                await _execute_chunked_mutation(
+                    session,
+                    """
+                    WITH batch AS (
+                        SELECT legacy.id
+                        FROM ip.stitches AS legacy
+                        WHERE legacy.tenant_id = '*'
+                          AND EXISTS (
+                              SELECT 1
+                              FROM ip.stitches AS canonical
+                              WHERE canonical.id = legacy.id
+                                AND canonical.tenant_id = :platform_tenant_id
+                          )
+                        LIMIT :batch_size
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    DELETE FROM ip.stitches AS target
+                    USING batch
+                    WHERE target.id = batch.id
+                      AND target.tenant_id = '*'
+                    RETURNING target.id;
+                    """,
+                    params={"platform_tenant_id": PLATFORM_TENANT_ID},
+                )
+                migrated_stitches = await _execute_chunked_mutation(
+                    session,
+                    """
+                    WITH batch AS (
+                        SELECT id
+                        FROM ip.stitches
+                        WHERE tenant_id = '*'
+                        LIMIT :batch_size
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE ip.stitches AS target
+                    SET tenant_id = :platform_tenant_id,
+                        updated_at = NOW()
+                    FROM batch
+                    WHERE target.id = batch.id
+                      AND target.tenant_id = '*'
+                    RETURNING target.id;
+                    """,
+                    params={"platform_tenant_id": PLATFORM_TENANT_ID},
+                )
+                if migrated_stitches > 0:
+                    logger.info(
+                        "reconciled_ip_stitches_platform_tenant_id",
+                        migrated_count=migrated_stitches,
+                        platform_tenant_id=PLATFORM_TENANT_ID,
+                    )
+                idx_def_result = await session.execute(
+                    text(
+                        """
+                        SELECT pg_get_indexdef(c.oid)
+                        FROM pg_class c
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = :schema_name
+                          AND c.relname = :index_name;
+                        """
+                    ),
+                    {
+                        "schema_name": "ip",
+                        "index_name": "uq_ip_stitches_concrete_id",
+                    },
+                )
+                existing_idx_def = idx_def_result.scalar_one_or_none()
+                if isinstance(existing_idx_def, str) and PLATFORM_TENANT_ID not in existing_idx_def:
+                    await session.execute(
+                        text("DROP INDEX IF EXISTS ip.uq_ip_stitches_concrete_id;")
+                    )
+                ip_reconcile_metadata = MetaData()
+                stitches_table = Table(
+                    "stitches",
+                    ip_reconcile_metadata,
+                    Column("id", String(64)),
+                    Column("tenant_id", String(64)),
+                    schema="ip",
+                )
+                stitches_concrete_idx = Index(
+                    "uq_ip_stitches_concrete_id",
+                    stitches_table.c.id,
+                    unique=True,
+                    postgresql_where=column("tenant_id") != literal(PLATFORM_TENANT_ID),
+                )
+                await session.execute(CreateIndex(stitches_concrete_idx, if_not_exists=True))
 
                 await session.execute(text("DROP TABLE IF EXISTS ip.simulator_sandboxes CASCADE;"))
                 await session.execute(
@@ -1266,15 +1663,17 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                     text("""
                     INSERT INTO identity.roles (id, tenant_id, name, description, capabilities, created_at, updated_at)
                     VALUES
-                        ('rol_1d55e88863640224', 'ten_000000000000000000000000', 'Viewer', 'Read-only access to a specific tenant.', ARRAY['tenant_settings:read', 'users:read', 'roles:read', 'api_keys:read', 'webhooks:read', 'invoices:read', 'ip:records:canonical:read', 'ip:traces:read'], NOW(), NOW()),
-                        ('rol_c58e771032bf4aa1', 'ten_000000000000000000000000', 'CustomerSupport', 'Customer Support with diagnostic access including L1, L2, L3 records and Traces.', ARRAY['ip:records:canonical:read', 'ip:records:raw:read', 'ip:traces:read', 'ip:sync:trigger', 'ip:flows:read'], NOW(), NOW()),
-                        ('rol_e93f882143cc5bb2', 'ten_000000000000000000000000', 'Customer', 'Customer role with restricted view (L3 normalized data, GEM crosswalk, and Traces only).', ARRAY['ip:records:canonical:read', 'ip:traces:read', 'ip:flows:read'], NOW(), NOW())
+                        ('rol_1d55e88863640224', :platform_tenant_id, 'Viewer', 'Read-only access to a specific tenant.', ARRAY['tenant_settings:read', 'users:read', 'roles:read', 'api_keys:read', 'webhooks:read', 'invoices:read', 'ip:records:canonical:read', 'ip:traces:read'], NOW(), NOW()),
+                        ('rol_c58e771032bf4aa1', :platform_tenant_id, 'CustomerSupport', 'Customer Support with diagnostic access including L1, L2, L3 records and Traces.', ARRAY['ip:records:canonical:read', 'ip:records:raw:read', 'ip:traces:read', 'ip:sync:trigger', 'ip:flows:read'], NOW(), NOW()),
+                        ('rol_e93f882143cc5bb2', :platform_tenant_id, 'Customer', 'Customer role with restricted view (L3 normalized data, GEM crosswalk, and Traces only).', ARRAY['ip:records:canonical:read', 'ip:traces:read', 'ip:flows:read'], NOW(), NOW())
                     ON CONFLICT (tenant_id, name) DO UPDATE SET
                         description = EXCLUDED.description,
                         capabilities = EXCLUDED.capabilities,
                         updated_at = NOW();
-                    """)
+                    """),
+                    {"platform_tenant_id": PLATFORM_TENANT_ID},
                 )
+                await _reconcile_identity_gold_standard_schema(session)
                 await _reconcile_ucp_cellular_sharding(session)
                 await _reconcile_pubsub_schema(session)
                 await _reconcile_config_sync_schema(session)

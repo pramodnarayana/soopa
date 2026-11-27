@@ -108,3 +108,75 @@ class UserCreatedEvent(DomainEvent):
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
+
+
+@dataclass(frozen=True)
+class UserTokensRevokedEvent(DomainEvent):
+    user_id: str
+    tokens_valid_after_iso: str
+    reason: str
+
+    @property
+    def event_name(self) -> str:
+        return IdentityEventType.USER_TOKENS_REVOKED.value
+
+    def get_routing_tenant_id(self) -> str | None:
+        return None
+
+
+@dataclass(frozen=True)
+class TenantTokensRevokedEvent(DomainEvent):
+    tenant_id: str
+    tokens_valid_after_iso: str
+    reason: str
+
+    @property
+    def event_name(self) -> str:
+        return IdentityEventType.TENANT_TOKENS_REVOKED.value
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class ResourceGrantUpdatedEvent(DomainEvent):
+    grant_id: str
+    tenant_id: str
+    resource_type: str
+    resource_id: str
+    action: str
+
+    @property
+    def event_name(self) -> str:
+        return IdentityEventType.RESOURCE_GRANT_UPDATED.value
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class PolicyRuleUpdatedEvent(DomainEvent):
+    policy_rule_id: str
+    tenant_id: str
+    action: str
+
+    @property
+    def event_name(self) -> str:
+        return IdentityEventType.POLICY_RULE_UPDATED.value
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class ExternalIdentityLinkedEvent(DomainEvent):
+    user_id: str
+    idp_issuer: str
+    idp_subject: str
+
+    @property
+    def event_name(self) -> str:
+        return IdentityEventType.EXTERNAL_IDENTITY_LINKED.value
+
+    def get_routing_tenant_id(self) -> str | None:
+        return None

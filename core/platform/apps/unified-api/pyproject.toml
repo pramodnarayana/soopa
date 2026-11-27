@@ -12,6 +12,7 @@ dependencies = [
     "notification",
     "security",
     "secret-store",
+    "storage",
     "ip",
     "strace",
     "config-sync",
@@ -50,6 +51,7 @@ observability = { workspace = true }
 notification = { workspace = true }
 security = { workspace = true }
 secret-store = { workspace = true }
+storage = { workspace = true }
 ip = { workspace = true }
 strace = { workspace = true }
 config-sync = { workspace = true }

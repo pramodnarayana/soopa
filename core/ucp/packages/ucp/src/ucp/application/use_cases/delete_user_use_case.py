@@ -41,9 +41,12 @@ class DeleteUserUseCase:
             await self._uow.role_repo.remove_user_roles(
                 tenant_id=command.tenant_id, user_id=user.id
             )
+            await self._uow.user_repo.remove_tenant_membership(
+                tenant_id=command.tenant_id, user_id=user.id
+            )
             await self._uow.user_repo.save(user)
 
-            has_memberships = await self._uow.role_repo.has_any_tenant_memberships(user.id)
+            has_memberships = await self._uow.user_repo.has_any_tenant_memberships(user.id)
             if not has_memberships:
                 del_res = user.mark_deleted()
                 if del_res.is_err:

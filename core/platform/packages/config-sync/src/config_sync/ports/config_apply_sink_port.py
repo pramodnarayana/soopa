@@ -4,15 +4,20 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from config_sync.domain.dtos import ConfigDeltaEvent, ConfigEntityRecord, ConfigSnapshot
+from config_sync.domain.dtos import (
+    ConfigCursor,
+    ConfigDeltaEvent,
+    ConfigEntityRecord,
+    ConfigSnapshot,
+)
 
 
 @runtime_checkable
 class ConfigApplySinkPort(Protocol):
     """Data Plane sink consuming verified Dynamic Watch snapshots and deltas (in-memory, LKG disk, or shard DB)."""
 
-    async def get_current_version(self, *, app_id: str, tenant_id: str) -> int:
-        """Returns the last durably applied version on this Data Plane shard (0 for cold start)."""
+    async def get_current_cursor(self, *, app_id: str, tenant_id: str) -> ConfigCursor:
+        """Returns the last durably applied `(txid, version)` cursor on this Data Plane shard."""
         ...
 
     async def apply_snapshot(self, snapshot: ConfigSnapshot) -> None:
@@ -27,6 +32,11 @@ class ConfigApplySinkPort(Protocol):
 @runtime_checkable
 class ReadableConfigSinkPort(ConfigApplySinkPort, Protocol):
     """ConfigApplySinkPort extension exposing lock-free read snapshots for downstream domain projections."""
+
+    @property
+    def current_cursor(self) -> ConfigCursor:
+        """Last durably applied monotonic `(txid, version)` cursor in this sink."""
+        ...
 
     @property
     def current_version(self) -> int:

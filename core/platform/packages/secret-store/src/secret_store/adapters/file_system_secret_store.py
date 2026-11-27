@@ -22,6 +22,47 @@ from secret_store.ports.secret_store_port import (
 logger = structlog.get_logger(__name__)
 
 DEFAULT_KEY_CATEGORY = "keys"
+SECURE_DIRECTORY_MODE = 0o700
+SECURE_FILE_MODE = 0o600
+
+
+def ensure_secure_directory(directory: Path) -> None:
+    """Create ``directory`` (and missing parents) with restrictive owner-only permissions (0o700)."""
+    if directory.exists():
+        return
+    missing_chain: list[Path] = []
+    cursor = directory
+    while not cursor.exists():
+        missing_chain.append(cursor)
+        parent = cursor.parent
+        if parent == cursor:
+            break
+        cursor = parent
+    directory.mkdir(mode=SECURE_DIRECTORY_MODE, parents=True, exist_ok=True)
+    for created_dir in reversed(missing_chain):
+        with contextlib.suppress(OSError):
+            os.chmod(created_dir, SECURE_DIRECTORY_MODE)
+
+
+def atomic_write_secure_file(target_path: Path, data: bytes) -> None:
+    """Atomically write secret bytes to ``target_path`` with 0o700 dirs, 0o600 file, fsync, and replace."""
+    ensure_secure_directory(target_path.parent)
+    temp_path = target_path.with_name(
+        f".{target_path.name}.{os.getpid()}.{os.urandom(6).hex()}.tmp"
+    )
+    fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, SECURE_FILE_MODE)
+    written = False
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, target_path)
+        written = True
+    finally:
+        if not written:
+            with contextlib.suppress(OSError):
+                temp_path.unlink(missing_ok=True)
 
 
 class FileSystemSecretStoreAdapter(SecretStorePort):
@@ -34,8 +75,7 @@ class FileSystemSecretStoreAdapter(SecretStorePort):
         path_resolver: MountedSecretPathResolverPort | None = None,
     ) -> None:
         self._secrets_mount_path = Path(secrets_mount_path).resolve()
-        if not self._secrets_mount_path.exists():
-            self._secrets_mount_path.mkdir(parents=True, exist_ok=True)
+        ensure_secure_directory(self._secrets_mount_path)
         self._secrets_prefix = (
             secrets_prefix if secrets_prefix is not None else os.getenv("SECRETS_PREFIX", "")
         ).strip("/")
@@ -98,23 +138,7 @@ class FileSystemSecretStoreAdapter(SecretStorePort):
 
     @staticmethod
     def _atomic_write_key(target_path: Path, data: bytes) -> None:
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = target_path.with_name(
-            f".{target_path.name}.{os.getpid()}.{os.urandom(6).hex()}.tmp"
-        )
-        fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        written = False
-        try:
-            with os.fdopen(fd, "wb") as handle:
-                handle.write(data)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temp_path, target_path)
-            written = True
-        finally:
-            if not written:
-                with contextlib.suppress(OSError):
-                    temp_path.unlink(missing_ok=True)
+        atomic_write_secure_file(target_path, data)
 
     async def retrieve_secret(self, vault_ref: str) -> bytes:
         """Retrieves any secret (private key, certificate, or credential) from the filesystem."""

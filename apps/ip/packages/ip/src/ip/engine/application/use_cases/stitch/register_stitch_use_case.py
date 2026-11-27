@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import structlog
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
 from seedwork.domain.types import JsonPrimitive
 from seedwork.utils import generate_id
@@ -85,7 +86,7 @@ class RegisterStitchUseCase:
                 if (
                     existing is not None
                     and existing.tenant_id != tenant_id
-                    and existing.tenant_id != "*"
+                    and existing.tenant_id != PLATFORM_TENANT_ID
                 ):
                     bound.error(
                         "register_stitch.cross_tenant_collision",
@@ -104,7 +105,7 @@ class RegisterStitchUseCase:
             if (
                 existing_in_mem is not None
                 and existing_in_mem.tenant_id != tenant_id
-                and existing_in_mem.tenant_id != "*"
+                and existing_in_mem.tenant_id != PLATFORM_TENANT_ID
             ):
                 bound.error(
                     "register_stitch.cross_tenant_collision",

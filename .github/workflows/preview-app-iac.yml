@@ -89,7 +89,7 @@ jobs:
         with:
           state-bucket: ${{ env.STATE_BUCKET }}
           pulumi-config-passphrase: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-          setup-zitadel: "true"
+          setup-zitadel: "false"
 
       # Step 1: Database Migrators (Platform & EDI)
       - name: Preview Platform Migrator Stack

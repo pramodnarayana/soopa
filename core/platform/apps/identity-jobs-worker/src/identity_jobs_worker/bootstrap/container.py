@@ -40,6 +40,7 @@ class WorkerContainer:
         self.aws_endpoint_url: str | None = settings.aws_endpoint_url
         self.sqs_jobs_queue_url = settings.sqs_identity_jobs_queue_url
         self.aws_region = settings.aws_region
+        self.pubsub_transport = settings.pubsub_transport
 
         self.outbox_relay: NotifyOutboxRelay | None = None
         self.jobs_consumer: ConsumerManagerPort | None = None
@@ -56,6 +57,7 @@ class WorkerContainer:
             destination_uri=self.sns_identity_events_topic_arn,
             region_name=self.aws_region,
             endpoint_url=self.aws_endpoint_url,
+            transport=self.pubsub_transport,
             session_factory=self.session_factory,
             database_url=self.database_url,
         )
@@ -109,6 +111,7 @@ class WorkerContainer:
             handler=job_dispatcher.dispatch,
             region_name=self.aws_region,
             endpoint_url=self.aws_endpoint_url,
+            transport=self.pubsub_transport,
             session_factory=self.session_factory,
             database_url=self.database_url,
         )

@@ -34,7 +34,7 @@ async def test_create_user_success(
         id=tenant_id,
         name="Test Tenant",
         slug="test",
-        idp_tenant_id="idp_org_123",
+        idp_realm_name="idp_org_123",
         status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
@@ -69,6 +69,7 @@ async def test_create_user_success(
     assert saved_user.email == "test@example.com"
     assert saved_user.name == "Test User"
 
+    assert (tenant_id, user_id) in fake_uow.user_repo.tenant_memberships
     role_memberships = fake_uow.role_repo.user_roles
     assert any(r[0] == tenant_id and r[1] == user_id and r[2] == role_id for r in role_memberships)
 
@@ -104,7 +105,7 @@ async def test_create_user_no_idp_tenant(
         id=tenant_id,
         name="Test Tenant",
         slug="test",
-        idp_tenant_id=None,
+        idp_realm_name=None,
         status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
@@ -135,7 +136,7 @@ async def test_create_user_role_not_found(
         id=tenant_id,
         name="Test Tenant",
         slug="test",
-        idp_tenant_id="idp_org_123",
+        idp_realm_name="idp_org_123",
         status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),

@@ -5,10 +5,7 @@ import { useAuth } from 'react-oidc-context';
 import { TenantContext } from '../../contexts/TenantContext';
 import { useGetTenant } from '../../domains/tenants/api/queries';
 import { useAuthUser } from '../../hooks/useAuthUser';
-import { resolveTenantId } from '../../lib/auth';
 import { getApiUrl } from '../../lib/config';
-
-const logger = console;
 
 export interface TenantProviderProps {
   children: (props: {
@@ -22,22 +19,23 @@ export interface TenantProviderProps {
 export function TenantProvider({ children }: TenantProviderProps) {
   const auth = useAuth();
   const token = auth.user?.access_token ?? '';
-  const tenantId = resolveTenantId(token, auth.user?.profile ?? {});
-  // Use the canonical platform user ID (usr_...) from our own /auth/me endpoint,
-  // NOT the raw OIDC `sub` from the JWT (which is the Zitadel numeric IDP user ID).
-  // This ensures our IDOR guards comparing against identity.subject always pass.
-  const { data: authUser } = useAuthUser();
+  // Single source of truth: canonical subject and authorized tenant scope come
+  // exclusively from `GET /api/v1/auth/me` (never decoded from raw JWTs in the browser).
+  const { data: authUser, isLoading: isAuthUserLoading } = useAuthUser();
   const canonicalUserId = authUser?.subject ?? '';
+  const tenantId = authUser?.tenantId ?? authUser?.authorizedTenants?.[0];
 
   const { data: tenant } = useGetTenant(tenantId ?? '');
 
-  if (!tenantId) {
-    logger.error('Tenant ID resolution failed', {
-      hasToken: !!token,
-      hasUser: !!auth.user,
-      profileKeyCount: Object.keys(auth.user?.profile ?? {}).length,
-    });
+  if (isAuthUserLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/40">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" />
+      </div>
+    );
+  }
 
+  if (!tenantId) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/40">
         <div className="max-w-md rounded-lg border border-border bg-card p-6 shadow-xs">
@@ -61,6 +59,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
     <div className="flex w-full items-center gap-2.5">
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
         <svg
+          aria-hidden="true"
           xmlns="http://www.w3.org/2000/svg"
           width="15"
           height="15"
@@ -71,7 +70,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1-1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+          <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
         </svg>
       </div>
       <span className="truncate text-sm font-semibold tracking-tight text-foreground">
@@ -80,14 +79,17 @@ export function TenantProvider({ children }: TenantProviderProps) {
     </div>
   );
 
+  const displayEmail = authUser?.email ?? auth.user?.profile.email ?? '';
+  const roleLabel = authUser?.capabilities?.includes('tenant:admin') ? 'Tenant Admin' : 'Member';
+
   const userProfile = (
     <div className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-sidebar-accent">
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-        {auth.user?.profile.email?.charAt(0).toUpperCase() || 'T'}
+        {displayEmail.charAt(0).toUpperCase() || 'U'}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground">{auth.user?.profile.email}</p>
-        <p className="truncate text-[11px] text-muted-foreground">Tenant Admin</p>
+        <p className="truncate text-xs font-medium text-foreground">{displayEmail}</p>
+        <p className="truncate text-[11px] text-muted-foreground">{roleLabel}</p>
       </div>
       <button
         type="button"
@@ -100,7 +102,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
     </div>
   );
 
-  const finalTenantId = tenant?.id ?? tenantId ?? '';
+  const finalTenantId = tenant?.id ?? tenantId;
 
   const headerContent = (
     <NotificationBell
@@ -122,7 +124,7 @@ export function TenantProvider({ children }: TenantProviderProps) {
         sidebarHeader,
         userProfile,
         headerContent,
-        tenantSubscriptions: tenant?.subscriptions ?? [],
+        tenantSubscriptions: tenant?.subscriptions ?? authUser?.subscribedApps ?? [],
       })}
     </TenantContext.Provider>
   );

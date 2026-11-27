@@ -1,4 +1,4 @@
-"""SQLAlchemy 2.0 ORM adapter for `config_sync.config_changelog` with atomic PostgreSQL NOTIFY."""
+"""SQLAlchemy 2.0 ORM adapter for `config_sync.config_changelog` with `xid8` MVCC visibility barrier."""
 
 from __future__ import annotations
 
@@ -8,27 +8,33 @@ from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime, timedelta
 
 import structlog
-from database.config_changelog import record_config_changelog_entry
+from database.config_changelog import (
+    config_changelog_visibility_barrier,
+    record_config_changelog_entry,
+)
 from database.models.config_sync import ConfigChangelogEntry
 from seedwork.domain.types import JsonDict
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config_sync.domain.checksum import compute_payload_checksum
-from config_sync.domain.dtos import ConfigDeltaEvent
-from config_sync.domain.enums import ConfigChangeAction, ConfigSyncChannel
+from config_sync.domain.dtos import (
+    ChangelogVisibilityWatermark,
+    ConfigCursor,
+    ConfigDeltaEvent,
+)
+from config_sync.domain.enums import ConfigChangeAction
 from config_sync.ports.config_changelog_port import ConfigChangelogRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
 SessionScopeFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
-WILDCARD_TENANT_ID = "*"
 
 
 class SqlAlchemyConfigChangelogRepository(ConfigChangelogRepositoryPort):
-    """Durable PostgreSQL append-only changelog driving Dynamic Watch catch-up & multi-pod NOTIFY."""
+    """Durable PostgreSQL append-only changelog driving linearizable `(txid, version)` tailing."""
 
     _CLEANUP_CHUNK_SIZE: int = 1000
 
@@ -36,11 +42,9 @@ class SqlAlchemyConfigChangelogRepository(ConfigChangelogRepositoryPort):
         self,
         session_factory: SessionScopeFactory,
         *,
-        notify_channel: str = ConfigSyncChannel.CONFIG_CHANGELOG_NOTIFY.value,
-        shared_tenant_ids: tuple[str, ...] = (WILDCARD_TENANT_ID,),
+        shared_tenant_ids: tuple[str, ...] = (),
     ) -> None:
         self._session_scope = session_factory
-        self._notify_channel = notify_channel
         self._shared_tenant_ids = shared_tenant_ids
 
     @staticmethod
@@ -54,6 +58,7 @@ class SqlAlchemyConfigChangelogRepository(ConfigChangelogRepositoryPort):
             entity_id=row.entity_id,
             action=ConfigChangeAction(row.action),
             version=int(row.version),
+            txid=int(row.txid),
             checksum=row.checksum,
             payload=dict(row.payload),
         )
@@ -70,7 +75,7 @@ class SqlAlchemyConfigChangelogRepository(ConfigChangelogRepositoryPort):
         payload: JsonDict,
         event_id: str | None = None,
     ) -> ConfigDeltaEvent:
-        """Appends a changelog row and schedules `pg_notify` inside the caller's active ACID transaction."""
+        """Appends a changelog row inside the caller's active ACID transaction (zero `AsyncQueueLock`)."""
         resolved_event_id = event_id or generate_id(SystemIdPrefix.GENERIC)
         checksum = compute_payload_checksum(payload)
         entry = await record_config_changelog_entry(
@@ -83,7 +88,6 @@ class SqlAlchemyConfigChangelogRepository(ConfigChangelogRepositoryPort):
             action=action.value,
             checksum=checksum,
             payload=dict(payload),
-            notify_channel=self._notify_channel,
         )
         return self._to_delta_event(entry)
 
@@ -122,60 +126,115 @@ class SqlAlchemyConfigChangelogRepository(ConfigChangelogRepositoryPort):
         )
         return delta
 
-    async def get_latest_version(self, *, app_id: str, tenant_id: str) -> int:
+    async def get_latest_cursor(self, *, app_id: str, tenant_id: str) -> ConfigCursor:
         c = ConfigChangelogEntry
-        tenant_scope = (tenant_id, *self._shared_tenant_ids)
+        tenant_scope = tuple({tenant_id, *self._shared_tenant_ids})
         async with self._session_scope() as session:
-            stmt = select(func.coalesce(func.max(c.version), 0)).where(
-                c.app_id == app_id,
-                or_(c.tenant_id == tenant_id, c.tenant_id.in_(tenant_scope)),
+            stmt = (
+                select(c.txid, c.version)
+                .where(
+                    c.app_id == app_id,
+                    c.tenant_id.in_(tenant_scope),
+                    config_changelog_visibility_barrier(),
+                )
+                .order_by(c.txid.desc(), c.version.desc())
+                .limit(1)
             )
-            res = await session.execute(stmt)
-            return int(res.scalar_one())
+            row = (await session.execute(stmt)).first()
+            if row is None:
+                return ConfigCursor.zero()
+            return ConfigCursor(txid=int(row[0]), version=int(row[1]))
+
+    async def get_global_safe_cursor(self) -> ConfigCursor:
+        c = ConfigChangelogEntry
+        async with self._session_scope() as session:
+            stmt = (
+                select(c.txid, c.version)
+                .where(config_changelog_visibility_barrier())
+                .order_by(c.txid.desc(), c.version.desc())
+                .limit(1)
+            )
+            row = (await session.execute(stmt)).first()
+            if row is None:
+                return ConfigCursor.zero()
+            return ConfigCursor(txid=int(row[0]), version=int(row[1]))
 
     async def get_deltas_since(
         self,
         *,
         app_id: str,
         tenant_id: str,
-        since_version: int,
+        since_cursor: ConfigCursor,
         limit: int = 1000,
     ) -> list[ConfigDeltaEvent]:
         c = ConfigChangelogEntry
-        tenant_scope = (tenant_id, *self._shared_tenant_ids)
+        tenant_scope = tuple({tenant_id, *self._shared_tenant_ids})
         async with self._session_scope() as session:
             stmt = (
                 select(c)
                 .where(
                     c.app_id == app_id,
                     c.tenant_id.in_(tenant_scope),
-                    c.version > since_version,
+                    tuple_(c.txid, c.version) > (since_cursor.txid, since_cursor.version),
+                    config_changelog_visibility_barrier(),
                 )
-                .order_by(c.version.asc())
+                .order_by(c.txid.asc(), c.version.asc())
                 .limit(limit)
             )
             rows = list((await session.execute(stmt)).scalars().all())
         return [self._to_delta_event(row) for row in rows]
 
-    async def get_entry_by_version(self, *, version: int) -> ConfigDeltaEvent | None:
-        c = ConfigChangelogEntry
-        async with self._session_scope() as session:
-            row = (
-                await session.execute(select(c).where(c.version == version))
-            ).scalar_one_or_none()
-            return self._to_delta_event(row) if row is not None else None
-
-    async def get_entries_after_version(
+    async def get_entries_after_cursor(
         self,
         *,
-        since_version: int,
+        since_cursor: ConfigCursor,
         limit: int = 1000,
     ) -> list[ConfigDeltaEvent]:
         c = ConfigChangelogEntry
         async with self._session_scope() as session:
-            stmt = select(c).where(c.version > since_version).order_by(c.version.asc()).limit(limit)
+            stmt = (
+                select(c)
+                .where(
+                    tuple_(c.txid, c.version) > (since_cursor.txid, since_cursor.version),
+                    config_changelog_visibility_barrier(),
+                )
+                .order_by(c.txid.asc(), c.version.asc())
+                .limit(limit)
+            )
             rows = list((await session.execute(stmt)).scalars().all())
         return [self._to_delta_event(row) for row in rows]
+
+    async def get_visibility_lag_metrics(self) -> ChangelogVisibilityWatermark:
+        """O(log N) backward B-tree scans comparing visibility-safe head vs raw committed head."""
+        c = ConfigChangelogEntry
+        async with self._session_scope() as session:
+            safe_row = (
+                await session.execute(
+                    select(c.txid, c.version)
+                    .where(config_changelog_visibility_barrier())
+                    .order_by(c.txid.desc(), c.version.desc())
+                    .limit(1)
+                )
+            ).first()
+            raw_row = (
+                await session.execute(
+                    select(c.txid, c.version).order_by(c.txid.desc(), c.version.desc()).limit(1)
+                )
+            ).first()
+            safe_cursor = (
+                ConfigCursor(txid=int(safe_row[0]), version=int(safe_row[1]))
+                if safe_row is not None
+                else ConfigCursor.zero()
+            )
+            raw_cursor = (
+                ConfigCursor(txid=int(raw_row[0]), version=int(raw_row[1]))
+                if raw_row is not None
+                else ConfigCursor.zero()
+            )
+            return ChangelogVisibilityWatermark(
+                safe_cursor=safe_cursor,
+                raw_max_cursor=raw_cursor,
+            )
 
     async def cleanup_old_entries(self, *, retention_days: int = 30) -> int:
         if retention_days < 0:
@@ -208,4 +267,4 @@ class SqlAlchemyConfigChangelogRepository(ConfigChangelogRepositoryPort):
         return total_deleted
 
 
-__all__ = ["WILDCARD_TENANT_ID", "SessionScopeFactory", "SqlAlchemyConfigChangelogRepository"]
+__all__ = ["SessionScopeFactory", "SqlAlchemyConfigChangelogRepository"]

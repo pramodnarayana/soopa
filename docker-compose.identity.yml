@@ -1,50 +1,47 @@
-
 services:
-  zitadel_postgres:
+  casdoor_postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-zitadel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      POSTGRES_DB: ${POSTGRES_DB:-zitadel}
+      POSTGRES_USER: ${CASDOOR_POSTGRES_USER:-casdoor}
+      POSTGRES_PASSWORD: ${CASDOOR_POSTGRES_PASSWORD:-casdoor_password}
+      POSTGRES_DB: ${CASDOOR_POSTGRES_DB:-casdoor}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB:-zitadel} -U ${POSTGRES_USER:-zitadel}"]
-      interval: 10s
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -d ${CASDOOR_POSTGRES_DB:-casdoor} -U ${CASDOOR_POSTGRES_USER:-casdoor}",
+        ]
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 10s
     volumes:
-      - zitadel_data:/var/lib/postgresql/data:rw
+      - casdoor_data:/var/lib/postgresql/data:rw
 
-  zitadel:
-    image: ghcr.io/zitadel/zitadel:${IDENTITY_VERSION:?IDENTITY_VERSION must be set in versions.env}
+  casdoor:
+    image: casbin/casdoor:${CASDOOR_VERSION:?CASDOOR_VERSION must be set in versions.env}
     restart: unless-stopped
-    command: start-from-init --steps /zitadel-first-instance.yaml --masterkeyFromEnv --tlsMode disabled
     environment:
-      ZITADEL_MASTERKEY: ${IDENTITY_MASTERKEY:?IDENTITY_MASTERKEY must be set (32 bytes)}
-      ZITADEL_PORT: 8080
-      ZITADEL_EXTERNALDOMAIN: ucp.localhost
-      ZITADEL_EXTERNALPORT: 8080
-      ZITADEL_EXTERNALSECURE: false
-      ZITADEL_DATABASE_POSTGRES_HOST: zitadel_postgres
-      ZITADEL_DATABASE_POSTGRES_PORT: 5432
-      ZITADEL_DATABASE_POSTGRES_DATABASE: ${POSTGRES_DB:-zitadel}
-      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${POSTGRES_USER:-zitadel}
-      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_USER:-zitadel}
-      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
-      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
-      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_ACTIVE: "false"
-      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "false"
+      RUNNING_IN_DOCKER: "true"
+      httpport: "8080"
+      driverName: "postgres"
+      dataSourceName: "user=${CASDOOR_POSTGRES_USER:-casdoor} password=${CASDOOR_POSTGRES_PASSWORD:-casdoor_password} host=casdoor_postgres port=5432 sslmode=disable dbname=${CASDOOR_POSTGRES_DB:-casdoor}"
+      dbName: "${CASDOOR_POSTGRES_DB:-casdoor}"
+      initAdminPassword: "${CASDOOR_ADMIN_PASSWORD:-Password1!}"
     ports:
       - "8080:8080"
     volumes:
-      - ./core/ucp/zitadel-first-instance.yaml:/zitadel-first-instance.yaml:ro
-      - ./infra/cloud/zitadel/machinekey:/machinekey
+      - ./infra/local/casdoor/conf/app.conf:/conf/app.conf:ro
     depends_on:
-      zitadel_postgres:
+      casdoor_postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://127.0.0.1:8080/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
 volumes:
-  zitadel_data:
+  casdoor_data:

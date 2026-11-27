@@ -67,6 +67,7 @@ class WorkerContainer:
             destination_uri=self.settings.sns_tenant_events_topic_arn,
             endpoint_url=self.settings.aws_endpoint_url,
             region_name=self.settings.aws_region,
+            transport=self.settings.pubsub_transport,
             session_factory=self.session_factory,
             database_url=self.settings.database_url,
         )
@@ -140,6 +141,7 @@ class WorkerContainer:
             handler=job_dispatcher.dispatch,
             region_name=self.settings.aws_region,
             endpoint_url=self.settings.aws_endpoint_url,
+            transport=self.settings.pubsub_transport,
             session_factory=self.session_factory,
             database_url=self.settings.database_url,
         )

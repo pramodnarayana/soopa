@@ -4,6 +4,8 @@ import { useAuthUser } from '../hooks/useAuthUser';
 export interface AuthorizationContextValue {
   capabilities: string[];
   isPlatformAdmin: boolean;
+  subscribedApps: string[];
+  mfaVerified: boolean;
 }
 
 export const AuthorizationContext = createContext<AuthorizationContextValue | null>(null);
@@ -62,12 +64,16 @@ export function AuthorizationProvider({ children }: { children: ReactNode }) {
 
   const capabilities = authUser?.capabilities ?? [];
   const isPlatformAdmin = authUser?.isPlatformAdmin ?? false;
+  const subscribedApps = authUser?.subscribedApps ?? [];
+  const mfaVerified = authUser?.mfaVerified ?? false;
 
   return (
     <AuthorizationContext.Provider
       value={{
         capabilities,
         isPlatformAdmin,
+        subscribedApps,
+        mfaVerified,
       }}
     >
       {children}

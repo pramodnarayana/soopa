@@ -20,7 +20,7 @@ class MountedSecretPathResolver(MountedSecretPathResolverPort):
             candidate = (mount_root / clean_ref).resolve()
             if candidate.is_relative_to(mount_root):
                 return candidate
-            logger.warning(
+            logger.error(
                 "secrets_mount_path_traversal_prevented",
                 vault_ref=vault_ref,
                 candidate=str(candidate),

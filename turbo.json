@@ -36,7 +36,6 @@
       "persistent": true
     },
     "start:dev": {
-      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     },

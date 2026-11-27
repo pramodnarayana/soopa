@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field, SecretStr
+from pubsub.config import PlatformPubSubSettings
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
 from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 
@@ -28,6 +29,9 @@ class IpEngineSettings(CleanBaseSettings):
     )
     db_pool_size: int = Field(default=10, validation_alias="IP_DB_POOL_SIZE")
     db_max_overflow: int = Field(default=20, validation_alias="IP_DB_MAX_OVERFLOW")
+
+    # Pub/Sub Transport Policy
+    pubsub: PlatformPubSubSettings = Field(default_factory=PlatformPubSubSettings)
 
     # AWS & LocalStack transport
     aws_region: str = Field(default="us-east-1", validation_alias="AWS_DEFAULT_REGION")
@@ -200,6 +204,27 @@ class IpEngineSettings(CleanBaseSettings):
         default=30.0,
         validation_alias="IP_CONFIG_WATCH_TENANT_DISCOVERY_SEC",
     )
+
+    @property
+    def pubsub_transport(self) -> str | None:
+        return self.pubsub.transport
+
+    @model_validator(mode="after")
+    def validate_pubsub_transport_uris(self) -> IpEngineSettings:
+        self.pubsub.validate_uris(
+            {
+                "SQS_IP_ORCHESTRATOR_REALTIME_QUEUE_URL": self.ip_orchestrator_realtime_queue_url,
+                "SQS_IP_ORCHESTRATOR_BULK_QUEUE_URL": self.ip_orchestrator_bulk_queue_url,
+                "SQS_IP_DELIVERY_REALTIME_QUEUE_URL": self.ip_delivery_realtime_queue_url,
+                "SQS_IP_DELIVERY_BULK_QUEUE_URL": self.ip_delivery_bulk_queue_url,
+                "SQS_IP_CONTROL_PLANE_JOBS_QUEUE_URL": self.ip_control_plane_jobs_queue_url,
+                "SQS_IP_DATA_PLANE_JOBS_QUEUE_URL": self.ip_data_plane_jobs_queue_url,
+                "SNS_IP_EVENTS_TOPIC_ARN": self.ip_events_topic_arn,
+                "SQS_NOTIFICATION_QUEUE_URL": self.notification_queue_url,
+            }
+        )
+        self.aws_endpoint_url = self.pubsub.effective_aws_endpoint_url(self.aws_endpoint_url)
+        return self
 
 
 @lru_cache(maxsize=1)

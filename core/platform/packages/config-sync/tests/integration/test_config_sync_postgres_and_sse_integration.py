@@ -3,9 +3,12 @@
 Exercises:
 1. `SqlAlchemyConfigChangelogRepository`: atomic append, strictly monotonic BigInt versions,
    wildcard `*` tenant visibility, and chunked CTE cleanup (inside SAVEPOINT rollback).
-2. `PostgresNotifyConfigBroadcasterBridge`: live PostgreSQL `LISTEN/NOTIFY` `<200B` pointer
-   push -> DB hydration -> `InMemoryRingBufferBroadcaster` real-time fan-out.
-3. End-to-end IP Control Plane -> Data Plane Dynamic Watch:
+2. `ChangelogCursorBroadcasterBridge`: live linearizable `xid8` Drain-Until-Empty tailing
+   and large-payload (>12KB) fan-out into `InMemoryRingBufferBroadcaster`.
+3. PostgreSQL MVCC `xid8` Visibility-Barrier concurrency proof: proves uncommitted slow
+   transaction T1 + fast committed transaction T2 NEVER skip T1 on live tailing OR cold
+   snapshot handoff.
+4. End-to-end IP Control Plane -> Data Plane Dynamic Watch:
    `SqlAlchemyStitchRepository` (`save` + `delete`) & `SqlAlchemyMappingSpecRepository` ->
    `config_sync.config_changelog` -> `IpConfigCatalogProvider` -> FastAPI SSE router ->
    `HttpxSseConfigWatchClient` -> `IpStitchCatalogSink` + LKG disk -> `InMemoryStitchCatalogRegistry`.
@@ -23,12 +26,19 @@ from pathlib import Path
 import httpx
 import pytest
 from config_sync.adapters.inbound.fastapi_watch_router import create_config_sync_router
+from config_sync.domain.dtos import ConfigCursor
 from config_sync.domain.enums import ConfigChangeAction, ConfigSyncJobName
+from config_sync.domain.monotonic_guard import MonotonicCatalogState
 from config_sync.provider import ConfigSyncProvider
+from database.config_changelog import (
+    get_latest_config_changelog_cursor_in_session,
+    record_config_changelog_entry,
+)
 from database.models.config_sync import ConfigChangelogEntry
 from database.provider import get_async_engine
 from database.testing import assert_test_database_url
 from fastapi import FastAPI
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from ip.engine.adapters.outbound.config_sync.ip_config_catalog_provider import (
     IpConfigCatalogProvider,
 )
@@ -53,7 +63,7 @@ from scheduler_worker.bootstrap.container import create_job_dispatcher
 from seedwork.domain.types import JsonDict
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
-from sqlalchemy import delete, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 pytestmark = pytest.mark.integration
@@ -81,12 +91,23 @@ async def isolated_session_factory() -> AsyncGenerator[SessionFactory]:
     await engine.dispose()
 
 
+async def _changelog_version_exists(session_factory: SessionFactory, version: int) -> bool:
+    async with session_factory() as session:
+        row = (
+            await session.execute(
+                select(ConfigChangelogEntry.version).where(ConfigChangelogEntry.version == version)
+            )
+        ).scalar_one_or_none()
+        return row is not None
+
+
 @pytest.mark.integration
-async def test_sqlalchemy_config_changelog_monotonic_wildcard_and_chunked_cleanup(
+async def test_sqlalchemy_config_changelog_monotonic_platform_shared_and_chunked_cleanup(
     isolated_session_factory: SessionFactory,
 ) -> None:
     repo = ConfigSyncProvider.create_changelog_repository(
         session_factory=isolated_session_factory,
+        shared_tenant_ids=(PLATFORM_TENANT_ID,),
     )
     tenant_id = f"ten_cs_{generate_id(SystemIdPrefix.GENERIC)}"
 
@@ -100,24 +121,25 @@ async def test_sqlalchemy_config_changelog_monotonic_wildcard_and_chunked_cleanu
     )
     d2 = await repo.append_change(
         app_id="edi",
-        tenant_id="*",
+        tenant_id=PLATFORM_TENANT_ID,
         entity_type="as2_partner",
         entity_id="ptr_global",
         action=ConfigChangeAction.UPSERT,
         payload={"id": "ptr_global", "name": "Platform Shared"},
     )
-    assert d2.version > d1.version
+    assert d2.cursor > d1.cursor
 
-    latest = await repo.get_latest_version(app_id="edi", tenant_id=tenant_id)
-    assert latest == d2.version
+    latest = await repo.get_latest_cursor(app_id="edi", tenant_id=tenant_id)
+    assert latest == d2.cursor
+    assert (await repo.get_global_safe_cursor()) >= d2.cursor
 
     deltas = await repo.get_deltas_since(
         app_id="edi",
         tenant_id=tenant_id,
-        since_version=d1.version - 1,
+        since_cursor=ConfigCursor(txid=d1.txid, version=d1.version - 1),
     )
-    assert [d.version for d in deltas] == [d1.version, d2.version]
-    assert (await repo.get_entry_by_version(version=d2.version)) is not None
+    assert [d.cursor for d in deltas] == [d1.cursor, d2.cursor]
+    assert await _changelog_version_exists(isolated_session_factory, d2.version)
 
     # Age d1 beyond retention window and verify chunked CTE cleanup deletes only aged row
     async with isolated_session_factory() as session:
@@ -130,8 +152,8 @@ async def test_sqlalchemy_config_changelog_monotonic_wildcard_and_chunked_cleanu
 
     deleted = await repo.cleanup_old_entries(retention_days=30)
     assert deleted >= 1
-    assert (await repo.get_entry_by_version(version=d1.version)) is None
-    assert (await repo.get_entry_by_version(version=d2.version)) is not None
+    assert not await _changelog_version_exists(isolated_session_factory, d1.version)
+    assert await _changelog_version_exists(isolated_session_factory, d2.version)
 
     # Verify scheduler-worker `create_job_dispatcher` executes CONFIG_CHANGELOG_CLEANUP in-process!
     async with isolated_session_factory() as session:
@@ -161,33 +183,34 @@ async def test_sqlalchemy_config_changelog_monotonic_wildcard_and_chunked_cleanu
             next_run_at=datetime.now(UTC),
         )
     )
-    assert (await repo.get_entry_by_version(version=d2.version)) is None
+    assert not await _changelog_version_exists(isolated_session_factory, d2.version)
 
 
 @pytest.mark.integration
-async def test_postgres_notify_broadcaster_bridge_live_push_roundtrip() -> None:
-    """Proves real PostgreSQL `LISTEN/NOTIFY` `<200B` pointer push hydrates full delta into broadcaster."""
+async def test_cursor_broadcaster_bridge_live_push_and_large_payload_roundtrip() -> None:
+    """Proves linearizable `ChangelogCursorBroadcasterBridge` streams >12KB deltas with zero pg_notify.
+
+    Uses independent committed transactions against `*_test` (rather than a single-connection
+    SAVEPOINT) because the background tailer task reads from a separate pooled connection.
+    """
     db_url = assert_test_database_url(os.environ["DATABASE_URL"])
     engine = get_async_engine(db_url, statement_cache_size=0)
     session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
     repo = ConfigSyncProvider.create_changelog_repository(session_factory=session_factory)
     broadcaster = ConfigSyncProvider.create_broadcaster()
-    bridge = ConfigSyncProvider.create_notify_bridge(
-        database_url=db_url,
+    bridge = ConfigSyncProvider.create_cursor_broadcaster_bridge(
         changelog_repo=repo,
         broadcaster=broadcaster,
+        poll_interval_seconds=0.05,
     )
 
-    tenant_id = f"ten_notify_{generate_id(SystemIdPrefix.GENERIC)}"
+    tenant_id = f"ten_cursor_{generate_id(SystemIdPrefix.GENERIC)}"
     created_version: int | None = None
+    await bridge.initialize_cursor()
     bridge.start()
     try:
-        # Allow asyncpg LISTEN connection to establish
-        await asyncio.sleep(0.25)
-
         async with broadcaster.subscribe(app_id="ip", tenant_id=tenant_id) as sub:
-            # Write a payload > 10KB to prove pointer-only NOTIFY bypasses PG's 8KB NOTIFY limit!
             large_payload: JsonDict = {"id": "spec_big", "blob": "X" * 12000}
             delta = await repo.append_change(
                 app_id="ip",
@@ -200,7 +223,7 @@ async def test_postgres_notify_broadcaster_bridge_live_push_roundtrip() -> None:
             created_version = delta.version
 
             received = await asyncio.wait_for(sub.__aiter__().__anext__(), timeout=5.0)
-            assert received.version == delta.version
+            assert received.cursor == delta.cursor
             assert received.entity_id == "spec_big"
             assert received.payload["blob"] == "X" * 12000
     finally:
@@ -210,6 +233,222 @@ async def test_postgres_notify_broadcaster_bridge_live_push_roundtrip() -> None:
                 await cleanup_session.execute(
                     delete(ConfigChangelogEntry).where(
                         ConfigChangelogEntry.version == created_version
+                    )
+                )
+                await cleanup_session.commit()
+        await engine.dispose()
+
+
+@pytest.mark.integration
+async def test_xid8_visibility_barrier_prevents_mvcc_sequence_gap_loss_and_snapshot_race() -> None:
+    """Mathematical MVCC proof on live PostgreSQL 16: slow uncommitted T1 (v=N) + fast committed T2 (v=N+1).
+
+    Requires independent PostgreSQL connections (not a single-connection SAVEPOINT) to exercise
+    true cross-transaction `pg_snapshot_xmin(pg_current_snapshot())` MVCC visibility barriers.
+    """
+    db_url = assert_test_database_url(os.environ["DATABASE_URL"])
+    engine = get_async_engine(db_url, statement_cache_size=0)
+    session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
+    repo = ConfigSyncProvider.create_changelog_repository(session_factory=session_factory)
+    broadcaster = ConfigSyncProvider.create_broadcaster()
+    baseline_cursor = await repo.get_global_safe_cursor()
+    bridge = ConfigSyncProvider.create_cursor_broadcaster_bridge(
+        changelog_repo=repo,
+        broadcaster=broadcaster,
+        initial_cursor=baseline_cursor,
+    )
+
+    tenant_id = f"ten_mvcc_{generate_id(SystemIdPrefix.GENERIC)}"
+    created_versions: list[int] = []
+    try:
+        async with session_factory() as session_t1:
+            e1 = await record_config_changelog_entry(
+                session_t1,
+                event_id=generate_id(SystemIdPrefix.GENERIC),
+                app_id="edi",
+                tenant_id=tenant_id,
+                entity_type="as2_partner",
+                entity_id="slow_t1",
+                action=ConfigChangeAction.UPSERT.value,
+                checksum="a" * 64,
+                payload={"id": "slow_t1"},
+            )
+            v1 = int(e1.version)
+            created_versions.append(v1)
+
+            async with session_factory() as session_t2:
+                e2 = await record_config_changelog_entry(
+                    session_t2,
+                    event_id=generate_id(SystemIdPrefix.GENERIC),
+                    app_id="edi",
+                    tenant_id=tenant_id,
+                    entity_type="as2_partner",
+                    entity_id="fast_t2",
+                    action=ConfigChangeAction.UPSERT.value,
+                    checksum="b" * 64,
+                    payload={"id": "fast_t2"},
+                )
+                v2 = int(e2.version)
+                created_versions.append(v2)
+                await session_t2.commit()
+
+            assert v2 > v1
+
+            # 1. Visibility barrier MUST hold back T2 while T1 is uncommitted
+            published_while_t1_open = await bridge.poll_once()
+            assert published_while_t1_open == 0
+            assert bridge.last_dispatched_cursor == baseline_cursor
+
+            # 2. Visibility lag telemetry MUST detect raw_max_cursor > safe_cursor
+            watermark = await repo.get_visibility_lag_metrics()
+            assert watermark.is_lagged is True
+            assert watermark.raw_max_version >= v2
+            assert watermark.safe_version < v1
+
+            # 3. Cold snapshot cursor taken during open T1 MUST stay strictly below T1
+            async with session_factory() as snapshot_session:
+                snap_txid, snap_ver = await get_latest_config_changelog_cursor_in_session(
+                    snapshot_session,
+                    app_id="edi",
+                    tenant_id=tenant_id,
+                )
+            snapshot_cursor = ConfigCursor(txid=snap_txid, version=snap_ver)
+            assert snapshot_cursor.version < v1
+
+            # 4. Now commit slow transaction T1
+            await session_t1.commit()
+
+        # 5. Drain emits BOTH [v1, v2] in strictly increasing `(txid, version)` order
+        async with broadcaster.subscribe(app_id="edi", tenant_id=tenant_id) as sub:
+            drained = await bridge.drain_until_empty()
+            assert drained == 2
+            assert bridge.last_dispatched_version == v2
+
+            it = sub.__aiter__()
+            first = await asyncio.wait_for(it.__anext__(), timeout=2.0)
+            second = await asyncio.wait_for(it.__anext__(), timeout=2.0)
+            assert [(first.version, first.entity_id), (second.version, second.entity_id)] == [
+                (v1, "slow_t1"),
+                (v2, "fast_t2"),
+            ]
+
+        # 6. Cold snapshot catch-up from `snapshot_cursor` delivers BOTH [v1, v2]
+        catchup = await repo.get_deltas_since(
+            app_id="edi",
+            tenant_id=tenant_id,
+            since_cursor=snapshot_cursor,
+        )
+        assert [(d.version, d.entity_id) for d in catchup] == [
+            (v1, "slow_t1"),
+            (v2, "fast_t2"),
+        ]
+    finally:
+        if created_versions:
+            async with session_factory() as cleanup_session:
+                await cleanup_session.execute(
+                    delete(ConfigChangelogEntry).where(
+                        ConfigChangelogEntry.version.in_(created_versions)
+                    )
+                )
+                await cleanup_session.commit()
+        await engine.dispose()
+
+
+@pytest.mark.integration
+async def test_composite_txid_version_cursor_prevents_txid_vs_sequence_interleaving_loss() -> None:
+    """Reproduces the exact B1 formal counterexample on live PostgreSQL 16.
+
+    1. T1 acquires `txid_1` FIRST (simulating a preceding `UPDATE` statement).
+    2. T2 acquires `txid_2 > txid_1` and inserts `version_1` (uncommitted).
+    3. T1 (`txid_1`) inserts `version_2 > version_1` and COMMITS FIRST.
+    4. Tailer polls while T2 is open -> emits `(txid_1, version_2)` and advances cursor.
+    5. T2 commits `(txid_2, version_1)`.
+    6. Tailer polls again -> emits `(txid_2, version_1)` (NOT LOST!) and client
+       `MonotonicCatalogState` accepts BOTH entries in `(txid, version)` total order!
+
+    Requires independent PostgreSQL connections (not a single-connection SAVEPOINT) to create
+    interleaved concurrent `xid8` transaction IDs.
+    """
+    db_url = assert_test_database_url(os.environ["DATABASE_URL"])
+    engine = get_async_engine(db_url, statement_cache_size=0)
+    session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
+    repo = ConfigSyncProvider.create_changelog_repository(session_factory=session_factory)
+    broadcaster = ConfigSyncProvider.create_broadcaster()
+    baseline_cursor = await repo.get_global_safe_cursor()
+    bridge = ConfigSyncProvider.create_cursor_broadcaster_bridge(
+        changelog_repo=repo,
+        broadcaster=broadcaster,
+        initial_cursor=baseline_cursor,
+    )
+
+    tenant_id = f"ten_b1_{generate_id(SystemIdPrefix.GENERIC)}"
+    created_versions: list[int] = []
+    client_state = MonotonicCatalogState(app_id="edi", tenant_id=tenant_id)
+    try:
+        async with broadcaster.subscribe(app_id="edi", tenant_id=tenant_id) as sub:
+            it = sub.__aiter__()
+            async with session_factory() as session_t1:
+                # Step 1: T1 allocates txid_1 FIRST (like `UPDATE as2_partners` before changelog insert)
+                t1_txid = int(
+                    (await session_t1.execute(select(func.pg_current_xact_id()))).scalar_one()
+                )
+
+                # Step 2: T2 starts SECOND, allocates txid_2 > txid_1, and inserts version_1 (uncommitted!)
+                async with session_factory() as session_t2:
+                    d_t2 = await repo.append_change_in_session(
+                        session_t2,
+                        app_id="edi",
+                        tenant_id=tenant_id,
+                        entity_type="as2_partner",
+                        entity_id="t2_lower_seq",
+                        action=ConfigChangeAction.UPSERT,
+                        payload={"id": "t2_lower_seq"},
+                    )
+                    created_versions.append(d_t2.version)
+
+                    # Step 3: T1 (lower txid_1!) inserts higher version_2 and COMMITS FIRST!
+                    d_t1 = await repo.append_change_in_session(
+                        session_t1,
+                        app_id="edi",
+                        tenant_id=tenant_id,
+                        entity_type="as2_partner",
+                        entity_id="t1_higher_seq",
+                        action=ConfigChangeAction.UPSERT,
+                        payload={"id": "t1_higher_seq"},
+                    )
+                    created_versions.append(d_t1.version)
+                    await session_t1.commit()
+
+                    assert d_t1.txid == t1_txid
+                    assert d_t1.txid < d_t2.txid
+                    assert d_t1.version > d_t2.version  # The exact B1 counterexample!
+
+                    # Step 4: Poll while T2 is still open -> emits T1 (txid_1, higher version_2)
+                    assert await bridge.drain_until_empty() == 1
+                    first = await asyncio.wait_for(it.__anext__(), timeout=2.0)
+                    assert first.entity_id == "t1_higher_seq"
+                    assert client_state.apply_delta(first).applied is True
+
+                    # Step 5: Now T2 (txid_2, LOWER version_1!) commits
+                    await session_t2.commit()
+
+            # Step 6: Next poll MUST emit T2 (NEVER skipped!) and MonotonicCatalogState MUST accept it!
+            assert await bridge.drain_until_empty() == 1
+            second = await asyncio.wait_for(it.__anext__(), timeout=2.0)
+            assert second.entity_id == "t2_lower_seq"
+            assert second.version < first.version
+            assert second.cursor > first.cursor
+            assert client_state.apply_delta(second).applied is True
+            assert client_state.get_entity("as2_partner", tenant_id, "t1_higher_seq") is not None
+            assert client_state.get_entity("as2_partner", tenant_id, "t2_lower_seq") is not None
+    finally:
+        if created_versions:
+            async with session_factory() as cleanup_session:
+                await cleanup_session.execute(
+                    delete(ConfigChangelogEntry).where(
+                        ConfigChangelogEntry.version.in_(created_versions)
                     )
                 )
                 await cleanup_session.commit()
@@ -349,7 +588,7 @@ async def test_ip_control_plane_to_data_plane_dynamic_watch_end_to_end(
 
     deltas = await ip_provider.get_deltas_since(
         tenant_id=tenant_id,
-        since_version=snapshot.version,
+        since_cursor=snapshot.cursor,
     )
     assert len(deltas) == 1
     assert deltas[0].action == ConfigChangeAction.DELETE

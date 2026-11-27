@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from orchestration.application.services import InMemoryWorkflowDefinitionRegistry
 from orchestration.domain.constants import EffectPolicy, NodeKind, Priority
 from orchestration.domain.definition import NodeDefinition, WorkflowDefinition
@@ -91,11 +92,11 @@ def build_transactional_stitch_definitions() -> tuple[WorkflowDefinition, ...]:
 
 
 def build_transactional_stitches() -> tuple[Stitch, ...]:
-    """Return built-in wildcard Stitches connecting transactional canonical events to workflows."""
+    """Return built-in platform-shared Stitches connecting transactional canonical events to workflows."""
     return (
         Stitch(
             id="stch_default_shopify_orders_to_sap",
-            tenant_id="*",
+            tenant_id=PLATFORM_TENANT_ID,
             canonical_event_type="canonical.order.v1",
             target_workflow_id="workflow.shopify_orders_to_sap",
             workflow_id="workflow.shopify_orders_to_sap",
@@ -107,7 +108,7 @@ def build_transactional_stitches() -> tuple[Stitch, ...]:
         ),
         Stitch(
             id="stch_default_sync_alpha_to_sink",
-            tenant_id="*",
+            tenant_id=PLATFORM_TENANT_ID,
             canonical_event_type="canonical.record_alpha.v1",
             target_workflow_id="workflow.sync_alpha_to_sink",
             workflow_id="workflow.sync_alpha_to_sink",
@@ -130,7 +131,7 @@ def build_default_stitch_definitions() -> tuple[WorkflowDefinition, ...]:
 
 
 def build_default_stitches() -> tuple[Stitch, ...]:
-    """Return built-in wildcard Stitches connecting canonical events to workflows."""
+    """Return built-in platform-shared Stitches connecting canonical events to workflows."""
     return (
         *build_transactional_stitches(),
         *build_energy_stitches(),

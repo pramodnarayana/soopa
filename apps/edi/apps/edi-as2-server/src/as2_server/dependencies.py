@@ -33,8 +33,9 @@ class DataPlaneUoWFactoryBuilderProtocol(Protocol):
 @lru_cache
 def get_vault_service() -> SecretStorePort:
     settings = get_settings()
-    return SecretStoreProvider.get_secret_store(
-        secrets_mount_path=settings.secrets.mount_path,
+    return SecretStoreProvider.from_settings(
+        settings.secrets,
+        aws_settings=settings.aws,
     )
 
 

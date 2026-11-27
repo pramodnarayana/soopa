@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from config_sync.domain.checksum import verify_delta_checksum, verify_snapshot_checksum
-from config_sync.domain.dtos import ConfigDeltaEvent, ConfigEntityRecord, ConfigSnapshot
+from config_sync.domain.dtos import (
+    ConfigCursor,
+    ConfigDeltaEvent,
+    ConfigEntityRecord,
+    ConfigSnapshot,
+)
 from config_sync.domain.enums import ConfigChangeAction
 
 EntityKey = tuple[str, str, str]  # (entity_type, tenant_id, entity_id)
@@ -14,15 +19,19 @@ EntityKey = tuple[str, str, str]  # (entity_type, tenant_id, entity_id)
 
 @dataclass(frozen=True)
 class DeltaApplyDecision:
-    """First-class outcome of evaluating a delta against the monotonic invariant."""
+    """First-class outcome of evaluating a delta against the monotonic `(txid, version)` invariant."""
 
     applied: bool
     reason: str
-    version: int
+    cursor: ConfigCursor
+
+    @property
+    def version(self) -> int:
+        return self.cursor.version
 
 
 class MonotonicCatalogState:
-    """Pure immutable-pointer catalog state enforcing `V(E) > V(local)` with atomic swaps.
+    """Pure immutable-pointer catalog state enforcing `Cursor(E) > Cursor(local)` with atomic swaps.
 
     Reads observe an immutable `MappingProxyType` reference (zero locks, sub-microsecond).
     Writes construct a new dict and atomically swap the single Python reference.
@@ -31,13 +40,17 @@ class MonotonicCatalogState:
     def __init__(self, *, app_id: str, tenant_id: str) -> None:
         self.app_id = app_id
         self.tenant_id = tenant_id
-        self._version: int = 0
-        self._entity_versions: dict[EntityKey, int] = {}
+        self._cursor: ConfigCursor = ConfigCursor.zero()
+        self._entity_cursors: dict[EntityKey, ConfigCursor] = {}
         self._entities: MappingProxyType[EntityKey, ConfigEntityRecord] = MappingProxyType({})
 
     @property
+    def current_cursor(self) -> ConfigCursor:
+        return self._cursor
+
+    @property
     def current_version(self) -> int:
-        return self._version
+        return self._cursor.version
 
     @property
     def entities(self) -> MappingProxyType[EntityKey, ConfigEntityRecord]:
@@ -58,46 +71,46 @@ class MonotonicCatalogState:
             return DeltaApplyDecision(
                 applied=False,
                 reason="snapshot_checksum_mismatch",
-                version=self._version,
+                cursor=self._cursor,
             )
-        if snapshot.version < self._version:
+        if snapshot.cursor < self._cursor:
             return DeltaApplyDecision(
                 applied=False,
                 reason="stale_snapshot_dropped",
-                version=self._version,
+                cursor=self._cursor,
             )
 
         next_entities: dict[EntityKey, ConfigEntityRecord] = {}
-        next_versions: dict[EntityKey, int] = {}
+        next_cursors: dict[EntityKey, ConfigCursor] = {}
         for rec in snapshot.entities:
             key: EntityKey = (rec.entity_type, rec.tenant_id, rec.entity_id)
             next_entities[key] = rec
-            next_versions[key] = snapshot.version
+            next_cursors[key] = snapshot.cursor
 
         self._entities = MappingProxyType(next_entities)
-        self._entity_versions = next_versions
-        self._version = snapshot.version
+        self._entity_cursors = next_cursors
+        self._cursor = snapshot.cursor
         return DeltaApplyDecision(
             applied=True,
             reason="snapshot_applied",
-            version=self._version,
+            cursor=self._cursor,
         )
 
     def apply_delta(self, event: ConfigDeltaEvent) -> DeltaApplyDecision:
-        """Applies a single delta iff checksum is valid and `event.version > local_version`."""
+        """Applies a single delta iff checksum is valid and `event.cursor > local_cursor`."""
         if not verify_delta_checksum(event):
             return DeltaApplyDecision(
                 applied=False,
                 reason="delta_checksum_mismatch",
-                version=self._version,
+                cursor=self._cursor,
             )
         key: EntityKey = (event.entity_type, event.tenant_id, event.entity_id)
-        entity_ver = self._entity_versions.get(key, 0)
-        if event.version <= entity_ver or event.version <= self._version:
+        entity_cursor = self._entity_cursors.get(key, ConfigCursor.zero())
+        if event.cursor <= entity_cursor or event.cursor <= self._cursor:
             return DeltaApplyDecision(
                 applied=False,
                 reason="stale_version_dropped",
-                version=self._version,
+                cursor=self._cursor,
             )
 
         next_entities = dict(self._entities)
@@ -112,13 +125,13 @@ class MonotonicCatalogState:
                 checksum=event.checksum,
             )
 
-        self._entity_versions[key] = event.version
+        self._entity_cursors[key] = event.cursor
         self._entities = MappingProxyType(next_entities)
-        self._version = event.version
+        self._cursor = event.cursor
         return DeltaApplyDecision(
             applied=True,
             reason="delta_applied",
-            version=self._version,
+            cursor=self._cursor,
         )
 
 

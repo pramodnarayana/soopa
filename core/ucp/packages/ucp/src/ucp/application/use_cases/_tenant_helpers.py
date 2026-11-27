@@ -10,7 +10,7 @@ from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 async def resolve_tenant(uow: UcpUnitOfWorkPort, tenant_id: str) -> Result[Tenant, UcpError]:
     tenant = await uow.tenant_repo.find_by_id(tenant_id)
     if not tenant:
-        tenant = await uow.tenant_repo.find_by_idp_tenant_id(tenant_id)
+        tenant = await uow.tenant_repo.find_by_idp_realm(tenant_id)
     if not tenant:
         return Result.fail(TenantNotFoundError.for_id(tenant_id))
     return Result.ok(tenant)

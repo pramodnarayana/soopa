@@ -17,6 +17,7 @@ logger = structlog.get_logger(__name__)
 _TENANT_EXEMPT_PATHS: frozenset[str] = frozenset(
     {
         "/api/v1/auth/me",
+        "/api/v1/auth/hrd",
         "/api/v1/tenants",  # GET all tenants, POST create tenant
         "/api/v1/tenants/roles",  # GET all global roles
         "/api/v1/apps",  # GET all global apps

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from orchestration.domain.constants import EffectPolicy, NodeKind, Priority
 from orchestration.domain.definition import NodeDefinition, WorkflowDefinition
 
@@ -46,10 +47,10 @@ def build_load_tender_erp_sync_definition() -> WorkflowDefinition:
 
 
 def build_load_tender_erp_sync_stitch() -> Stitch:
-    """Build the wildcard Stitch triggering the ERP sync workflow on TMS loads."""
+    """Build the platform-shared Stitch triggering the ERP sync workflow on TMS loads."""
     return Stitch(
         id="stch_default_tms_load_sync",
-        tenant_id="*",
+        tenant_id=PLATFORM_TENANT_ID,
         canonical_event_type=TmsEntityType.TMS_LOAD.value,
         target_workflow_id="tms.load_tender_erp_sync_stitch",
         name="TMS Load Tender ERP Sync",

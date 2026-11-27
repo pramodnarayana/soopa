@@ -106,6 +106,11 @@ def test_worker_container_wire_direct_db_mode(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_worker_container_wire_sqs_relay_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PUBSUB_TRANSPORT", "aws")
+    monkeypatch.setenv(
+        "SNS_PLATFORM_EVENTS_TOPIC_ARN",
+        "arn:aws:sns:us-east-1:000000000000:platform-events-topic.fifo",
+    )
     monkeypatch.setenv(
         "SQS_ORCHESTRATOR_QUEUE_URL",
         "https://sqs.us-east-1.amazonaws.com/000000000000/edi-orchestrator.fifo",
@@ -117,6 +122,10 @@ def test_worker_container_wire_sqs_relay_mode(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv(
         "SQS_DELIVER_QUEUE_URL",
         "https://sqs.us-east-1.amazonaws.com/000000000000/edi-deliver.fifo",
+    )
+    monkeypatch.setenv(
+        "SQS_DELIVER_DLQ_URL",
+        "https://sqs.us-east-1.amazonaws.com/000000000000/edi-deliver-dlq.fifo",
     )
     monkeypatch.setenv(
         "SQS_DATA_PLANE_JOBS_QUEUE_URL",

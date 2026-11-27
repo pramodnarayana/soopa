@@ -33,7 +33,7 @@ async def test_delete_tenant_success(db_session):
         id=tenant_id,
         name="Test",
         slug="test-del",
-        idp_tenant_id="zitadel-org-123",
+        idp_realm_name="soopa-global",
         subscriptions=[],
     ).unwrap()
 

@@ -7,7 +7,10 @@ from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import ClassVar, Protocol, cast
 
-from database.config_changelog import get_latest_config_changelog_version_in_session
+from database.config_changelog import (
+    ensure_repeatable_read_snapshot,
+    get_latest_config_changelog_cursor_in_session,
+)
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork.domain.types import JsonDict, JsonValue
 from sqlalchemy import Select, select
@@ -15,7 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped
 
 from config_sync.domain.checksum import compute_payload_checksum, compute_snapshot_checksum
-from config_sync.domain.dtos import ConfigDeltaEvent, ConfigEntityRecord, ConfigSnapshot
+from config_sync.domain.dtos import (
+    ConfigCursor,
+    ConfigDeltaEvent,
+    ConfigEntityRecord,
+    ConfigSnapshot,
+)
 from config_sync.ports.config_catalog_provider_port import ConfigCatalogProviderPort
 from config_sync.ports.config_changelog_port import ConfigChangelogRepositoryPort
 from edi.adapters.outbound.database.replication_registry import REPLICATION_GRAPH
@@ -78,13 +86,13 @@ class EdiConfigCatalogProvider(ConfigCatalogProviderPort):
     async def get_tenant_snapshot(self, *, tenant_id: str) -> ConfigSnapshot:
         entities: list[ConfigEntityRecord] = []
         async with self._session_scope() as session:
-            # Read version FIRST inside the same transaction so any concurrent commit V+1
-            # during entity reads is guaranteed to be replayed as a live delta > version.
-            version = await get_latest_config_changelog_version_in_session(
+            # Lock-free REPEATABLE READ snapshot guarantees FK consistency across all topological layers.
+            await ensure_repeatable_read_snapshot(session)
+            txid, version = await get_latest_config_changelog_cursor_in_session(
                 session,
                 app_id=EDI_CONFIG_APP_ID,
                 tenant_id=tenant_id,
-                shared_tenant_ids=("*", PLATFORM_TENANT_ID),
+                shared_tenant_ids=(PLATFORM_TENANT_ID,),
             )
             for layer in _TOPOLOGICAL_LAYERS:
                 for entity_key in layer:
@@ -114,17 +122,18 @@ class EdiConfigCatalogProvider(ConfigCatalogProviderPort):
             app_id=EDI_CONFIG_APP_ID,
             tenant_id=tenant_id,
             version=version,
+            txid=txid,
             entities=frozen_entities,
             checksum=compute_snapshot_checksum(frozen_entities),
         )
 
     async def get_deltas_since(
-        self, *, tenant_id: str, since_version: int
+        self, *, tenant_id: str, since_cursor: ConfigCursor
     ) -> list[ConfigDeltaEvent]:
         return await self._changelog_repo.get_deltas_since(
             app_id=EDI_CONFIG_APP_ID,
             tenant_id=tenant_id,
-            since_version=since_version,
+            since_cursor=since_cursor,
         )
 
 

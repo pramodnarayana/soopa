@@ -12,6 +12,7 @@ from types import TracebackType
 import pytest
 from database.router import DatabaseRouterPort
 from database.types import GlobalSession, TenantSession
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from ip.engine.adapters.outbound.stitches import (
     DurableWorkflowOrchestratorAdapter,
 )
@@ -363,7 +364,7 @@ def _create_synthetic_stitch_catalog() -> InMemoryStitchCatalogRegistry:
     catalog.register_stitch(
         Stitch(
             id="stch_default_alpha_sync",
-            tenant_id="*",
+            tenant_id=PLATFORM_TENANT_ID,
             canonical_event_type="canonical.record_alpha.v1",
             target_workflow_id="workflow.sync_alpha_to_sink_stitch",
             is_active=True,
@@ -372,7 +373,7 @@ def _create_synthetic_stitch_catalog() -> InMemoryStitchCatalogRegistry:
     catalog.register_stitch(
         Stitch(
             id="stch_default_beta_reconcile",
-            tenant_id="*",
+            tenant_id=PLATFORM_TENANT_ID,
             canonical_event_type="canonical.record_beta.v1",
             target_workflow_id="workflow.reconcile_alpha_stitch",
             is_active=True,
@@ -513,19 +514,21 @@ class _InMemoryStitchRepo(StitchRepositoryPort):
         sub = self.items.get((stitch_id, tenant_id))
         if sub is not None:
             return sub
-        return self.items.get((stitch_id, "*"))
+        return self.items.get((stitch_id, PLATFORM_TENANT_ID))
 
     async def get_by_id_global(self, *, stitch_id: str) -> Stitch | None:
         for (sid, tid), stitch in self.items.items():
-            if sid == stitch_id and tid != "*":
+            if sid == stitch_id and tid != PLATFORM_TENANT_ID:
                 return stitch
         for (sid, tid), stitch in self.items.items():
-            if sid == stitch_id and tid == "*":
+            if sid == stitch_id and tid == PLATFORM_TENANT_ID:
                 return stitch
         return None
 
     async def list_by_tenant(self, *, tenant_id: str) -> list[Stitch]:
-        matching = [s for s in self.items.values() if s.tenant_id in (tenant_id, "*")]
+        matching = [
+            s for s in self.items.values() if s.tenant_id in (tenant_id, PLATFORM_TENANT_ID)
+        ]
         by_id: dict[str, Stitch] = {}
         for s in matching:
             if s.id not in by_id or s.tenant_id == tenant_id:
@@ -536,7 +539,7 @@ class _InMemoryStitchRepo(StitchRepositoryPort):
         matching = [
             s
             for s in self.items.values()
-            if s.tenant_id in (tenant_id, "*")
+            if s.tenant_id in (tenant_id, PLATFORM_TENANT_ID)
             and s.canonical_event_type == canonical_event_type
             and s.is_active
         ]
@@ -1253,15 +1256,15 @@ async def test_stitch_control_plane_use_cases() -> None:
     assert reg_res.unwrap().name == "Alpha to Sink Wire Stitch"
     assert reg_res.unwrap().description == "Syncs alpha canonical entities to sink"
 
-    reg_wildcard = await reg_stitch_uc.execute(
+    reg_platform = await reg_stitch_uc.execute(
         RegisterStitchCommand(
-            tenant_id="*",
+            tenant_id=PLATFORM_TENANT_ID,
             stitch_id=shared_stitch_id,
             target_workflow_id="workflow.sync_alpha_to_sink_stitch",
             canonical_event_type="canonical.custom_alpha.normalized",
         )
     )
-    assert reg_wildcard.is_ok
+    assert reg_platform.is_ok
 
     reg_override = await reg_stitch_uc.execute(
         RegisterStitchCommand(

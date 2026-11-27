@@ -1,10 +1,10 @@
-import os
 from collections.abc import AsyncGenerator
 from typing import ClassVar, Protocol
 
 import fastapi
 import structlog
 from database.router import DatabaseRouterPort
+from dependency_injector import providers
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -13,11 +13,13 @@ from fastapi.responses import JSONResponse
 from identity import PlatformIdentitySettings
 from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings
+from secret_store import PlatformSecretStoreSettings
 from seedwork.domain.types import JsonValue
 from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from storage import PlatformStorageSettings
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
     get_current_user_profile,
@@ -41,7 +43,7 @@ from unified_api.adapters.inbound.http.edi.routers.tenant import dashboard
 
 from edi.bootstrap.container import Container
 from edi.bootstrap.lifespan import shutdown, startup
-from edi.config.models import EdiAwsSettings, EdiDataPlaneSqsSettings, S3Settings
+from edi.config.models import EdiAwsSettings, EdiDataPlaneSqsSettings
 from edi.domain.exceptions import OrchestrationError, VaultError
 
 load_dotenv()
@@ -52,6 +54,8 @@ logger = structlog.get_logger(__name__)
 class EdiHostSettingsProtocol(Protocol):
     database: PlatformDatabaseSettings
     identity: PlatformIdentitySettings
+    secrets: PlatformSecretStoreSettings
+    storage: PlatformStorageSettings
     model_fields: ClassVar[dict[str, FieldInfo]]
 
 
@@ -217,16 +221,30 @@ def create_edi_app(settings: EdiHostSettingsProtocol | None = None) -> EdiFastAP
     container = Container()
     container.config.from_pydantic(settings)
     declared_fields = type(settings).model_fields
-    if "s3" not in declared_fields:
-        container.config.s3.from_pydantic(load_settings_safely(S3Settings))
+    if "storage" not in declared_fields:
+        storage_settings = load_settings_safely(PlatformStorageSettings)
+        container.config.storage.from_pydantic(storage_settings)
+    else:
+        storage_settings = settings.storage
+    if "secrets" not in declared_fields:
+        secrets_settings = load_settings_safely(PlatformSecretStoreSettings)
+        container.config.secrets.from_pydantic(secrets_settings)
+    else:
+        secrets_settings = settings.secrets
     if "sqs" not in declared_fields:
         container.config.sqs.from_pydantic(load_settings_safely(EdiDataPlaneSqsSettings))
     aws_settings = load_settings_safely(EdiAwsSettings)
     if "aws" not in declared_fields:
         container.config.aws.from_pydantic(aws_settings)
 
+    secrets_settings.validate_against_aws(aws_settings)
+    storage_settings.validate_against_aws(aws_settings)
+
+    container.secrets_settings.override(providers.Object(secrets_settings))
+    container.storage_settings.override(providers.Object(storage_settings))
+    container.aws_settings.override(providers.Object(aws_settings))
     container.config.aws.resolved_region.from_value(aws_settings.resolved_region)
-    container.config.aws.endpoint_url.from_value(os.getenv("AWS_ENDPOINT_URL"))
+    container.config.aws.endpoint_url.from_value(aws_settings.endpoint_url)
 
     app.container = container
     app.state.db_router = None

@@ -5,13 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 from collections.abc import Sequence
 from enum import StrEnum
 from pathlib import Path
 
 import structlog
+from dotenv import set_key
 
 logger = structlog.get_logger(__name__)
 
@@ -19,6 +19,23 @@ LOCALSTACK_SQS_URL = "http://sqs.us-east-1.localhost.localstack.cloud:4566/00000
 LOCALSTACK_SNS_ARN = "arn:aws:sns:us-east-1:000000000000:"
 DB_QUEUE_PREFIX = "db://"
 DB_TOPIC_PREFIX = "db://topic/"
+
+
+class LocalEnvKey(StrEnum):
+    """Managed environment keys synchronized for local development."""
+
+    PUBSUB_TRANSPORT = "PUBSUB_TRANSPORT"
+    AWS_ENDPOINT_URL = "AWS_ENDPOINT_URL"
+    SECRETS_BACKEND = "SECRETS_BACKEND"
+    SECRETS_MOUNT_PATH = "SECRETS_MOUNT_PATH"
+    STORAGE_BACKEND = "STORAGE_BACKEND"
+    STORAGE_FILE_PATH = "STORAGE_FILE_PATH"
+
+
+LOCAL_FILE_BACKEND = "file"
+LOCAL_STATE_DIR = ".local"
+LOCAL_SECRETS_SUBDIR = "secrets"
+LOCAL_STORAGE_SUBDIR = "storage"
 
 
 class PubSubTransportMode(StrEnum):
@@ -151,6 +168,22 @@ def compose_topology_env_mappings(
     return build_env_mappings(topology, transport=transport)
 
 
+def _deduplicate_env_keys(env_path: Path, managed_keys: set[str]) -> None:
+    """Removes duplicate assignments for managed keys so ``dotenv.set_key`` updates the sole entry."""
+    lines = env_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    seen: set[str] = set()
+    cleaned_lines: list[str] = []
+    for line in lines:
+        stripped = line.lstrip()
+        key_candidate = stripped.split("=", 1)[0].strip() if "=" in stripped else ""
+        if key_candidate in managed_keys and not stripped.startswith("#"):
+            if key_candidate in seen:
+                continue
+            seen.add(key_candidate)
+        cleaned_lines.append(line)
+    env_path.write_text("".join(cleaned_lines), encoding="utf-8")
+
+
 def sync_topology(
     root_dir: Path,
     domains: str = "all",
@@ -175,23 +208,30 @@ def sync_topology(
     )
 
     mappings = build_env_mappings(topology, transport=transport)
-    env_content = env_path.read_text(encoding="utf-8")
+    env_updates: dict[str, str] = {
+        LocalEnvKey.PUBSUB_TRANSPORT.value: transport.value,
+        **mappings,
+    }
+    if transport == PubSubTransportMode.DB:
+        env_updates[LocalEnvKey.AWS_ENDPOINT_URL.value] = ""
+        env_updates[LocalEnvKey.SECRETS_BACKEND.value] = LOCAL_FILE_BACKEND
+        env_updates[LocalEnvKey.SECRETS_MOUNT_PATH.value] = str(
+            root_dir / LOCAL_STATE_DIR / LOCAL_SECRETS_SUBDIR
+        )
+        env_updates[LocalEnvKey.STORAGE_BACKEND.value] = LOCAL_FILE_BACKEND
+        env_updates[LocalEnvKey.STORAGE_FILE_PATH.value] = str(
+            root_dir / LOCAL_STATE_DIR / LOCAL_STORAGE_SUBDIR
+        )
 
-    for key, value in mappings.items():
-        pattern = re.compile(rf"^{key}=.*$", re.MULTILINE)
-        if pattern.search(env_content):
-            env_content = pattern.sub(f"{key}={value}", env_content)
-        else:
-            if not env_content.endswith("\n"):
-                env_content += "\n"
-            env_content += f"{key}={value}\n"
+    _deduplicate_env_keys(env_path, set(env_updates.keys()))
+    for key, value in env_updates.items():
+        set_key(str(env_path), key, value, quote_mode="never")
 
-    env_path.write_text(env_content, encoding="utf-8")
     logger.info(
         "topology_synced_to_env",
         domains=domains,
         transport=transport.value,
-        synced_key_count=len(mappings),
+        synced_key_count=len(env_updates),
     )
     return mappings
 

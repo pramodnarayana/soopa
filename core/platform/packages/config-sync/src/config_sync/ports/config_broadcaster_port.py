@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager
 from typing import Protocol, runtime_checkable
 
-from config_sync.domain.dtos import ConfigDeltaEvent
+from config_sync.domain.dtos import ConfigCursor, ConfigDeltaEvent
 
 
 @runtime_checkable
@@ -22,9 +22,9 @@ class ConfigBroadcasterPort(Protocol):
         *,
         app_id: str,
         tenant_id: str,
-        since_version: int,
+        since_cursor: ConfigCursor,
     ) -> list[ConfigDeltaEvent] | None:
-        """Returns cached deltas newer than `since_version`, or `None` if `since_version` was evicted."""
+        """Returns cached deltas newer than `since_cursor`, or `None` if `since_cursor` was evicted or incomplete."""
         ...
 
     def subscribe(

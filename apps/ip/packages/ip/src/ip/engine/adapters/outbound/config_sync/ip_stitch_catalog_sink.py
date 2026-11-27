@@ -10,7 +10,12 @@ from ip.engine.ports.outbound.stitch_catalog_registry_port import (
 )
 from seedwork.domain.types import JsonDict, JsonPrimitive
 
-from config_sync.domain.dtos import ConfigDeltaEvent, ConfigEntityRecord, ConfigSnapshot
+from config_sync.domain.dtos import (
+    ConfigCursor,
+    ConfigDeltaEvent,
+    ConfigEntityRecord,
+    ConfigSnapshot,
+)
 from config_sync.domain.enums import ConfigChangeAction
 from config_sync.ports.config_apply_sink_port import (
     ConfigApplySinkPort,
@@ -67,7 +72,7 @@ class IpStitchCatalogSink(ConfigApplySinkPort):
         self._stitch_catalog = stitch_catalog
         self._backing_sink = backing_sink
         self._tenant_id = tenant_id
-        if self._backing_sink.current_version > 0:
+        if not self._backing_sink.current_cursor.is_zero:
             self._rebuild_stitch_catalog(
                 self._backing_sink.list_by_type(IpConfigEntityType.STITCH.value)
             )
@@ -86,8 +91,8 @@ class IpStitchCatalogSink(ConfigApplySinkPort):
         for stale_tenant, stale_id in existing_keys - incoming_keys:
             self._stitch_catalog.unregister_stitch(tenant_id=stale_tenant, stitch_id=stale_id)
 
-    async def get_current_version(self, *, app_id: str, tenant_id: str) -> int:
-        return await self._backing_sink.get_current_version(app_id=app_id, tenant_id=tenant_id)
+    async def get_current_cursor(self, *, app_id: str, tenant_id: str) -> ConfigCursor:
+        return await self._backing_sink.get_current_cursor(app_id=app_id, tenant_id=tenant_id)
 
     async def apply_snapshot(self, snapshot: ConfigSnapshot) -> None:
         await self._backing_sink.apply_snapshot(snapshot)
@@ -96,14 +101,14 @@ class IpStitchCatalogSink(ConfigApplySinkPort):
         logger.info(
             "ip_stitch_catalog_snapshot_applied",
             tenant_id=self._tenant_id,
-            version=snapshot.version,
+            cursor=snapshot.cursor.encode(),
             stitch_count=len(stitch_records),
         )
 
     async def apply_delta(self, delta: ConfigDeltaEvent) -> None:
-        prev_version = self._backing_sink.current_version
+        prev_cursor = self._backing_sink.current_cursor
         await self._backing_sink.apply_delta(delta)
-        if self._backing_sink.current_version <= prev_version:
+        if self._backing_sink.current_cursor <= prev_cursor:
             return
         if delta.entity_type == IpConfigEntityType.STITCH.value:
             if delta.action == ConfigChangeAction.DELETE:

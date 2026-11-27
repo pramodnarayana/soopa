@@ -12,6 +12,7 @@ from strace.domain import TracedAggregateRoot, TraceEvent
 
 from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
 from edi.domain.enums import EdiTraceEventType
+from edi.domain.exceptions import EdiError
 from edi.domain.routing.enums import EdiDirection
 from edi.domain.transaction.enums import MessageStatus
 from edi.domain.transaction.events import (
@@ -59,6 +60,12 @@ class EdiRecordBase(TracedAggregateRoot):
                 metadata={k: v for k, v in metadata.items() if v is not None},
             )
         )
+
+    def attach_error(self, error: EdiError) -> None:
+        """Attaches a first-class domain error without altering the record's lifecycle status."""
+        self.status_message = error.message[:255]
+        self.error_code = error.code.value
+        self.error_details = dict(error.details)
 
     def mark_delivery_attempt_failed(
         self,

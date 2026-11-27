@@ -64,6 +64,7 @@ class WorkerContainer(containers.DeclarativeContainer):
         destination_uri=config.sns_topic_arn,
         region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
+        transport=config.pubsub_transport,
         session_factory=notification_package.session_factory,
         database_url=config.database_url,
     )
@@ -122,6 +123,7 @@ class WorkerContainer(containers.DeclarativeContainer):
         handler=job_dispatcher.provided.dispatch,
         region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
+        transport=config.pubsub_transport,
         session_factory=notification_package.session_factory,
         database_url=config.database_url,
     )

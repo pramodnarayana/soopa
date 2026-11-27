@@ -1,9 +1,11 @@
 import datetime
 
 import pytest
+from database.models.config_sync import ConfigChangelogEntry
 from database.models.identity import IdentityOutbox as OrmIdentityOutbox
 from database.models.identity import Role as OrmRole
 from database.models.identity import Tenant as OrmTenant
+from database.models.identity import TenantUser as OrmTenantUser
 from database.models.identity import UserRole as OrmUserRole
 from seedwork import generate_id, generate_random_hex
 from sqlalchemy import select
@@ -11,7 +13,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ucp.domain.constants import LifecycleStatus
 
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
-from identity.domain.constants import IdentityEventType, UserStatus
+from identity.domain.constants import (
+    IDENTITY_CONFIG_APP_ID,
+    IdentityConfigEntityType,
+    IdentityEventType,
+    MembershipStatus,
+    UserStatus,
+)
 from identity.domain.constants import IdentityIdPrefix as DomainIdPrefix
 from identity.domain.user import User
 
@@ -25,7 +33,7 @@ def dummy_tenant_data() -> dict:
         "id": tenant_id,
         "name": f"User Repo Tenant {generate_random_hex(6)}",
         "slug": f"user-tenant-{generate_random_hex(6)}",
-        "idp_tenant_id": "idp_ten_123",
+        "idp_realm_name": "soopa-global",
         "status": LifecycleStatus.ACTIVE,
         "created_at": datetime.datetime.now().replace(tzinfo=None),
         "updated_at": datetime.datetime.now().replace(tzinfo=None),
@@ -117,7 +125,11 @@ async def test_user_repository_lifecycle(
         # 4b. Find by IDP User ID - Missing
         assert await repo.find_by_idp_user_id("idp_missing") is None
 
-        # 5. Link to Tenant and Role (UserRole) manually to test find_users_by_tenant
+        # 5. Persist canonical tenant membership (identity.tenant_users) & role assignment (identity.user_roles)
+        await repo.upsert_tenant_membership(
+            tenant_id=dummy_tenant_data["id"],
+            user_id=user.id,
+        )
         await db_session.execute(
             pg_insert(OrmUserRole).values(
                 id=generate_id(DomainIdPrefix.USER_ROLE),
@@ -127,7 +139,7 @@ async def test_user_repository_lifecycle(
             )
         )
 
-        # 6. Find Users By Tenant
+        # 6. Find Users By Tenant (anchored on identity.tenant_users)
         users_in_tenant = await repo.find_users_by_tenant(dummy_tenant_data["id"])
         assert len(users_in_tenant) >= 1
         assert any(u.id == user.id for u in users_in_tenant)
@@ -140,9 +152,53 @@ async def test_user_repository_lifecycle(
         # 7a. Find By ID and Tenant - Missing
         assert await repo.find_by_id_and_tenant(user.id, "iam_ten_missing") is None
 
-        # 8. Check Tenant Memberships
-        has_memberships = await repo.has_any_tenant_memberships(user.id)
-        assert has_memberships is True
+        # 8. Check Tenant Memberships & Suspension / Removal lifecycle + config_changelog tombstones
+        assert await repo.has_any_tenant_memberships(user.id) is True
+
+        await repo.upsert_tenant_membership(
+            tenant_id=dummy_tenant_data["id"],
+            user_id=user.id,
+            status=MembershipStatus.SUSPENDED,
+        )
+        assert await repo.has_any_tenant_memberships(user.id) is False
+
+        await repo.upsert_tenant_membership(
+            tenant_id=dummy_tenant_data["id"],
+            user_id=user.id,
+            status=MembershipStatus.ACTIVE,
+        )
+        assert await repo.has_any_tenant_memberships(user.id) is True
+
+        await repo.remove_tenant_membership(
+            tenant_id=dummy_tenant_data["id"],
+            user_id=user.id,
+        )
+        assert await repo.has_any_tenant_memberships(user.id) is False
+        remaining_membership = (
+            await db_session.execute(
+                select(OrmTenantUser).where(
+                    OrmTenantUser.user_id == user.id,
+                    OrmTenantUser.tenant_id == dummy_tenant_data["id"],
+                )
+            )
+        ).scalar_one_or_none()
+        assert remaining_membership is None
+
+        tombstones = (
+            (
+                await db_session.execute(
+                    select(ConfigChangelogEntry).where(
+                        ConfigChangelogEntry.app_id == IDENTITY_CONFIG_APP_ID,
+                        ConfigChangelogEntry.entity_type
+                        == IdentityConfigEntityType.USER_REVOCATION.value,
+                        ConfigChangelogEntry.entity_id == user.id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(tombstones) >= 4
 
         # 9. Update User
         user.name = "Updated User"

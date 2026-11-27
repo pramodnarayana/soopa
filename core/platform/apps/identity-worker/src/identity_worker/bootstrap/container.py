@@ -4,12 +4,14 @@ from contextlib import AbstractAsyncContextManager
 import structlog
 from database.provider import DatabaseProvider
 from database.utils import normalize_to_asyncpg
-from identity.adapters.outbound.zitadel.machine_key_auth import ZitadelMachineTokenProvider
+from identity.adapters.outbound.casdoor.casdoor_admin_adapter import (
+    CasdoorAdminAdapter,
+    CasdoorAdminOptions,
+)
 from pubsub.domain.dtos import TopicSubscriptionSpec
 from pubsub.domain.enums import PlatformTopicName
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
 from pubsub.provider import PubSubProvider
-from shttp import HttpClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
@@ -22,15 +24,6 @@ from identity_worker.adapters.outbound.database.identity_sync_repository import 
     SqlAlchemyIdentitySyncRepository,
 )
 from identity_worker.adapters.outbound.database.uow import SqlAlchemyIdentitySyncUnitOfWork
-from identity_worker.adapters.outbound.identity_provider.zitadel_organizations_adapter import (
-    ZitadelOrganizationsAdapter,
-)
-from identity_worker.adapters.outbound.identity_provider.zitadel_projects_adapter import (
-    ZitadelProjectsAdapter,
-)
-from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter import (
-    ZitadelUsersAdapter,
-)
 from identity_worker.application.use_cases.identity_sync_service import IdentitySyncService
 from identity_worker.config.settings import AppSettings, get_settings
 
@@ -59,7 +52,7 @@ class WorkerContainer:
 
         self.database_url = normalize_to_asyncpg(database_url)
         self.db_provider = DatabaseProvider.from_url(self.database_url)
-        self._zitadel_client: HttpClient | None = None
+        self._idp_admin: CasdoorAdminAdapter | None = None
         self.events_dispatcher: IdentityEventDispatcher | None = None
         self.events_consumer: ConsumerManagerPort | None = None
 
@@ -67,39 +60,22 @@ class WorkerContainer:
         self._wire_events_consumer()
 
     def _wire_events_consumer(self) -> None:
-        allow_private_ips = self.settings.identity.allow_private_ips
-        token_provider = ZitadelMachineTokenProvider(
-            api_url=self.settings.idp_api_url,
-            machine_key=self.settings.idp_machine_key,
-            allow_private_ips=allow_private_ips,
+        idp_admin = CasdoorAdminAdapter(
+            options=CasdoorAdminOptions(
+                endpoint=self.settings.idp_api_url or self.settings.identity.issuer,
+                client_id=self.settings.identity.admin_client_id,
+                client_secret=self.settings.identity.admin_client_secret,
+                default_organization=self.settings.identity.global_realm,
+                allow_private_ips=self.settings.identity.allow_private_ips,
+            )
         )
-        zitadel_client = HttpClient(
-            base_url=self.settings.idp_api_url or None,
-            token_provider=token_provider,
-            default_headers={"Accept": "application/json"},
-            allow_private_ips=allow_private_ips,
-        )
-        self._zitadel_client = zitadel_client
-
-        project_provider = ZitadelProjectsAdapter(
-            http_client=zitadel_client,
-            settings=self.settings,
-        )
-        org_provider = ZitadelOrganizationsAdapter(
-            http_client=zitadel_client,
-            project_provider=project_provider,
-            settings=self.settings,
-        )
-        idp_users = ZitadelUsersAdapter(
-            http_client=zitadel_client,
-            settings=self.settings,
-        )
+        self._idp_admin = idp_admin
 
         identity_service = IdentitySyncService(
-            organization_provider=org_provider,
-            user_identity_provider=idp_users,
+            idp_admin=idp_admin,
             uow_factory=lambda: create_identity_sync_uow(self.db_provider.session),
-            control_plane_project_id=self.settings.control_plane_project_id,
+            default_global_realm=self.settings.identity.global_realm,
+            default_user_password=self.settings.idp_default_user_password or None,
         )
 
         self.events_dispatcher = IdentityEventDispatcher()
@@ -110,6 +86,7 @@ class WorkerContainer:
             handler=self.events_dispatcher.dispatch_raw,
             region_name=self.settings.aws_region,
             endpoint_url=self.settings.aws_endpoint_url,
+            transport=self.settings.pubsub_transport,
             session_factory=self.db_provider.session,
             database_url=self.database_url,
             subscribe_topics=(
@@ -121,6 +98,6 @@ class WorkerContainer:
         )
 
     async def dispose(self) -> None:
-        if self._zitadel_client is not None:
-            await self._zitadel_client.close()
+        if self._idp_admin is not None:
+            await self._idp_admin.close()
         await self.db_provider.close()

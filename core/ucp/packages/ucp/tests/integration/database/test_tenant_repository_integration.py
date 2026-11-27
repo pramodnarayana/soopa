@@ -2,7 +2,9 @@ from datetime import UTC, datetime
 
 import pytest
 from database.exceptions import DuplicateEntityError
+from identity.domain.constants import TenantIsolationMode
 from seedwork import generate_id
+from sqlalchemy.exc import IntegrityError
 from ucp_models.subscriptions import App
 
 from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
@@ -29,7 +31,8 @@ async def test_save_and_find_tenant(db_session):
         id=tenant_id,
         name="Integration Test Tenant",
         slug=f"integ-{tenant_id}",
-        idp_tenant_id=f"idp-{tenant_id}",
+        idp_realm_name=f"org_{tenant_id}",
+        isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG,
         status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
@@ -55,8 +58,8 @@ async def test_save_and_find_tenant(db_session):
     assert sub_map["app_1"] == LifecycleStatus.ACTIVE
     assert sub_map["app_2"] == LifecycleStatus.INACTIVE
 
-    # Find by IDP tenant ID
-    found_tenant_idp = await repo.find_by_idp_tenant_id(f"idp-{tenant_id}")
+    # Find by dedicated IDP realm
+    found_tenant_idp = await repo.find_by_idp_realm(f"org_{tenant_id}")
     assert found_tenant_idp is not None
     assert found_tenant_idp.id == tenant_id
 
@@ -76,7 +79,7 @@ async def test_insert_if_slug_available_handles_slug_conflict_and_preserves_name
         id=generate_id(DomainIdPrefix.TENANT.value),
         name=f"Acme, Corp. {slug}",
         slug=slug,
-        idp_tenant_id=None,
+        idp_realm_name=None,
     ).unwrap()
     assert await repo.insert_if_slug_available(first) is True
 
@@ -85,7 +88,7 @@ async def test_insert_if_slug_available_handles_slug_conflict_and_preserves_name
         id=generate_id(DomainIdPrefix.TENANT.value),
         name=f"Acme Corp {slug}",
         slug=slug,
-        idp_tenant_id=None,
+        idp_realm_name=None,
     ).unwrap()
     assert await repo.insert_if_slug_available(slug_collision) is False
 
@@ -94,7 +97,7 @@ async def test_insert_if_slug_available_handles_slug_conflict_and_preserves_name
         id=generate_id(DomainIdPrefix.TENANT.value),
         name=f"Acme Corp {slug}",
         slug=f"{slug}-2",
-        idp_tenant_id=None,
+        idp_realm_name=None,
     ).unwrap()
     assert await repo.insert_if_slug_available(retry) is True
 
@@ -103,7 +106,79 @@ async def test_insert_if_slug_available_handles_slug_conflict_and_preserves_name
         id=generate_id(DomainIdPrefix.TENANT.value),
         name=first.name,
         slug=f"{slug}-3",
-        idp_tenant_id=None,
+        idp_realm_name=None,
     ).unwrap()
     with pytest.raises(DuplicateEntityError):
         await repo.insert_if_slug_available(duplicate_name)
+
+
+@pytest.mark.asyncio
+async def test_partial_unique_index_allows_pooled_and_enforces_active_dedicated_realms(
+    db_session,
+) -> None:
+    repo = SqlAlchemyTenantRepository(db_session)
+
+    # 1. Unlimited POOLED_REALM tenants can share the same idp_realm_name
+    pooled_1 = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT.value),
+        name=f"Pooled One {generate_id(DomainIdPrefix.TENANT.value)[-6:]}",
+        slug=f"pooled-one-{generate_id(DomainIdPrefix.TENANT.value)[-6:]}",
+        idp_realm_name="soopa-global",
+        isolation_mode=TenantIsolationMode.POOLED_REALM,
+    ).unwrap()
+    pooled_2 = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT.value),
+        name=f"Pooled Two {generate_id(DomainIdPrefix.TENANT.value)[-6:]}",
+        slug=f"pooled-two-{generate_id(DomainIdPrefix.TENANT.value)[-6:]}",
+        idp_realm_name="soopa-global",
+        isolation_mode=TenantIsolationMode.POOLED_REALM,
+    ).unwrap()
+    await repo.save(pooled_1)
+    await repo.save(pooled_2)
+    await db_session.flush()
+
+    # Pooled realms must NEVER match dedicated 1:1 realm lookups
+    assert await repo.find_by_idp_realm("soopa-global") is None
+
+    # 2. Active DEDICATED_IDP_ORG tenants enforce strict 1:1 uniqueness on idp_realm_name
+    dedicated_realm = f"org_ent_{generate_id(DomainIdPrefix.TENANT.value)[-8:]}"
+    ent_1 = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT.value),
+        name=f"Ent One {dedicated_realm}",
+        slug=f"ent-one-{dedicated_realm}",
+        idp_realm_name=dedicated_realm,
+        isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG,
+    ).unwrap()
+    await repo.save(ent_1)
+    await db_session.flush()
+
+    ent_duplicate = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT.value),
+        name=f"Ent Dup {dedicated_realm}",
+        slug=f"ent-dup-{dedicated_realm}",
+        idp_realm_name=dedicated_realm,
+        isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG,
+    ).unwrap()
+    with pytest.raises(IntegrityError):
+        async with db_session.begin_nested():
+            await repo.save(ent_duplicate)
+            await db_session.flush()
+
+    # 3. Soft-deleting the first dedicated tenant frees the realm for re-onboarding
+    assert ent_1.mark_deleted().is_ok
+    await repo.delete(ent_1)
+    await db_session.flush()
+
+    ent_recreated = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT.value),
+        name=f"Ent Recreated {dedicated_realm}",
+        slug=f"ent-recreated-{dedicated_realm}",
+        idp_realm_name=dedicated_realm,
+        isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG,
+    ).unwrap()
+    await repo.save(ent_recreated)
+    await db_session.flush()
+
+    resolved = await repo.find_by_idp_realm(dedicated_realm)
+    assert resolved is not None
+    assert resolved.id == ent_recreated.id

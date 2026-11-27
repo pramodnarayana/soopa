@@ -199,7 +199,7 @@ class AwsSecretsManagerAdapter(SecretStorePort):
             try:
                 await asyncio.to_thread(mounted_path.unlink, missing_ok=True)
             except OSError as e:
-                logger.warning(
+                logger.error(
                     "local_secret_file_removal_failed",
                     vault_ref=vault_ref,
                     error=str(e),

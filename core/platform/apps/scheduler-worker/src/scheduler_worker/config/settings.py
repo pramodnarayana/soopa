@@ -4,7 +4,8 @@ import os
 from collections.abc import Mapping
 from functools import lru_cache
 
-from pydantic import Field, computed_field
+from pubsub.config import PlatformPubSubSettings
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import SettingsConfigDict
 from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
@@ -89,6 +90,23 @@ class AppSettings(CleanBaseSettings):
     database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
     aws: PlatformAwsSettings = Field(default_factory=PlatformAwsSettings)
     sqs: SqsSettings = Field(default_factory=SqsSettings)
+    pubsub: PlatformPubSubSettings = Field(default_factory=PlatformPubSubSettings)
+
+    @model_validator(mode="after")
+    def validate_pubsub_transport_uris(self) -> AppSettings:
+        uris_to_validate: dict[str, str | None] = {
+            "SQS_DATA_PLANE_JOBS_QUEUE_URL": self.sqs.data_plane_jobs_queue_url,
+            "SQS_CONTROL_PLANE_JOBS_QUEUE_URL": self.sqs.control_plane_jobs_queue_url,
+            "SQS_IP_DATA_PLANE_JOBS_QUEUE_URL": self.sqs.ip_data_plane_jobs_queue_url,
+            "SQS_IP_CONTROL_PLANE_JOBS_QUEUE_URL": self.sqs.ip_control_plane_jobs_queue_url,
+            "SQS_NOTIFICATION_JOBS_QUEUE_URL": self.sqs.notification_jobs_queue_url,
+            "SQS_IDENTITY_JOBS_QUEUE_URL": self.sqs.identity_jobs_queue_url,
+            "SQS_UCP_JOBS_QUEUE_URL": self.sqs.ucp_jobs_queue_url,
+        }
+        for queue_name, queue_url in self.sqs_queue_url_map.items():
+            uris_to_validate.setdefault(f"DISCOVERED_JOB_QUEUE[{queue_name}]", queue_url)
+        self.pubsub.validate_uris(uris_to_validate)
+        return self
 
     @computed_field
     @property
@@ -161,8 +179,13 @@ class AppSettings(CleanBaseSettings):
 
     @computed_field
     @property
+    def pubsub_transport(self) -> str | None:
+        return self.pubsub.transport
+
+    @computed_field
+    @property
     def aws_endpoint_url(self) -> str | None:
-        return self.aws.endpoint_url
+        return self.pubsub.effective_aws_endpoint_url(self.aws.endpoint_url)
 
     @computed_field
     @property

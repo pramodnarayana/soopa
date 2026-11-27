@@ -6,13 +6,17 @@ from typing import Protocol, runtime_checkable
 
 from seedwork.domain.types import JsonDict
 
-from config_sync.domain.dtos import ConfigDeltaEvent
+from config_sync.domain.dtos import (
+    ChangelogVisibilityWatermark,
+    ConfigCursor,
+    ConfigDeltaEvent,
+)
 from config_sync.domain.enums import ConfigChangeAction
 
 
 @runtime_checkable
 class ConfigChangelogRepositoryPort(Protocol):
-    """Stores append-only monotonically versioned config deltas in PostgreSQL (`config_sync.config_changelog`)."""
+    """Stores append-only linearly ordered config deltas in PostgreSQL (`config_sync.config_changelog`)."""
 
     async def append_change(
         self,
@@ -25,11 +29,15 @@ class ConfigChangelogRepositoryPort(Protocol):
         payload: JsonDict,
         event_id: str | None = None,
     ) -> ConfigDeltaEvent:
-        """Atomically appends a change, assigns a monotonic `version`, and emits `pg_notify`."""
+        """Atomically appends a change and assigns a monotonic `version` & `xid8` transaction id."""
         ...
 
-    async def get_latest_version(self, *, app_id: str, tenant_id: str) -> int:
-        """Returns the highest persisted version for `(app_id, tenant_id)` (including wildcard `*`)."""
+    async def get_latest_cursor(self, *, app_id: str, tenant_id: str) -> ConfigCursor:
+        """Returns the highest visibility-safe `(txid, version)` cursor for `(app_id, tenant_id)`."""
+        ...
+
+    async def get_global_safe_cursor(self) -> ConfigCursor:
+        """Returns the highest globally visible `(txid, version)` cursor across all apps."""
         ...
 
     async def get_deltas_since(
@@ -37,23 +45,23 @@ class ConfigChangelogRepositoryPort(Protocol):
         *,
         app_id: str,
         tenant_id: str,
-        since_version: int,
+        since_cursor: ConfigCursor,
         limit: int = 1000,
     ) -> list[ConfigDeltaEvent]:
-        """Returns ordered deltas with `version > since_version` for catch-up streaming."""
+        """Returns visibility-safe deltas with `(txid, version) > since_cursor` ordered by `(txid, version)`."""
         ...
 
-    async def get_entry_by_version(self, *, version: int) -> ConfigDeltaEvent | None:
-        """Fetches a single changelog entry by its monotonic version (used by LISTEN/NOTIFY bridge)."""
-        ...
-
-    async def get_entries_after_version(
+    async def get_entries_after_cursor(
         self,
         *,
-        since_version: int,
+        since_cursor: ConfigCursor,
         limit: int = 1000,
     ) -> list[ConfigDeltaEvent]:
-        """Returns ordered global entries with `version > since_version` for LISTEN/NOTIFY reconnect catch-up."""
+        """Returns global visibility-safe entries with `(txid, version) > since_cursor` for cursor tailing."""
+        ...
+
+    async def get_visibility_lag_metrics(self) -> ChangelogVisibilityWatermark:
+        """Returns the visibility-safe head vs raw head cursor to detect long-running write stalls."""
         ...
 
     async def cleanup_old_entries(self, *, retention_days: int = 30) -> int:

@@ -51,6 +51,7 @@ async def test_delete_user_success(
     res = await delete_user_use_case.execute(command)
     assert res.is_ok
 
+    assert (tenant_id, user_id) not in fake_uow.user_repo.tenant_memberships
     assert (tenant_id, user_id) not in fake_uow.role_repo.user_roles
 
     saved_user = await fake_uow.user_repo.find_by_id(user_id)

@@ -4,6 +4,7 @@ from typing import Self
 
 from identity.domain.api_token import ApiToken
 from identity.domain.authorization import CapabilityDescriptor, Role
+from identity.domain.constants import MembershipScope, MembershipStatus
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.user import User
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
@@ -26,6 +27,23 @@ class FakeUserRepository(UserRepositoryPort):
             member_user_id == user_id and tenant_id != PLATFORM_TENANT_ID
             for tenant_id, member_user_id in self.tenant_memberships
         )
+
+    async def upsert_tenant_membership(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        scope: MembershipScope = MembershipScope.DIRECT,
+        status: MembershipStatus = MembershipStatus.ACTIVE,
+    ) -> None:
+        del scope
+        if status == MembershipStatus.ACTIVE:
+            self.tenant_memberships.add((tenant_id, user_id))
+        else:
+            self.tenant_memberships.discard((tenant_id, user_id))
+
+    async def remove_tenant_membership(self, *, tenant_id: str, user_id: str) -> None:
+        self.tenant_memberships.discard((tenant_id, user_id))
 
     async def find_by_email(self, email: str) -> User | None:
         return next((u for u in self.users if u.email == email), None)
@@ -102,9 +120,6 @@ class FakeRoleRepository(RoleRepositoryPort):
         key = (normalized_tenant_id, user_id)
         if key in self.user_roles:
             del self.user_roles[key]
-
-    async def has_any_tenant_memberships(self, user_id: str) -> bool:
-        return any(u_id == user_id and t_id is not None for t_id, u_id in self.user_roles)
 
 
 class FakeApiTokenRepository(ApiTokenRepositoryPort):

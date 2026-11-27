@@ -16,28 +16,6 @@ services:
       timeout: 5s
       retries: 5
 
-  localstack:
-    image: localstack/localstack:3.5.0
-    profiles: ["aws-compat"]
-    ports:
-      - "4566:4566"
-    environment:
-      - SERVICES=sqs,sns,s3,secretsmanager
-      - DEFAULT_REGION=us-east-1
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-      - LS_LOG=warn
-      - PERSISTENCE=1
-    volumes:
-      - localstack_data:/var/lib/localstack
-      - ./localstack-setup.sh:/etc/localstack/init/ready.d/init.sh
-      - ../topology.json:/etc/localstack/init/ready.d/topology.json
-    healthcheck:
-      test: ["CMD", "curl", "-s", "-f", "http://localhost:4566/_localstack/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 60
-
   sftp:
     image: atmoz/sftp:alpine
     ports:
@@ -46,4 +24,3 @@ services:
 
 volumes:
   postgres_global_data:
-  localstack_data:

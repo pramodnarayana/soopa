@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Protocol, cast
 
 from config_sync.domain.checksum import compute_payload_checksum
-from config_sync.domain.enums import ConfigChangeAction, ConfigSyncChannel
+from config_sync.domain.enums import ConfigChangeAction
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonDict, JsonValue
@@ -195,7 +195,6 @@ class GlobalSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
             action=action.value,
             checksum=compute_payload_checksum(changelog_payload),
             payload=dict(changelog_payload),
-            notify_channel=ConfigSyncChannel.CONFIG_CHANGELOG_NOTIFY.value,
         )
 
 

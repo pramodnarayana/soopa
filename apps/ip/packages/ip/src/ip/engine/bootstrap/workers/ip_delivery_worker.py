@@ -176,6 +176,7 @@ class IpDeliveryWorkerModule(LaunchableWorker):
                 handler=dispatcher.handle,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,
+                transport=settings.pubsub_transport,
                 shard_drain_repo=rt_shard_repo,
                 batch_size=settings.outbox_batch_size,
                 lock_lease_ms=settings.outbox_lock_lease_ms,
@@ -186,6 +187,7 @@ class IpDeliveryWorkerModule(LaunchableWorker):
                 self.cp_queue_manager = PubSubProvider.create_consumer_manager(
                     source_uri=rt_uri,
                     handler=dispatcher.handle,
+                    transport=settings.pubsub_transport,
                     session_factory=(
                         self.db_router.global_session_scope if self.db_router is not None else None
                     ),
@@ -219,6 +221,7 @@ class IpDeliveryWorkerModule(LaunchableWorker):
                 handler=dispatcher.handle,
                 region_name=settings.aws_region,
                 endpoint_url=settings.aws_endpoint_url,
+                transport=settings.pubsub_transport,
                 shard_drain_repo=bulk_shard_repo,
                 batch_size=settings.outbox_batch_size,
                 lock_lease_ms=settings.outbox_lock_lease_ms,
@@ -229,6 +232,7 @@ class IpDeliveryWorkerModule(LaunchableWorker):
                 self.cp_bulk_queue_manager = PubSubProvider.create_consumer_manager(
                     source_uri=bulk_uri,
                     handler=dispatcher.handle,
+                    transport=settings.pubsub_transport,
                     session_factory=(
                         self.db_router.global_session_scope if self.db_router is not None else None
                     ),

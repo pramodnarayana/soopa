@@ -117,7 +117,7 @@ async def get_roles(
 async def resolve_tenant(id: str, tenant_repo: TenantRepositoryPort) -> Tenant:
     tenant = await tenant_repo.find_by_id(id)
     if not tenant:
-        tenant = await tenant_repo.find_by_idp_tenant_id(id)
+        tenant = await tenant_repo.find_by_idp_realm(id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return tenant

@@ -1,4 +1,5 @@
 import structlog
+from config_sync.domain.enums import ConfigChangeAction
 from database.exceptions import DuplicateEntityError, ForeignKeyViolationError
 from database.models import Role as OrmRole
 from database.models import UserRole
@@ -10,6 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
+from identity.adapters.outbound.database._invalidation import record_user_revocation_tombstone
 from identity.domain.authorization import Role as DomainRole
 from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID
@@ -218,6 +220,13 @@ class SqlAlchemyRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
                 f"Cannot assign role: User '{user_id}' or Role '{role_id}' not found."
             ) from e
 
+        await record_user_revocation_tombstone(
+            self.session,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action=ConfigChangeAction.UPSERT,
+            reason="user_role_assigned",
+        )
         bound_logger.info("role_repo.assign_user_role.completed")
 
     async def remove_user_roles(self, tenant_id: str | None, user_id: str) -> None:
@@ -233,23 +242,15 @@ class SqlAlchemyRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
 
         await self.session.execute(stmt)
         await self.flush()
+        await record_user_revocation_tombstone(
+            self.session,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            action=ConfigChangeAction.DELETE,
+            reason="user_roles_removed",
+        )
 
         bound_logger.info("role_repo.remove_user_roles.completed")
-
-    async def has_any_tenant_memberships(self, user_id: str) -> bool:
-        """Check if a user has any remaining tenant memberships by querying UserRole."""
-        stmt = (
-            select(UserRole)
-            .join(OrmRole, OrmRole.id == UserRole.role_id)
-            .where(
-                UserRole.user_id == user_id,
-                UserRole.tenant_id != PLATFORM_TENANT_ID,
-                OrmRole.deleted_at.is_(None),
-            )
-            .limit(1)
-        )
-        result = await self.session.execute(stmt)
-        return result.first() is not None
 
     def _flush_events(self, role: DomainRole, idempotency_key: str | None = None) -> None:
         for index, event in enumerate(role.domain_events):

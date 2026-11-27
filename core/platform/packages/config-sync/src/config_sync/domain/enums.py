@@ -22,12 +22,6 @@ class ConfigWatchEventType(StrEnum):
     HEARTBEAT = "heartbeat"
 
 
-class ConfigSyncChannel(StrEnum):
-    """PostgreSQL LISTEN/NOTIFY channel identifier for multi-replica Dynamic Watch fan-out."""
-
-    CONFIG_CHANGELOG_NOTIFY = "config_sync_changelog"
-
-
 class ConfigSyncJobName(StrEnum):
     """Canonical scheduled maintenance job names for the Config Sync subsystem."""
 
@@ -47,7 +41,6 @@ class ConfigSyncErrorCode(StrEnum):
 
 __all__ = [
     "ConfigChangeAction",
-    "ConfigSyncChannel",
     "ConfigSyncErrorCode",
     "ConfigSyncJobName",
     "ConfigWatchEventType",

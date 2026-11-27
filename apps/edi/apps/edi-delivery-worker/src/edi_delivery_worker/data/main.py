@@ -298,22 +298,24 @@ class EdiDeliveryWorkerModule(_BaseEdiDeliveryWorkerModule):
     async def start(self) -> None:
         settings = get_settings()
         aws_endpoint = settings.aws.endpoint_url
-        s3_bucket = settings.s3.bucket
 
         self.db_router = DatabaseRouter(
             global_db_url=settings.database.global_url,
             shard_overrides=settings.database.shard_overrides,
         )
         resolver = SqlAlchemyTenantResolver(self.db_router)
-        vault = SecretStoreProvider.get_secret_store(secrets_mount_path=settings.secrets.mount_path)
+        vault = SecretStoreProvider.from_settings(
+            settings.secrets,
+            aws_settings=settings.aws,
+        )
         field_encryption = SecurityProvider.get_fernet_cipher()
         crypto_service = SmimeCryptoService()
 
         uow_provider = create_edi_tenant_uow_provider(
             resolver=resolver,
             db_router=self.db_router,
-            s3_bucket=s3_bucket,
-            aws_endpoint=aws_endpoint,
+            storage_settings=settings.storage,
+            aws_settings=settings.aws,
         )
 
         self.http_delivery = HttpxDeliveryClient(validator=validate_target_url)
@@ -348,7 +350,8 @@ class EdiDeliveryWorkerModule(_BaseEdiDeliveryWorkerModule):
             PubSubProvider.create_outbox_publisher(
                 destination_uri=settings.sqs.deliver_dlq_url,
                 region_name=settings.aws.resolved_region,
-                endpoint_url=aws_endpoint,
+                endpoint_url=settings.effective_aws_endpoint_url(aws_endpoint),
+                transport=settings.pubsub_transport,
                 session_factory=self.db_router.global_session_scope,
                 database_url=settings.database.global_url,
             )
@@ -360,7 +363,8 @@ class EdiDeliveryWorkerModule(_BaseEdiDeliveryWorkerModule):
             source_uri=deliver_uri,
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
-            endpoint_url=aws_endpoint,
+            endpoint_url=settings.effective_aws_endpoint_url(aws_endpoint),
+            transport=settings.pubsub_transport,
             shard_drain_repo=deliver_shard_repo,
             dlq_publisher=dlq_publisher,
         )
@@ -376,7 +380,6 @@ class EdiDeliveryDlqWorkerModule(_BaseEdiDeliveryWorkerModule):
             raise ValueError("SQS_DELIVER_DLQ_URL is required when running in DLQ mode")
 
         aws_endpoint = settings.aws.endpoint_url
-        s3_bucket = settings.s3.bucket
 
         self.db_router = DatabaseRouter(
             global_db_url=settings.database.global_url,
@@ -386,8 +389,8 @@ class EdiDeliveryDlqWorkerModule(_BaseEdiDeliveryWorkerModule):
         uow_provider = create_edi_tenant_uow_provider(
             resolver=resolver,
             db_router=self.db_router,
-            s3_bucket=s3_bucket,
-            aws_endpoint=aws_endpoint,
+            storage_settings=settings.storage,
+            aws_settings=settings.aws,
         )
 
         consumer = _setup_dlq_registry(settings=settings, uow_provider=uow_provider)
@@ -395,7 +398,8 @@ class EdiDeliveryDlqWorkerModule(_BaseEdiDeliveryWorkerModule):
             source_uri=settings.sqs.deliver_dlq_url,
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
-            endpoint_url=aws_endpoint,
+            endpoint_url=settings.effective_aws_endpoint_url(aws_endpoint),
+            transport=settings.pubsub_transport,
             session_factory=self.db_router.global_session_scope,
             database_url=settings.database.global_url,
         )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from orchestration.domain.constants import EffectPolicy, NodeKind, Priority
 from orchestration.domain.definition import (
     ConcurrencyPolicy,
@@ -46,10 +47,10 @@ def build_meter_reading_erp_sync_definition() -> WorkflowDefinition:
 
 
 def build_meter_reading_erp_sync_stitch() -> Stitch:
-    """Build the wildcard Stitch triggering the ERP sync workflow on MDM meter readings."""
+    """Build the platform-shared Stitch triggering the ERP sync workflow on MDM meter readings."""
     return Stitch(
         id="stch_default_energy_reading_sync",
-        tenant_id="*",
+        tenant_id=PLATFORM_TENANT_ID,
         canonical_event_type=EnergyEntityType.MDM_METER_READING.value,
         target_workflow_id="energy.meter_reading_erp_sync_stitch",
         name="AMI Energy Meter Reading ERP Sync",

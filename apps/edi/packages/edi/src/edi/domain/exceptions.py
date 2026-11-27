@@ -25,6 +25,7 @@ class EdiErrorCode(StrEnum):
     INVALID_DESTINATION_MUTUAL_EXCLUSIVITY = "INVALID_DESTINATION_MUTUAL_EXCLUSIVITY"
     ROUTE_ALREADY_ACTIVE = "ROUTE_ALREADY_ACTIVE"
     ROUTE_ALREADY_INACTIVE = "ROUTE_ALREADY_INACTIVE"
+    ROUTE_NOT_ACTIVE = "ROUTE_NOT_ACTIVE"
     INVALID_MATCHING_CRITERIA = "INVALID_MATCHING_CRITERIA"
     ROUTE_NOT_FOUND = "ROUTE_NOT_FOUND"
     HEADER_NOT_FOUND = "HEADER_NOT_FOUND"
@@ -44,6 +45,24 @@ class EdiErrorCode(StrEnum):
     INVALID_PAYLOAD = "INVALID_PAYLOAD"
     VALIDATION_FAILED = "VALIDATION_FAILED"
     INTERNAL_ERROR = "INTERNAL_ERROR"
+
+    # Inbound AS2 Protocol & Routing Invariants
+    AS2_PARSE_FAILED = "AS2_PARSE_FAILED"
+    AS2_DECRYPTION_FAILED = "AS2_DECRYPTION_FAILED"
+    AS2_AUTHENTICATION_FAILED = "AS2_AUTHENTICATION_FAILED"
+    AS2_INTEGRITY_FAILED = "AS2_INTEGRITY_FAILED"
+    AS2_TENANT_NOT_FOUND = "AS2_TENANT_NOT_FOUND"
+    AS2_AMBIGUOUS_ISA_ROUTE = "AS2_AMBIGUOUS_ISA_ROUTE"
+
+
+class As2MdnDispositionModifier(StrEnum):
+    """RFC 4130 Section 7.5.3 MDN disposition error modifiers."""
+
+    DECRYPTION_FAILED = "error: decryption-failed"
+    AUTHENTICATION_FAILED = "error: authentication-failed"
+    INTEGRITY_CHECK_FAILED = "error: integrity-check-failed"
+    INSUFFICIENT_MESSAGE_SECURITY = "error: insufficient-message-security"
+    UNEXPECTED_PROCESSING_ERROR = "error: unexpected-processing-error"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,6 +88,222 @@ class EdiValidationError(EdiError):
 @dataclass(frozen=True, kw_only=True)
 class EdiRoutingError(EdiError):
     """Domain errors specific to EDI Inbound Route, Outbound Route, and Header aggregates."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class RouteNotActiveEdiError(EdiRoutingError):
+    """First-class error when an inbound route exists for an ISA pair but is not active."""
+
+    code: EdiErrorCode = EdiErrorCode.ROUTE_NOT_ACTIVE
+
+    @classmethod
+    def for_isa_pair(
+        cls,
+        *,
+        isa_sender: str,
+        isa_receiver: str,
+        inactive_route_ids: tuple[str, ...],
+        inactive_route_names: tuple[str, ...] = (),
+        as2_from: str | None = None,
+        as2_to: str | None = None,
+        message_id: str | None = None,
+    ) -> RouteNotActiveEdiError:
+        route_label = (
+            ", ".join(f"'{name}'" for name in inactive_route_names)
+            if inactive_route_names
+            else ", ".join(inactive_route_ids)
+        )
+        details: JsonDict = {
+            "isa_sender": isa_sender,
+            "isa_receiver": isa_receiver,
+            "inactive_route_ids": list(inactive_route_ids),
+            "inactive_route_names": list(inactive_route_names),
+        }
+        if as2_from is not None:
+            details["as2_from"] = as2_from
+        if as2_to is not None:
+            details["as2_to"] = as2_to
+        if message_id is not None:
+            details["message_id"] = message_id
+        return cls(
+            message=(
+                f"Route Not Active: Inbound route {route_label} for ISA pair "
+                f"'{isa_sender}' -> '{isa_receiver}' is not active."
+            ),
+            details=details,
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class As2InboundError(EdiError):
+    """First-class domain error for known inbound AS2 protocol, crypto, and ISA routing rejections."""
+
+    mdn_modifier: As2MdnDispositionModifier
+    external_message: str = ""
+
+    @property
+    def safe_mdn_text(self) -> str:
+        return self.external_message or self.message
+
+    @classmethod
+    def parse_failed(cls, *, reason: str) -> As2InboundError:
+        return cls(
+            code=EdiErrorCode.AS2_PARSE_FAILED,
+            message=f"Failed to parse inbound AS2 request: {reason}",
+            external_message=f"Bad AS2 request: {reason}",
+            mdn_modifier=As2MdnDispositionModifier.UNEXPECTED_PROCESSING_ERROR,
+            details={"reason": reason},
+        )
+
+    @classmethod
+    def partnership_not_found(
+        cls, *, as2_from: str, as2_to: str, message_id: str
+    ) -> As2InboundError:
+        msg = f"AS2 partnership not configured for AS2-From='{as2_from}' -> AS2-To='{as2_to}'."
+        return cls(
+            code=EdiErrorCode.PARTNERSHIP_NOT_FOUND,
+            message=msg,
+            external_message=msg,
+            mdn_modifier=As2MdnDispositionModifier.INSUFFICIENT_MESSAGE_SECURITY,
+            details={
+                "as2_from": as2_from,
+                "as2_to": as2_to,
+                "message_id": message_id,
+            },
+        )
+
+    @classmethod
+    def decryption_failed(
+        cls, *, reason: str, as2_from: str, as2_to: str, message_id: str
+    ) -> As2InboundError:
+        return cls(
+            code=EdiErrorCode.AS2_DECRYPTION_FAILED,
+            message=f"AS2 decryption failed for AS2-From='{as2_from}' -> AS2-To='{as2_to}': {reason}",
+            external_message="Failed to decrypt S/MIME payload.",
+            mdn_modifier=As2MdnDispositionModifier.DECRYPTION_FAILED,
+            details={
+                "as2_from": as2_from,
+                "as2_to": as2_to,
+                "message_id": message_id,
+                "reason": reason,
+            },
+        )
+
+    @classmethod
+    def authentication_failed(
+        cls, *, reason: str, as2_from: str, as2_to: str, message_id: str
+    ) -> As2InboundError:
+        return cls(
+            code=EdiErrorCode.AS2_AUTHENTICATION_FAILED,
+            message=(
+                f"AS2 signature authentication failed for AS2-From='{as2_from}' -> "
+                f"AS2-To='{as2_to}': {reason}"
+            ),
+            external_message="Signature authentication failed.",
+            mdn_modifier=As2MdnDispositionModifier.AUTHENTICATION_FAILED,
+            details={
+                "as2_from": as2_from,
+                "as2_to": as2_to,
+                "message_id": message_id,
+                "reason": reason,
+            },
+        )
+
+    @classmethod
+    def integrity_failed(
+        cls, *, reason: str, as2_from: str, as2_to: str, message_id: str
+    ) -> As2InboundError:
+        return cls(
+            code=EdiErrorCode.AS2_INTEGRITY_FAILED,
+            message=f"AS2 integrity check failed for AS2-From='{as2_from}' -> AS2-To='{as2_to}': {reason}",
+            external_message="Message integrity check failed.",
+            mdn_modifier=As2MdnDispositionModifier.INTEGRITY_CHECK_FAILED,
+            details={
+                "as2_from": as2_from,
+                "as2_to": as2_to,
+                "message_id": message_id,
+                "reason": reason,
+            },
+        )
+
+    @classmethod
+    def invalid_payload(
+        cls, *, reason: str, as2_from: str, as2_to: str, message_id: str
+    ) -> As2InboundError:
+        return cls(
+            code=EdiErrorCode.INVALID_PAYLOAD,
+            message=(
+                f"Invalid EDI payload for AS2-From='{as2_from}' -> AS2-To='{as2_to}': {reason}"
+            ),
+            external_message=f"Invalid EDI payload: {reason}",
+            mdn_modifier=As2MdnDispositionModifier.UNEXPECTED_PROCESSING_ERROR,
+            details={
+                "as2_from": as2_from,
+                "as2_to": as2_to,
+                "message_id": message_id,
+                "reason": reason,
+            },
+        )
+
+    @classmethod
+    def tenant_not_found(
+        cls,
+        *,
+        isa_sender: str,
+        isa_receiver: str,
+        as2_from: str,
+        as2_to: str,
+        message_id: str,
+        reason: str = "no_matching_inbound_route",
+    ) -> As2InboundError:
+        external = (
+            f"No active tenant inbound route found for ISA pair '{isa_sender}' -> '{isa_receiver}'."
+        )
+        return cls(
+            code=EdiErrorCode.AS2_TENANT_NOT_FOUND,
+            message=external,
+            external_message=external,
+            mdn_modifier=As2MdnDispositionModifier.UNEXPECTED_PROCESSING_ERROR,
+            details={
+                "isa_sender": isa_sender,
+                "isa_receiver": isa_receiver,
+                "as2_from": as2_from,
+                "as2_to": as2_to,
+                "message_id": message_id,
+                "reason": reason,
+            },
+        )
+
+    @classmethod
+    def ambiguous_isa_route(
+        cls,
+        *,
+        isa_sender: str,
+        isa_receiver: str,
+        matched_tenant_ids: tuple[str, ...],
+        as2_from: str,
+        as2_to: str,
+        message_id: str,
+    ) -> As2InboundError:
+        return cls(
+            code=EdiErrorCode.AS2_AMBIGUOUS_ISA_ROUTE,
+            message=(
+                f"Ambiguous ISA pair '{isa_sender}' -> '{isa_receiver}' matched "
+                f"{len(matched_tenant_ids)} active tenants: {list(matched_tenant_ids)}."
+            ),
+            external_message=(
+                f"Ambiguous routing configuration for ISA pair '{isa_sender}' -> '{isa_receiver}'."
+            ),
+            mdn_modifier=As2MdnDispositionModifier.UNEXPECTED_PROCESSING_ERROR,
+            details={
+                "isa_sender": isa_sender,
+                "isa_receiver": isa_receiver,
+                "matched_tenant_ids": list(matched_tenant_ids),
+                "as2_from": as2_from,
+                "as2_to": as2_to,
+                "message_id": message_id,
+            },
+        )
 
 
 @dataclass(frozen=True, kw_only=True)

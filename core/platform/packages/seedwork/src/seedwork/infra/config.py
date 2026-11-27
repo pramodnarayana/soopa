@@ -81,6 +81,34 @@ def resolve_env_file_path(repo_root: Path | None = None) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
+def resolve_anchored_path(raw_path: str, *, setting_name: str) -> str:
+    """Resolve a configured filesystem path deterministically across monorepo services.
+
+    - Absolute paths are normalized via ``os.path.normpath``.
+    - Relative paths (e.g. ``.local/secrets``) are anchored to the monorepo root
+      via ``find_repo_root()`` so services launched from different subdirectories
+      always read and write the exact same directory.
+    - Outside a git monorepo (e.g. production containers), relative paths fail fast.
+    """
+    cleaned = raw_path.strip()
+    if not cleaned:
+        raise ValueError(f"{setting_name} must not be empty.")
+
+    candidate = Path(cleaned)
+    if candidate.is_absolute():
+        return os.path.normpath(cleaned)
+
+    try:
+        repo_root = find_repo_root(Path(__file__).resolve())
+    except RuntimeError as exc:
+        raise ValueError(
+            f"{setting_name}='{cleaned}' must be an absolute path when running outside a "
+            "monorepo workspace."
+        ) from exc
+
+    return str((repo_root / candidate).resolve())
+
+
 def load_repo_env(*, repo_root: Path | None = None) -> dict[str, str]:
     """Parse key-value pairs from the active environment file into a dictionary.
 

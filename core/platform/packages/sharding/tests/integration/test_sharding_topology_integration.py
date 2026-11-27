@@ -59,7 +59,7 @@ async def test_sqlalchemy_shard_topology_repository_and_resolver_end_to_end(
         id=f"{Tenant.ID_PREFIX}_{suffix}",
         name=f"Tenant {suffix}",
         slug=f"tenant-{suffix}",
-        idp_tenant_id=f"org_{suffix}",
+        idp_realm_name=f"org_{suffix}",
     )
     shard = DatabaseShard(
         id=f"{DatabaseShard.ID_PREFIX}_{suffix}",

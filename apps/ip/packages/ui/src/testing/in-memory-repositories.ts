@@ -21,6 +21,7 @@ import {
   EntitySyncSchedule,
   type JsonRecord,
   PipelineLayer,
+  PLATFORM_TENANT_ID,
   ReplayDispatchStatus,
   type ReplayStageValue,
   StitchRunStatus,
@@ -1054,12 +1055,14 @@ export class InMemoryStitchRepository implements StitchRepositoryPort {
   }
 
   public async listStitches(tenantId: string): Promise<Result<readonly Stitch[], ApiProblem>> {
-    return ok(this.stitches.filter((s) => s.tenantId === tenantId || s.tenantId === '*'));
+    return ok(
+      this.stitches.filter((s) => s.tenantId === tenantId || s.tenantId === PLATFORM_TENANT_ID),
+    );
   }
 
   public async getStitch(tenantId: string, stitchId: string): Promise<Result<Stitch, ApiProblem>> {
     const found = this.stitches.find(
-      (s) => s.id === stitchId && (s.tenantId === tenantId || s.tenantId === '*'),
+      (s) => s.id === stitchId && (s.tenantId === tenantId || s.tenantId === PLATFORM_TENANT_ID),
     );
     return found ? ok(found) : err(notFoundProblem(`Stitch '${stitchId}' not found.`));
   }
@@ -1094,7 +1097,7 @@ export class InMemoryStitchRepository implements StitchRepositoryPort {
     input: UpdateStitchInput,
   ): Promise<Result<Stitch, ApiProblem>> {
     const idx = this.stitches.findIndex(
-      (s) => s.id === stitchId && (s.tenantId === tenantId || s.tenantId === '*'),
+      (s) => s.id === stitchId && (s.tenantId === tenantId || s.tenantId === PLATFORM_TENANT_ID),
     );
     if (idx === -1) {
       return err(notFoundProblem(`Stitch '${stitchId}' not found.`));
@@ -1122,7 +1125,7 @@ export class InMemoryStitchRepository implements StitchRepositoryPort {
 
   public async deleteStitch(tenantId: string, stitchId: string): Promise<Result<void, ApiProblem>> {
     const idx = this.stitches.findIndex(
-      (s) => s.id === stitchId && (s.tenantId === tenantId || s.tenantId === '*'),
+      (s) => s.id === stitchId && (s.tenantId === tenantId || s.tenantId === PLATFORM_TENANT_ID),
     );
     if (idx === -1) {
       return err(notFoundProblem(`Stitch '${stitchId}' not found.`));

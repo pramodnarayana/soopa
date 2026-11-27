@@ -27,7 +27,7 @@ async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None
             id=tenant_id,
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=f"test-tenant-{generate_random_hex(6)}",
-            idp_tenant_id="idp_test_123",
+            idp_realm_name="soopa-global",
             status=LifecycleStatus.ACTIVE,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),

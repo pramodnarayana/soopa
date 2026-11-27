@@ -6,6 +6,7 @@ from edi.adapters.outbound.database.models.data_plane import InboundRoute as Orm
 from edi.domain.routing.constants import WILDCARD_TRANSACTION_TYPE
 from edi.domain.routing.enums import EdiConnectionType, ProcessingMode
 from edi.domain.routing.inbound_route import InboundRoute
+from edi.domain.routing.isa_resolution import IsaTenantResolution
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 
 
@@ -50,8 +51,13 @@ class SqlAlchemyDataPlaneInboundRouteRepository(InboundRouteRepositoryPort):
         record = (await self.session.execute(stmt)).scalars().first()
         return self._to_domain_model(record) if record else None
 
-    async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
-        # Not applicable for a data plane scoped to a tenant
+    async def resolve_tenant_by_isa(
+        self,
+        isa_sender_id: str,
+        isa_receiver_id: str,
+        *,
+        transaction_type: str | None = None,
+    ) -> IsaTenantResolution:
         raise ReadOnlyDataPlaneRepositoryError(
             "Cannot resolve tenant from tenant-scoped data plane"
         )

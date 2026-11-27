@@ -44,8 +44,8 @@ class CreateUserUseCase:
                 logger.error("create_user.tenant_not_found", tenant_id=command.tenant_id)
                 return Result.fail(TenantNotFoundError.for_id(command.tenant_id))
 
-            if not tenant.idp_tenant_id:
-                logger.error("create_user.missing_idp_tenant", tenant_id=command.tenant_id)
+            if not tenant.idp_realm_name:
+                logger.error("create_user.missing_idp_realm", tenant_id=command.tenant_id)
                 return Result.fail(MissingIdpOrganizationError.for_tenant(command.tenant_id))
 
             pbac_role = await self._uow.role_repo.get_platform_role_by_id(command.role)
@@ -84,6 +84,10 @@ class CreateUserUseCase:
             new_user = user_res.unwrap()
             await self._uow.user_repo.save(new_user)
 
+            await self._uow.user_repo.upsert_tenant_membership(
+                tenant_id=tenant.id,
+                user_id=local_user_id,
+            )
             await self._uow.role_repo.assign_user_role(
                 tenant_id=tenant.id, user_id=local_user_id, role_id=pbac_role.id
             )

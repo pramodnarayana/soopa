@@ -118,7 +118,7 @@ async def test_edi_dynamic_watch_syncs_topological_and_shared_platform_entities_
         await session.commit()
 
     # 2. Wire Universal Watch Gateway with PLATFORM_TENANT_ID included in shared_tenant_ids
-    shared_tenants: tuple[str, ...] = ("*", PLATFORM_TENANT_ID)
+    shared_tenants: tuple[str, ...] = (PLATFORM_TENANT_ID,)
     changelog_repo = ConfigSyncProvider.create_changelog_repository(
         session_factory=test_db_router.global_session_scope,
         shared_tenant_ids=shared_tenants,
@@ -188,7 +188,7 @@ async def test_edi_dynamic_watch_syncs_topological_and_shared_platform_entities_
     )
     tenant_deltas = await edi_provider.get_deltas_since(
         tenant_id=tenant_id,
-        since_version=snap_res.unwrap().version,
+        since_cursor=snap_res.unwrap().cursor,
     )
     assert any(d.version == shared_delta.version for d in tenant_deltas)
 

@@ -65,7 +65,7 @@ async def test_provision_tenant_success(
 
     saved_tenant = fake_uow.tenant_repo.saved_tenants[0]
     assert saved_tenant.name == "Test Tenant"
-    assert saved_tenant.idp_tenant_id is None
+    assert saved_tenant.idp_realm_name is None
     assert saved_tenant.id.startswith("iam_ten_")
     assert tenant is saved_tenant
 
@@ -96,7 +96,7 @@ async def test_provision_tenant_retries_on_slug_collision_and_exhausts_cleanly(
         id=generate_id(DomainIdPrefix.TENANT),
         name="Acme, Corp.",
         slug="acme-corp",
-        idp_tenant_id=None,
+        idp_realm_name=None,
     ).unwrap()
     await fake_uow.tenant_repo.save(existing)
 
@@ -110,7 +110,7 @@ async def test_provision_tenant_retries_on_slug_collision_and_exhausts_cleanly(
             id=generate_id(DomainIdPrefix.TENANT),
             name=f"Acme Corp Variant {suffix}",
             slug=f"acme-corp-{suffix}",
-            idp_tenant_id=None,
+            idp_realm_name=None,
         ).unwrap()
         await fake_uow.tenant_repo.save(occupied)
 

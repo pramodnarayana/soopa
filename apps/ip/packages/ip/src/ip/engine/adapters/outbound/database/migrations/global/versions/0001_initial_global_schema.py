@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
@@ -410,7 +411,7 @@ def upgrade() -> None:
         "stitches",
         ["id"],
         unique=True,
-        postgresql_where=sa.text("tenant_id != '*'"),
+        postgresql_where=sa.column("tenant_id") != sa.literal(PLATFORM_TENANT_ID),
         schema="ip",
     )
 

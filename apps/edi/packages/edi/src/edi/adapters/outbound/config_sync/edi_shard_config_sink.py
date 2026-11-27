@@ -14,7 +14,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped
 
-from config_sync.domain.dtos import ConfigDeltaEvent, ConfigEntityRecord, ConfigSnapshot
+from config_sync.domain.dtos import (
+    ConfigCursor,
+    ConfigDeltaEvent,
+    ConfigEntityRecord,
+    ConfigSnapshot,
+)
 from config_sync.domain.enums import ConfigChangeAction
 from config_sync.domain.monotonic_guard import MonotonicCatalogState
 from config_sync.ports.config_apply_sink_port import ConfigApplySinkPort
@@ -81,9 +86,9 @@ class EdiShardConfigSink(ConfigApplySinkPort):
     def mirror(self) -> MonotonicCatalogState:
         return self._mirror
 
-    async def get_current_version(self, *, app_id: str, tenant_id: str) -> int:
+    async def get_current_cursor(self, *, app_id: str, tenant_id: str) -> ConfigCursor:
         del app_id, tenant_id
-        return self._mirror.current_version
+        return self._mirror.current_cursor
 
     async def apply_snapshot(self, snapshot: ConfigSnapshot) -> None:
         shard_name, shard_dsn = await self._tenant_port.resolve_shard(self._tenant_id)
@@ -136,14 +141,14 @@ class EdiShardConfigSink(ConfigApplySinkPort):
         )
 
     async def apply_delta(self, delta: ConfigDeltaEvent) -> None:
-        if delta.version <= self._mirror.current_version:
+        if delta.cursor <= self._mirror.current_cursor:
             logger.debug(
                 "edi_shard_config_delta_dropped_stale",
                 tenant_id=self._tenant_id,
                 entity_type=delta.entity_type,
                 entity_id=delta.entity_id,
-                incoming_version=delta.version,
-                current_version=self._mirror.current_version,
+                incoming_cursor=delta.cursor.encode(),
+                current_cursor=self._mirror.current_cursor.encode(),
             )
             return
 

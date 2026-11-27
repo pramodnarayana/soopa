@@ -11,6 +11,7 @@ import structlog
 
 from config_sync.domain.checksum import verify_delta_checksum, verify_snapshot_checksum
 from config_sync.domain.dtos import (
+    ConfigCursor,
     ConfigDeltaEvent,
     ConfigSnapshot,
     ConfigSyncError,
@@ -47,11 +48,15 @@ class SyncConfigWatchLoopUseCase:
         self._config = config
         self._running = False
         self._task: asyncio.Task[None] | None = None
-        self._last_applied_version: int = 0
+        self._last_applied_cursor: ConfigCursor = ConfigCursor.zero()
+
+    @property
+    def last_applied_cursor(self) -> ConfigCursor:
+        return self._last_applied_cursor
 
     @property
     def last_applied_version(self) -> int:
-        return self._last_applied_version
+        return self._last_applied_cursor.version
 
     @property
     def is_running(self) -> bool:
@@ -82,16 +87,71 @@ class SyncConfigWatchLoopUseCase:
             "config_watch_loop_stopped",
             app_id=self._config.app_id,
             tenant_id=self._config.tenant_id,
-            last_applied_version=self._last_applied_version,
+            last_applied_cursor=self._last_applied_cursor.encode(),
         )
 
-    async def sync_once(self) -> int:
-        """Consumes one watch session until the stream closes, returning the latest applied version."""
-        current_version = await self._sink.get_current_version(
+    async def _apply_snapshot_item(
+        self, item: ConfigSnapshot, bound: structlog.stdlib.BoundLogger
+    ) -> None:
+        if not verify_snapshot_checksum(item):
+            bound.error(
+                "config_watch_snapshot_checksum_mismatch",
+                cursor=item.cursor.encode(),
+                declared_checksum=item.checksum,
+            )
+            return
+        if item.cursor < self._last_applied_cursor:
+            bound.info(
+                "config_watch_stale_snapshot_dropped",
+                incoming_cursor=item.cursor.encode(),
+                local_cursor=self._last_applied_cursor.encode(),
+            )
+            return
+        await self._sink.apply_snapshot(item)
+        self._last_applied_cursor = item.cursor
+        bound.info(
+            "config_watch_snapshot_applied",
+            cursor=item.cursor.encode(),
+            entity_count=len(item.entities),
+        )
+
+    async def _apply_delta_item(
+        self, item: ConfigDeltaEvent, bound: structlog.stdlib.BoundLogger
+    ) -> None:
+        if not verify_delta_checksum(item):
+            bound.error(
+                "config_watch_delta_checksum_mismatch",
+                event_id=item.event_id,
+                cursor=item.cursor.encode(),
+            )
+            return
+        if item.cursor <= self._last_applied_cursor:
+            bound.info(
+                "config_watch_stale_delta_dropped",
+                event_id=item.event_id,
+                incoming_cursor=item.cursor.encode(),
+                local_cursor=self._last_applied_cursor.encode(),
+            )
+            return
+        await self._sink.apply_delta(item)
+        self._last_applied_cursor = item.cursor
+        bound.info(
+            "config_watch_delta_applied",
+            event_id=item.event_id,
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            action=item.action.value,
+            cursor=item.cursor.encode(),
+        )
+
+    async def sync_once(self) -> ConfigCursor:
+        """Consumes one watch session until the stream closes, returning the latest applied cursor."""
+        current_cursor = await self._sink.get_current_cursor(
             app_id=self._config.app_id,
             tenant_id=self._config.tenant_id,
         )
-        self._last_applied_version = max(self._last_applied_version, current_version)
+        if current_cursor > self._last_applied_cursor:
+            self._last_applied_cursor = current_cursor
         bound = logger.bind(
             app_id=self._config.app_id,
             tenant_id=self._config.tenant_id,
@@ -100,7 +160,7 @@ class SyncConfigWatchLoopUseCase:
         async for item in self._watch_client.watch(
             app_id=self._config.app_id,
             tenant_id=self._config.tenant_id,
-            since_version=self._last_applied_version,
+            since_cursor=self._last_applied_cursor,
         ):
             if isinstance(item, ConfigSyncError):
                 bound.error(
@@ -109,71 +169,27 @@ class SyncConfigWatchLoopUseCase:
                     message=item.message,
                 )
                 break
-
             if isinstance(item, ConfigWatchHeartbeat):
-                bound.debug("config_watch_heartbeat_received", latest_version=item.latest_version)
+                bound.debug(
+                    "config_watch_heartbeat_received",
+                    latest_cursor=item.latest_cursor.encode(),
+                )
                 continue
-
             if isinstance(item, ConfigSnapshot):
-                if not verify_snapshot_checksum(item):
-                    bound.error(
-                        "config_watch_snapshot_checksum_mismatch",
-                        version=item.version,
-                        declared_checksum=item.checksum,
-                    )
-                    continue
-                if item.version < self._last_applied_version:
-                    bound.info(
-                        "config_watch_stale_snapshot_dropped",
-                        incoming_version=item.version,
-                        local_version=self._last_applied_version,
-                    )
-                    continue
-                await self._sink.apply_snapshot(item)
-                self._last_applied_version = item.version
-                bound.info(
-                    "config_watch_snapshot_applied",
-                    version=item.version,
-                    entity_count=len(item.entities),
-                )
+                await self._apply_snapshot_item(item, bound)
                 continue
-
             if isinstance(item, ConfigDeltaEvent):
-                if not verify_delta_checksum(item):
-                    bound.error(
-                        "config_watch_delta_checksum_mismatch",
-                        event_id=item.event_id,
-                        version=item.version,
-                    )
-                    continue
-                if item.version <= self._last_applied_version:
-                    bound.info(
-                        "config_watch_stale_delta_dropped",
-                        event_id=item.event_id,
-                        incoming_version=item.version,
-                        local_version=self._last_applied_version,
-                    )
-                    continue
-                await self._sink.apply_delta(item)
-                self._last_applied_version = item.version
-                bound.info(
-                    "config_watch_delta_applied",
-                    event_id=item.event_id,
-                    entity_type=item.entity_type,
-                    entity_id=item.entity_id,
-                    action=item.action.value,
-                    version=item.version,
-                )
+                await self._apply_delta_item(item, bound)
 
-        return self._last_applied_version
+        return self._last_applied_cursor
 
     async def run_forever(self) -> None:
         backoff = self._config.initial_backoff_seconds
         while self._running:
             try:
-                before = self._last_applied_version
+                before = self._last_applied_cursor
                 await self.sync_once()
-                if self._last_applied_version > before:
+                if self._last_applied_cursor > before:
                     backoff = self._config.initial_backoff_seconds
             except asyncio.CancelledError:
                 raise

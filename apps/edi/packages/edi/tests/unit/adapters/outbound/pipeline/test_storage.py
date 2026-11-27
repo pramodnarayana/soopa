@@ -4,8 +4,9 @@ import os
 import aioboto3
 import botocore.exceptions
 import pytest
+from storage import PlatformStorageSettings, StorageBackend
 
-from edi.adapters.outbound.pipeline.storage import S3StorageClient
+from edi.adapters.outbound.pipeline.storage import PlatformStorageAdapter
 
 pytestmark = pytest.mark.asyncio
 
@@ -18,7 +19,7 @@ def aws_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.integration
 async def test_s3_storage_adapter_integration(aws_credentials: None) -> None:
     """
-    Narrow Integration Test for S3StorageClient.
+    Narrow Integration Test for PlatformStorageAdapter with S3 backend.
     Connects to the LocalStack S3 container, creates a bucket,
     uploads a file, downloads it, and asserts the content matches.
     """
@@ -32,7 +33,13 @@ async def test_s3_storage_adapter_integration(aws_credentials: None) -> None:
             await s3.create_bucket(Bucket=bucket_name)
 
     # Initialize Adapter
-    adapter = S3StorageClient(bucket_name=bucket_name, endpoint_url=endpoint_url)
+    adapter = PlatformStorageAdapter.from_settings(
+        PlatformStorageSettings(
+            backend=StorageBackend.S3,
+            bucket=bucket_name,
+            endpoint_url=endpoint_url,
+        )
+    )
 
     # Act: Upload
     test_data = b"real integration test payload for S3 storage pipeline"

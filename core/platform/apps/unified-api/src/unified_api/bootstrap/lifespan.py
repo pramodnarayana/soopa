@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 
 import structlog
+from database.config_changelog import CONTROL_PLANE_OLTP_SERVER_SETTINGS
 from database.provider import DatabaseProvider
 from database.router import DatabaseRouter
 from dependency_injector import providers
@@ -22,6 +23,7 @@ from seedwork.infra.api import LaunchableApiModule
 from ucp.bootstrap.lifespan import shutdown as ucp_shutdown
 from ucp.bootstrap.lifespan import startup as ucp_startup
 
+from unified_api.bootstrap.identity_authz import warm_global_authz_catalog
 from unified_api.bootstrap.identity_drift_guard import verify_platform_tenant_idp_alignment
 from unified_api.settings import get_settings
 
@@ -70,13 +72,26 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except AttributeError:
         settings = get_settings()
     db_url = os.environ.get("DATABASE_URL") or str(settings.database.global_url)
-    db_provider = DatabaseProvider.from_url(db_url)
+    db_provider = DatabaseProvider.from_url(
+        db_url,
+        server_settings=CONTROL_PLANE_OLTP_SERVER_SETTINGS,
+    )
     app.state.db_provider = db_provider
     try:
         await verify_platform_tenant_idp_alignment(
             db_provider=db_provider,
             expected_platform_org_id=settings.identity.platform_org_id,
         )
+
+        try:
+            identity_authz = app.state.identity_authz
+        except AttributeError:
+            identity_authz = None
+        if identity_authz is not None:
+            await warm_global_authz_catalog(
+                db_provider=db_provider,
+                catalog=identity_authz.global_catalog,
+            )
 
         try:
             ucp_container = app.state.ucp_container

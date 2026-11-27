@@ -43,11 +43,11 @@ async def test_shell_lifespan_awaits_identity_drift_guard_on_startup(
                 name="Platform Admin Tenant",
                 slug="platform-admin",
                 status=LifecycleStatus.ACTIVE,
-                idp_tenant_id="org_drifted_startup_probe",
+                idp_realm_name="org_drifted_startup_probe",
             )
             session.add(platform_tenant)
         else:
-            platform_tenant.idp_tenant_id = "org_drifted_startup_probe"
+            platform_tenant.idp_realm_name = "org_drifted_startup_probe"
             platform_tenant.deleted_at = None
         await session.commit()
 
@@ -102,7 +102,7 @@ async def test_purge_non_platform_tenants_and_self_healing_platform_seed_preserv
                     name=f"Tenant A {extra_tenant_a[-6:]}",
                     slug=f"ten-a-{extra_tenant_a[-6:]}",
                     status=LifecycleStatus.ACTIVE,
-                    idp_tenant_id=colliding_org_id,
+                    idp_realm_name=colliding_org_id,
                 ),
                 TenantORM(
                     id=extra_tenant_b,
@@ -145,7 +145,7 @@ async def test_purge_non_platform_tenants_and_self_healing_platform_seed_preserv
         assert await session.get(TenantORM, extra_tenant_b) is None
         platform_tenant = await session.get(TenantORM, PLATFORM_TENANT_ID)
         assert platform_tenant is not None
-        assert platform_tenant.idp_tenant_id == colliding_org_id
+        assert platform_tenant.idp_realm_name == colliding_org_id
         assert platform_tenant.deleted_at is None
 
         admin_role = (

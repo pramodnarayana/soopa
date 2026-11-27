@@ -1,7 +1,8 @@
 from functools import lru_cache
 
 from identity import PlatformIdentitySettings
-from pydantic import Field
+from pubsub.config import PlatformPubSubSettings
+from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 from seedwork.infra.config import CleanBaseSettings, load_settings_safely
 from seedwork.infra.config_models import (
@@ -37,7 +38,19 @@ class AppSettings(CleanBaseSettings):
     database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
     aws: UcpAwsSettings = Field(default_factory=UcpAwsSettings)
     sqs: SqsSettings = Field(default_factory=SqsSettings)
+    pubsub: PlatformPubSubSettings = Field(default_factory=PlatformPubSubSettings)
     identity: PlatformIdentitySettings = Field(default_factory=PlatformIdentitySettings)
+
+    @model_validator(mode="after")
+    def validate_pubsub_transport_uris(self) -> "AppSettings":
+        self.pubsub.validate_uris(
+            {
+                "SNS_PLATFORM_EVENTS_TOPIC_ARN": self.aws.sns_tenant_events_topic_arn,
+                "SQS_UCP_IDENTITY_SYNC_QUEUE_URL": self.sqs.ucp_identity_sync_queue_url,
+                "SQS_UCP_JOBS_QUEUE_URL": self.sqs.ucp_jobs_queue_url,
+            }
+        )
+        return self
 
     idp_api_url_value: str = Field(validation_alias="IDENTITY_API_URL", default="")
     idp_machine_key_value: str = Field(validation_alias="IDENTITY_MACHINE_KEY", default="")
@@ -54,8 +67,12 @@ class AppSettings(CleanBaseSettings):
         return self.database.global_url
 
     @property
+    def pubsub_transport(self) -> str | None:
+        return self.pubsub.transport
+
+    @property
     def aws_endpoint_url(self) -> str | None:
-        return self.aws.endpoint_url
+        return self.pubsub.effective_aws_endpoint_url(self.aws.endpoint_url)
 
     @property
     def aws_region(self) -> str:

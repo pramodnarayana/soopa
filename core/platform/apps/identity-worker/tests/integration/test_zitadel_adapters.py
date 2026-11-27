@@ -83,7 +83,7 @@ async def setup_tenant_db(db_session_factory):
             id=tenant_id,
             name="Test Corp Identity Sync",
             slug=f"test-corp-{tenant_id[:8]}",
-            idp_tenant_id=None,
+            idp_realm_name=None,
         )
         session.add(tenant)
         await session.commit()
@@ -226,10 +226,10 @@ async def test_sync_tenant_success(
 
     async with db_session_factory() as session:
         tenant = await session.get(DbTenant, setup_tenant_db)
-        assert tenant.idp_tenant_id is not None
+        assert tenant.idp_realm_name is not None
 
         # Cleanup from Zitadel
-        await zitadel_orgs_adapter.delete_organization(tenant.idp_tenant_id)
+        await zitadel_orgs_adapter.delete_organization(tenant.idp_realm_name)
 
 
 async def test_sync_tenant_not_found(
@@ -256,7 +256,7 @@ async def test_sync_tenant_already_synced(
             id=tenant_id,
             name="Test Corp Already Synced",
             slug=f"synced-{tenant_id[:8]}",
-            idp_tenant_id="existing-id",
+            idp_realm_name="existing-id",
         )
         session.add(tenant)
         await session.commit()

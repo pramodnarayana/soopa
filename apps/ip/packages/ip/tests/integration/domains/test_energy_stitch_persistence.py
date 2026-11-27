@@ -7,6 +7,7 @@ import asyncio
 import pytest
 from database.testing import TransactionalTestRouter
 from database.types import GlobalSession
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from ip.engine.adapters.outbound.auth.token_refresh_lock import (
     SqlAlchemyTokenRefreshLockAdapter,
 )
@@ -91,15 +92,15 @@ async def test_postgres_stitch_repository_supports_wildcard_override_with_confli
         uow=cp_uow,
     )
 
-    reg_wildcard_res = await reg_uc.execute(
+    reg_platform_res = await reg_uc.execute(
         RegisterStitchCommand(
-            tenant_id="*",
+            tenant_id=PLATFORM_TENANT_ID,
             stitch_id="stitch_shared_override_test",
             target_workflow_id="energy.outage_restoration_stitch",
             canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
         )
     )
-    assert reg_wildcard_res.is_ok
+    assert reg_platform_res.is_ok
 
     reg_override_res = await reg_uc.execute(
         RegisterStitchCommand(

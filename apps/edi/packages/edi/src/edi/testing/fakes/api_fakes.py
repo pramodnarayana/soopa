@@ -49,6 +49,11 @@ from edi.domain.partner.as2.partnership import AS2Partnership
 from edi.domain.partner.sftp.partner import SFTPPartner
 from edi.domain.routing.enums import ProcessingMode
 from edi.domain.routing.inbound_route import InboundRoute
+from edi.domain.routing.isa_resolution import (
+    IsaRouteCandidate,
+    IsaTenantResolution,
+    resolve_isa_candidates,
+)
 from edi.domain.routing.outbound_header import OutboundEdiHeader
 from edi.domain.routing.outbound_route import OutboundRoute
 from edi.domain.routing.webhook import Webhook
@@ -152,11 +157,29 @@ class FakeInboundRouteRepository:
     async def list_inbound_routes(self, tenant_id: str) -> list[InboundRoute]:
         return [r for r in self.inbound_routes.values() if r.tenant_id == tenant_id]
 
-    async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
-        for r in self.inbound_routes.values():
-            if r.isa_sender_id == isa_sender_id and r.isa_receiver_id == isa_receiver_id:
-                return r.tenant_id
-        return None
+    async def resolve_tenant_by_isa(
+        self,
+        isa_sender_id: str,
+        isa_receiver_id: str,
+        *,
+        transaction_type: str | None = None,
+    ) -> IsaTenantResolution:
+        candidates = [
+            IsaRouteCandidate(
+                route_id=r.id,
+                tenant_id=r.tenant_id,
+                name=r.name,
+                active=r.active,
+                transaction_type=r.transaction_type,
+            )
+            for r in self.inbound_routes.values()
+            if r.isa_sender_id == isa_sender_id and r.isa_receiver_id == isa_receiver_id
+        ]
+        return resolve_isa_candidates(
+            candidates,
+            platform_tenant_id=PLATFORM_TENANT_ID,
+            transaction_type=transaction_type,
+        )
 
     async def save(self, aggregate: AggregateRoot) -> list[EventEnvelope]:
         if isinstance(aggregate, InboundRoute):
@@ -533,8 +556,10 @@ class FakeAS2PartnershipRepository:
     async def list_partnerships(self) -> list[object]:
         return list(self.partnerships.values())
 
-    async def get_partnership_by_as2_ids(self, as2_from: str, as2_to: str) -> object | None:
-        matches = []
+    async def get_partnership_by_as2_ids(
+        self, as2_from: str, as2_to: str
+    ) -> tuple[AS2Partnership, AS2Partner, AS2Partner] | None:
+        matches: list[tuple[AS2Partnership, AS2Partner, AS2Partner]] = []
         for partnership in self.partnerships.values():
             local_partner = self.partners_repo.partners.get(partnership.local_partner_id)
             remote_partner = self.partners_repo.partners.get(partnership.remote_partner_id)

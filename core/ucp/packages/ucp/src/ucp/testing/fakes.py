@@ -5,6 +5,7 @@ from typing import Self
 
 from identity.domain.api_token import ApiToken
 from identity.domain.authorization import Role
+from identity.domain.constants import MembershipScope, MembershipStatus, TenantIsolationMode
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.user import User
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
@@ -49,8 +50,16 @@ class FakeTenantRepository(TenantRepositoryPort):
     async def find_by_id(self, id: str) -> Tenant | None:
         return next((t for t in self.tenants if t.id == id), None)
 
-    async def find_by_idp_tenant_id(self, idp_tenant_id: str) -> Tenant | None:
-        return next((t for t in self.tenants if t.idp_tenant_id == idp_tenant_id), None)
+    async def find_by_idp_realm(self, idp_realm_name: str) -> Tenant | None:
+        return next(
+            (
+                t
+                for t in self.tenants
+                if t.idp_realm_name == idp_realm_name
+                and t.isolation_mode == TenantIsolationMode.DEDICATED_IDP_ORG
+            ),
+            None,
+        )
 
     async def find_all(self) -> list[Tenant]:
         return self.tenants
@@ -116,7 +125,27 @@ class FakeUserRepository(UserRepositoryPort):
         return [user for user in self.users if (tenant_id, user.id) in self.tenant_memberships]
 
     async def has_any_tenant_memberships(self, user_id: str) -> bool:
-        return False
+        return any(
+            member_user_id == user_id and tenant_id != PLATFORM_TENANT_ID
+            for tenant_id, member_user_id in self.tenant_memberships
+        )
+
+    async def upsert_tenant_membership(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        scope: MembershipScope = MembershipScope.DIRECT,
+        status: MembershipStatus = MembershipStatus.ACTIVE,
+    ) -> None:
+        del scope
+        if status == MembershipStatus.ACTIVE:
+            self.tenant_memberships.add((tenant_id, user_id))
+        else:
+            self.tenant_memberships.discard((tenant_id, user_id))
+
+    async def remove_tenant_membership(self, *, tenant_id: str, user_id: str) -> None:
+        self.tenant_memberships.discard((tenant_id, user_id))
 
     async def find_by_email(self, email: str) -> User | None:
         return next((u for u in self.users if u.email == email), None)
@@ -180,9 +209,6 @@ class FakeRoleRepository(RoleRepositoryPort):
         self.user_roles = [
             r for r in self.user_roles if not (r[0] == tenant_id and r[1] == user_id)
         ]
-
-    async def has_any_tenant_memberships(self, user_id: str) -> bool:
-        return any(r[1] == user_id for r in self.user_roles)
 
 
 class DummyApiTokenRepository(ApiTokenRepositoryPort):

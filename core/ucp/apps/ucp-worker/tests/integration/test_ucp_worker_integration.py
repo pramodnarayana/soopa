@@ -62,7 +62,7 @@ async def test_ucp_worker_handles_tenant_deleted_event(
     # Insert a tenant and a role directly on the connection
     await db_connection.execute(
         text(
-            "INSERT INTO identity.tenants (id, name, slug, status, idp_tenant_id, created_at, updated_at) VALUES (:id, 'To Delete', :slug, 'active', 'idp_123', NOW(), NOW())"
+            "INSERT INTO identity.tenants (id, name, slug, status, idp_realm_name, created_at, updated_at) VALUES (:id, 'To Delete', :slug, 'active', 'soopa-global', NOW(), NOW())"
         ),
         {"id": tenant_id, "slug": f"delete-me-{generate_random_hex(6)}"},
     )

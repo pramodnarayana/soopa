@@ -38,6 +38,11 @@ class DeleteTenantUseCase:
                 )
                 return Result.fail(err)
 
+            for user in tenant_users:
+                await self.uow.user_repo.remove_tenant_membership(
+                    tenant_id=tenant_id, user_id=user.id
+                )
+
             await self.uow.tenant_repo.delete(tenant, idempotency_key)
 
             for user in tenant_users:

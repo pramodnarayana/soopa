@@ -27,14 +27,14 @@ async def test_create_user_endpoint_resolves_di_and_persists(
             id=generate_id(DomainIdPrefix.TENANT.value),
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=f"test-tenant-{generate_random_hex(6)}",
-            idp_tenant_id=generate_id("fake_org"),
+            idp_realm_name="soopa-global",
         )
         db_session.add(tenant)
         # Ensure the 'TenantAdmin' role exists (in case other tests cleared it)
         await db_session.execute(
             text(
-                "INSERT INTO identity.tenants (id, name, slug, idp_tenant_id, status, created_at, updated_at) "
-                "VALUES ('ten_000000000000000000000000', 'Global', 'global', 'global', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+                "INSERT INTO identity.tenants (id, name, slug, idp_realm_name, status, created_at, updated_at) "
+                "VALUES ('ten_000000000000000000000000', 'Global', 'global', 'soopa-platform', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
                 "ON CONFLICT DO NOTHING"
             )
         )

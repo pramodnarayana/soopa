@@ -5,7 +5,7 @@ import pytest
 from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
 from identity.application.authenticate_use_case import TenantNotProvisionedError
-from identity.domain.constants import UserStatus
+from identity.domain.constants import TenantIsolationMode, UserStatus
 from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
 from identity.domain.user import User
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
@@ -67,7 +67,8 @@ async def test_jwt_strategy_resolves_idp_ids(jwt_strategy, db_session):
         id=canonical_tenant_id,
         name="Test",
         slug=f"test-{canonical_tenant_id}",
-        idp_tenant_id=idp_org_id,
+        idp_realm_name=idp_org_id,
+        isolation_mode=TenantIsolationMode.DEDICATED_IDP_ORG,
         status=LifecycleStatus.ACTIVE,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),

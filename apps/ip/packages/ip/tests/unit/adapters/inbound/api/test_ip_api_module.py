@@ -54,8 +54,8 @@ class _StubTenantRepository(TenantRepositoryPort):
         self._by_slug = by_slug or {}
         self._by_idp = by_idp or {}
 
-    async def get_by_idp_tenant_id(self, idp_tenant_id: str) -> TenantSummary | None:
-        return self._by_idp.get(idp_tenant_id.strip())
+    async def get_by_idp_realm(self, idp_realm_name: str) -> TenantSummary | None:
+        return self._by_idp.get(idp_realm_name.strip())
 
     async def get_by_slug(self, tenant_slug: str) -> TenantSummary | None:
         return self._by_slug.get(tenant_slug.strip().lower())
@@ -220,7 +220,7 @@ async def test_require_tenant_member_validates_federated_tenant_scope() -> None:
             "org_01": TenantSummary(
                 id="ten_01",
                 slug="acme-tenant",
-                idp_tenant_id="org_01",
+                idp_realm_name="org_01",
                 name="Acme",
             )
         }
@@ -351,7 +351,7 @@ def test_pure_engine_api_dependencies_expose_protocol_only_defaults() -> None:
 
     stitch_cat = get_stitch_catalog_registry(req)
     assert stitch_cat is get_stitch_catalog_registry(req)
-    assert stitch_cat.list_stitches(tenant_id="*") == ()
+    assert stitch_cat.list_stitches(tenant_id=PLATFORM_TENANT_ID) == ()
 
 
 def test_ip_error_dto_responses_map_domain_errors_to_http_status() -> None:
@@ -376,7 +376,7 @@ async def test_resolve_tenant_id_by_slug_enforces_lookup_isolation() -> None:
             "acme-tenant": TenantSummary(
                 id="ten_01",
                 slug="acme-tenant",
-                idp_tenant_id="org_01",
+                idp_realm_name="org_01",
                 name="Acme",
             )
         }

@@ -12,6 +12,7 @@ from seedwork.domain.exceptions import Result
 from seedwork.domain.types import JsonDict
 
 from config_sync.domain.dtos import (
+    ConfigCursor,
     ConfigDeltaEvent,
     ConfigEntityRecord,
     ConfigSnapshot,
@@ -32,6 +33,7 @@ logger = structlog.get_logger(__name__)
 class _SnapshotAccumulator:
     app_id: str
     tenant_id: str
+    base_txid: int
     base_version: int
     entities: list[ConfigEntityRecord]
 
@@ -95,6 +97,7 @@ def _parse_delta(data: JsonDict) -> Result[ConfigDeltaEvent, ConfigSyncError]:
                 message=f"Unsupported delta action: {data.get('action')!r}.",
             )
         )
+    raw_txid = data.get("txid", 0)
     return Result.ok(
         ConfigDeltaEvent(
             event_id=str(data.get("event_id", "")),
@@ -104,6 +107,7 @@ def _parse_delta(data: JsonDict) -> Result[ConfigDeltaEvent, ConfigSyncError]:
             entity_id=str(data.get("entity_id", "")),
             action=action,
             version=raw_version,
+            txid=int(raw_txid) if isinstance(raw_txid, int) else 0,
             checksum=str(data.get("checksum", "")),
             payload=dict(raw_payload),
         )
@@ -212,28 +216,49 @@ class HttpxSseConfigWatchClient(ConfigWatchClientPort):
                 if rec is not None:
                     entities.append(rec)
         raw_ver = parsed.get("version", 0)
+        raw_txid = parsed.get("txid", 0)
         return Result.ok(
             ConfigSnapshot(
                 app_id=str(parsed.get("app_id", app_id)),
                 tenant_id=str(parsed.get("tenant_id", tenant_id)),
                 version=int(raw_ver) if isinstance(raw_ver, int) else 0,
+                txid=int(raw_txid) if isinstance(raw_txid, int) else 0,
                 entities=tuple(entities),
                 checksum=str(parsed.get("checksum", "")),
             )
         )
+
+    def _build_watch_request(
+        self,
+        *,
+        app_id: str,
+        tenant_id: str,
+        since_cursor: ConfigCursor | None,
+    ) -> tuple[str, dict[str, str | int], dict[str, str]]:
+        resolved_cursor = since_cursor if since_cursor is not None else ConfigCursor.zero()
+        url = f"{self._base_url}/api/v1/internal/{app_id}/config/watch"
+        params: dict[str, str | int] = {
+            "tenant_id": tenant_id,
+            "since_cursor": resolved_cursor.encode(),
+            "since_version": resolved_cursor.version,
+        }
+        headers = self._build_headers()
+        if not resolved_cursor.is_zero:
+            headers["Last-Event-ID"] = resolved_cursor.encode()
+        return url, params, headers
 
     async def watch(
         self,
         *,
         app_id: str,
         tenant_id: str,
-        since_version: int = 0,
+        since_cursor: ConfigCursor | None = None,
     ) -> AsyncIterator[WatchStreamItem]:
-        url = f"{self._base_url}/api/v1/internal/{app_id}/config/watch"
-        params: dict[str, str | int] = {
-            "tenant_id": tenant_id,
-            "since_version": since_version,
-        }
+        url, params, headers = self._build_watch_request(
+            app_id=app_id,
+            tenant_id=tenant_id,
+            since_cursor=since_cursor,
+        )
 
         try:
             async with (
@@ -241,7 +266,7 @@ class HttpxSseConfigWatchClient(ConfigWatchClientPort):
                     transport=self._http_transport,
                     timeout=self._timeout,
                 ) as client,
-                client.stream("GET", url, params=params, headers=self._build_headers()) as response,
+                client.stream("GET", url, params=params, headers=headers) as response,
             ):
                 if response.is_error:
                     body = await response.aread()
@@ -343,9 +368,11 @@ class HttpxSseConfigWatchClient(ConfigWatchClientPort):
 
         if event_name == ConfigWatchEventType.SNAPSHOT_START.value:
             base_ver = parsed.get("base_version", 0)
+            base_txid = parsed.get("base_txid", 0)
             return None, _SnapshotAccumulator(
                 app_id=str(parsed.get("app_id", app_id)),
                 tenant_id=str(parsed.get("tenant_id", tenant_id)),
+                base_txid=int(base_txid) if isinstance(base_txid, int) else 0,
                 base_version=int(base_ver) if isinstance(base_ver, int) else 0,
                 entities=[],
             )
@@ -357,10 +384,12 @@ class HttpxSseConfigWatchClient(ConfigWatchClientPort):
             if accumulator is None:
                 return None, None
             final_ver = parsed.get("final_version", accumulator.base_version)
+            final_txid = parsed.get("final_txid", accumulator.base_txid)
             snapshot = ConfigSnapshot(
                 app_id=accumulator.app_id,
                 tenant_id=accumulator.tenant_id,
                 version=int(final_ver) if isinstance(final_ver, int) else accumulator.base_version,
+                txid=int(final_txid) if isinstance(final_txid, int) else accumulator.base_txid,
                 entities=tuple(accumulator.entities),
                 checksum=str(parsed.get("checksum", "")),
             )
@@ -374,11 +403,13 @@ class HttpxSseConfigWatchClient(ConfigWatchClientPort):
 
         if event_name == ConfigWatchEventType.HEARTBEAT.value:
             latest = parsed.get("latest_version", 0)
+            latest_txid = parsed.get("latest_txid", 0)
             return (
                 ConfigWatchHeartbeat(
                     app_id=str(parsed.get("app_id", app_id)),
                     tenant_id=str(parsed.get("tenant_id", tenant_id)),
                     latest_version=int(latest) if isinstance(latest, int) else 0,
+                    latest_txid=int(latest_txid) if isinstance(latest_txid, int) else 0,
                     timestamp=str(parsed.get("timestamp", "")),
                 ),
                 accumulator,

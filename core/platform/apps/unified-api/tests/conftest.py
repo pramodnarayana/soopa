@@ -357,7 +357,7 @@ async def seeded_api_token(db_session_factory):
                 name="Test Auth Tenant",
                 slug="test-auth-tenant",
                 status=LifecycleStatus.ACTIVE,
-                idp_tenant_id="org_test",
+                idp_realm_name="org_test",
             )
             session.add(tenant)
             await session.flush()

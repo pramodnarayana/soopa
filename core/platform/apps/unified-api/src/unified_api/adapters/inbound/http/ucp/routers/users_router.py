@@ -50,6 +50,16 @@ class UsersListResponse(BaseModel):
     result: list[UserResponse]
 
 
+async def _evict_local_principal_cache(request: Request, user_id: str) -> None:
+    """Immediately evict local L1 PrincipalSnapshot after membership/role mutations (0ms local lag)."""
+    try:
+        authz_runtime = request.app.state.identity_authz
+    except AttributeError:
+        authz_runtime = None
+    if authz_runtime is not None:
+        await authz_runtime.principal_cache.evict_principal(user_id)
+
+
 @router.get(
     "",
     dependencies=[Depends(RequireCapability(Capability.USERS_READ))],
@@ -129,7 +139,9 @@ async def create_user(
         raise_http_for_ucp_error(
             res.unwrap_err(), not_found_status=status.HTTP_422_UNPROCESSABLE_ENTITY
         )
-    return {"userId": res.unwrap()}
+    created_user_id = res.unwrap()
+    await _evict_local_principal_cache(request, created_user_id)
+    return {"userId": created_user_id}
 
 
 @router.patch("/{user_id}", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))])
@@ -158,6 +170,7 @@ async def update_user(
     res = await use_case.execute(command)
     if res.is_err:
         raise_http_for_ucp_error(res.unwrap_err())
+    await _evict_local_principal_cache(request, user_id)
     return {"success": True}
 
 
@@ -187,6 +200,7 @@ async def toggle_status(
     res = await use_case.execute(command)
     if res.is_err:
         raise_http_for_ucp_error(res.unwrap_err())
+    await _evict_local_principal_cache(request, user_id)
     return {"success": True}
 
 
@@ -212,4 +226,5 @@ async def delete_user(
     res = await use_case.execute(command)
     if res.is_err:
         raise_http_for_ucp_error(res.unwrap_err())
+    await _evict_local_principal_cache(request, user_id)
     return {"success": True}

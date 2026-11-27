@@ -14,7 +14,7 @@ class SqlAlchemyTenantRepository(TenantRepositoryPort, GlobalSqlAlchemyRepositor
     def _to_domain_model(tenant: Tenant) -> TenantSummary:
         return TenantSummary(
             id=tenant.id,
-            idp_tenant_id=tenant.idp_tenant_id,
+            idp_realm_name=tenant.idp_realm_name,
             name=tenant.name,
         )
 

@@ -13,6 +13,7 @@
   "devDependencies": {
     "@soopa/notification": "workspace:*",
     "@soopa/outbox": "workspace:*",
-    "@soopa/seedwork": "workspace:*"
+    "@soopa/seedwork": "workspace:*",
+    "@soopa/pubsub": "workspace:*"
   }
 }

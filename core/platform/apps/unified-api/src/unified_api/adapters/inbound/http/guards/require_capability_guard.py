@@ -25,7 +25,7 @@ class RequireCapability:
         identity: IdentityContext | None = request.state.identity
 
         if not identity:
-            logger.warning("authz.denied.unauthenticated", path=request.url.path)
+            logger.error("authz.denied.unauthenticated", path=request.url.path)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Not authenticated",
@@ -56,7 +56,7 @@ class RequireCapability:
 
         # Check if the required capability is in the user's resolved capabilities
         if self.required_capability not in identity.capabilities:
-            logger.warning(
+            logger.error(
                 "authz.denied.missing_capability",
                 path=request.url.path,
                 tenant_id=identity.tenant_id,

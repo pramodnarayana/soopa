@@ -15,6 +15,7 @@ from pubsub.adapters import (
     KafkaOutboxPublisher,
     KafkaPublisherAdapter,
 )
+from pubsub.config import PlatformPubSubSettings
 from pubsub.domain import (
     AckableMessage,
     BrokerType,
@@ -25,6 +26,10 @@ from pubsub.domain import (
     PublishResultDTO,
     PubSubError,
     UnsupportedBrokerSchemeError,
+)
+from pubsub.domain.exceptions import (
+    BrokerTransportMismatchError,
+    InvalidBrokerTransportError,
 )
 from pubsub.enums import (
     ConsumerAction,
@@ -42,7 +47,16 @@ from pubsub.ports import (
     MessageHandler,
     MessagePublisherPort,
 )
-from pubsub.provider import PubSubProvider
+from pubsub.provider import PubSubProvider, create_default_broker_registry
+from pubsub.registry import (
+    BrokerPolicyGroup,
+    BrokerTransportRegistry,
+    BrokerTransportSpec,
+    ConsumerBuildRequest,
+    OutboxPublisherBuildRequest,
+    PublisherBuildRequest,
+    TransportPolicyViolation,
+)
 
 __all__ = [
     "AckableMessage",
@@ -52,8 +66,13 @@ __all__ = [
     "AwsSqsConsumer",
     "AwsSqsConsumerManager",
     "AwsSqsOutboxPublisher",
+    "BrokerPolicyGroup",
+    "BrokerTransportMismatchError",
+    "BrokerTransportRegistry",
+    "BrokerTransportSpec",
     "BrokerType",
     "ConsumerAction",
+    "ConsumerBuildRequest",
     "ConsumerDecision",
     "ConsumerError",
     "ConsumerErrorHandlerPort",
@@ -66,6 +85,7 @@ __all__ = [
     "InMemoryConsumerManager",
     "InMemoryOutboxPublisher",
     "InMemoryPublisherAdapter",
+    "InvalidBrokerTransportError",
     "KafkaConsumerManager",
     "KafkaOutboxPublisher",
     "KafkaPublisherAdapter",
@@ -73,9 +93,14 @@ __all__ = [
     "MessageHandler",
     "MessagePublisherPort",
     "NackCallbackPort",
+    "OutboxPublisherBuildRequest",
+    "PlatformPubSubSettings",
     "PubSubError",
     "PubSubProvider",
     "PublishResultDTO",
+    "PublisherBuildRequest",
     "PublisherError",
+    "TransportPolicyViolation",
     "UnsupportedBrokerSchemeError",
+    "create_default_broker_registry",
 ]

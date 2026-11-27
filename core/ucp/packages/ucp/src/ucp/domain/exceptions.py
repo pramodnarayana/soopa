@@ -117,18 +117,17 @@ class MissingIdpOrganizationError(UcpError):
 
 @dataclass(frozen=True, kw_only=True)
 class IdpOrganizationConflictError(UcpError):
-    idp_tenant_id: str = ""
+    idp_realm_name: str = ""
     code: UcpErrorCode = UcpErrorCode.IDP_ORGANIZATION_CONFLICT
 
     @classmethod
-    def for_org(cls, existing_idp_tenant_id: str) -> IdpOrganizationConflictError:
+    def for_realm(cls, existing_idp_realm_name: str) -> IdpOrganizationConflictError:
         return cls(
-            idp_tenant_id=existing_idp_tenant_id,
+            idp_realm_name=existing_idp_realm_name,
             message=(
-                "Tenant already has a different IDP organization associated: "
-                f"{existing_idp_tenant_id}"
+                f"Tenant already has a different IDP realm associated: {existing_idp_realm_name}"
             ),
-            details={"idp_tenant_id": existing_idp_tenant_id},
+            details={"idp_realm_name": existing_idp_realm_name},
         )
 
 

@@ -717,6 +717,9 @@ importers:
       '@soopa/outbox':
         specifier: workspace:*
         version: link:../../packages/outbox
+      '@soopa/pubsub':
+        specifier: workspace:*
+        version: link:../../packages/pubsub
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../packages/seedwork

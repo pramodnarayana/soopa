@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from config_sync.domain.checksum import compute_payload_checksum
-from config_sync.domain.enums import ConfigChangeAction, ConfigSyncChannel
+from config_sync.domain.enums import ConfigChangeAction
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.control_plane import MappingSpecRecord
 from ip.engine.domain.config_payloads import mapping_spec_to_config_payload
@@ -146,7 +146,6 @@ class SqlAlchemyMappingSpecRepository(GlobalSqlAlchemyRepository, MappingSpecRep
             action=ConfigChangeAction.UPSERT.value,
             checksum=compute_payload_checksum(payload),
             payload=dict(payload),
-            notify_channel=ConfigSyncChannel.CONFIG_CHANGELOG_NOTIFY.value,
         )
 
     async def get_by_id(
@@ -226,5 +225,4 @@ class SqlAlchemyMappingSpecRepository(GlobalSqlAlchemyRepository, MappingSpecRep
             action=ConfigChangeAction.DELETE.value,
             checksum=compute_payload_checksum(tombstone),
             payload=dict(tombstone),
-            notify_channel=ConfigSyncChannel.CONFIG_CHANGELOG_NOTIFY.value,
         )

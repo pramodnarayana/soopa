@@ -24,6 +24,11 @@ DATABASE_QUEUE_SCHEMES: tuple[str, ...] = (
     f"{BrokerType.POSTGRES.value}://",
 )
 
+AMQP_QUEUE_SCHEMES: tuple[str, ...] = (
+    f"{BrokerType.AMQP.value}://",
+    "amqps://",
+)
+
 DATABASE_TOPIC_PREFIX = "topic/"
 
 

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import httpx
 
-from config_sync.adapters.inbound.postgres_notify_broadcaster_bridge import (
-    PostgresNotifyConfigBroadcasterBridge,
+from config_sync.adapters.inbound.changelog_cursor_broadcaster_bridge import (
+    ChangelogCursorBroadcasterBridge,
 )
 from config_sync.adapters.outbound.atomic_in_memory_config_sink import AtomicInMemoryConfigSink
 from config_sync.adapters.outbound.httpx_sse_config_watch_client import HttpxSseConfigWatchClient
@@ -30,6 +30,7 @@ from config_sync.application.sync_config_watch_loop_use_case import (
     SyncConfigWatchLoopUseCase,
     WatchLoopConfig,
 )
+from config_sync.domain.dtos import ConfigCursor
 from config_sync.ports.config_apply_sink_port import ConfigApplySinkPort
 from config_sync.ports.config_broadcaster_port import ConfigBroadcasterPort
 from config_sync.ports.config_catalog_provider_port import ConfigCatalogProviderPort
@@ -44,7 +45,7 @@ class ConfigSyncProvider:
     def create_changelog_repository(
         *,
         session_factory: SessionScopeFactory,
-        shared_tenant_ids: tuple[str, ...] = ("*",),
+        shared_tenant_ids: tuple[str, ...] = (),
     ) -> SqlAlchemyConfigChangelogRepository:
         return SqlAlchemyConfigChangelogRepository(
             session_factory=session_factory,
@@ -56,7 +57,7 @@ class ConfigSyncProvider:
         *,
         ring_buffer_size: int = 1000,
         subscriber_queue_maxsize: int = 256,
-        broadcast_tenant_ids: tuple[str, ...] = ("*",),
+        broadcast_tenant_ids: tuple[str, ...] = (),
     ) -> InMemoryRingBufferBroadcaster:
         return InMemoryRingBufferBroadcaster(
             ring_buffer_size=ring_buffer_size,
@@ -65,16 +66,22 @@ class ConfigSyncProvider:
         )
 
     @staticmethod
-    def create_notify_bridge(
+    def create_cursor_broadcaster_bridge(
         *,
-        database_url: str,
         changelog_repo: ConfigChangelogRepositoryPort,
         broadcaster: ConfigBroadcasterPort,
-    ) -> PostgresNotifyConfigBroadcasterBridge:
-        return PostgresNotifyConfigBroadcasterBridge(
-            database_url=database_url,
+        poll_interval_seconds: float = 0.15,
+        batch_size: int = 500,
+        error_backoff_seconds: float = 1.0,
+        initial_cursor: ConfigCursor | None = None,
+    ) -> ChangelogCursorBroadcasterBridge:
+        return ChangelogCursorBroadcasterBridge(
             changelog_repo=changelog_repo,
             broadcaster=broadcaster,
+            poll_interval_seconds=poll_interval_seconds,
+            batch_size=batch_size,
+            error_backoff_seconds=error_backoff_seconds,
+            initial_cursor=initial_cursor,
         )
 
     @staticmethod

@@ -17,6 +17,9 @@ Fix:
 from types import SimpleNamespace
 
 import pytest
+from identity.adapters.outbound.oidc.oidc_jwks_token_verifier_adapter import (
+    OidcJwksTokenVerifierAdapter,
+)
 
 from ucp.bootstrap.dependencies import get_token_verifier
 
@@ -31,13 +34,15 @@ def clear_lru_cache():
     get_token_verifier.cache_clear()
 
 
-def _make_settings(issuer: str, api_url: str):
+def _make_settings(issuer: str, api_url: str, jwks_url: str = "", jwks_host_header: str = ""):
     """
     Build a minimal settings stub that satisfies all attributes accessed by
     get_token_verifier().
     """
     identity = SimpleNamespace(
         issuer=issuer,
+        jwks_url=jwks_url,
+        jwks_host_header=jwks_host_header,
         oauth_client_id="test-client-id",
         platform_org_id="test-org-id",
         tenant_role_group="TenantAdmin",
@@ -57,15 +62,16 @@ def test_jwks_url_uses_internal_cloud_map_url_not_public_issuer(monkeypatch: pyt
     public issuer. Traffic stays within the VPC for performance and security.
     """
     public_issuer = "https://identity.staging.flowwolf.io"
-    internal_api_url = "http://zitadel.staging-cluster.local:8080"
+    internal_api_url = "http://casdoor.staging-cluster.local:8080"
 
     settings = _make_settings(issuer=public_issuer, api_url=internal_api_url)
 
     monkeypatch.setattr("ucp.bootstrap.dependencies.get_settings", lambda: settings)
     verifier = get_token_verifier()
+    assert isinstance(verifier, OidcJwksTokenVerifierAdapter)
 
-    expected_jwks_url = f"{internal_api_url}/oauth/v2/keys"
-    actual_jwks_url = verifier.jwks_url
+    expected_jwks_url = f"{internal_api_url}/.well-known/jwks"
+    actual_jwks_url = verifier._options.default_jwks_uri
 
     assert actual_jwks_url == expected_jwks_url, (
         f"JWKS URL must use the internal Cloud Map address for VPC-internal routing.\n"
@@ -79,24 +85,22 @@ def test_jwks_host_header_override_is_set_to_public_issuer_hostname(
 ):
     """
     When using the internal Cloud Map URL for JWKS, the Host header must be
-    overridden to the public issuer hostname so Zitadel's host-header domain
-    matching succeeds. Without this, Zitadel returns HTTP 404.
+    overridden to the public issuer hostname so host-header-sensitive IdPs succeed.
     """
     public_issuer = "https://identity.staging.flowwolf.io"
-    internal_api_url = "http://zitadel.staging-cluster.local:8080"
+    internal_api_url = "http://casdoor.staging-cluster.local:8080"
 
     settings = _make_settings(issuer=public_issuer, api_url=internal_api_url)
 
     monkeypatch.setattr("ucp.bootstrap.dependencies.get_settings", lambda: settings)
     verifier = get_token_verifier()
+    assert isinstance(verifier, OidcJwksTokenVerifierAdapter)
 
     expected_host = "identity.staging.flowwolf.io"
-    actual_host = verifier.jwks_host_header
+    actual_host = verifier._options.default_jwks_host_header
 
     assert actual_host == expected_host, (
         f"jwks_host_header must equal the public issuer hostname.\n"
         f"Expected: {expected_host}\n"
-        f"Actual:   {actual_host}\n"
-        f"Without this, Zitadel sees 'zitadel.staging-cluster.local' as Host "
-        f"and returns HTTP 404."
+        f"Actual:   {actual_host}"
     )

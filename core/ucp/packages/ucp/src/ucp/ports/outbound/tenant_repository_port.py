@@ -19,8 +19,8 @@ class TenantRepositoryPort(Protocol):
         """Finds a tenant by ID"""
         ...
 
-    async def find_by_idp_tenant_id(self, idp_tenant_id: str) -> Tenant | None:
-        """Finds a tenant by its IDP Tenant ID (e.g. Zitadel Org ID)"""
+    async def find_by_idp_realm(self, idp_realm_name: str) -> Tenant | None:
+        """Finds a dedicated-realm tenant by its 1:1 IdP realm name."""
         ...
 
     async def find_all(self) -> list[Tenant]:

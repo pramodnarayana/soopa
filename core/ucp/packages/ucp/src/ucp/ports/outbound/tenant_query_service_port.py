@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
+from identity.domain.constants import TenantIsolationMode
+
 from ucp.domain.constants import LifecycleStatus
 
 
@@ -10,11 +12,12 @@ class TenantReadModel:
     id: str
     name: str
     slug: str
-    idp_tenant_id: str | None
+    idp_realm_name: str | None
     status: Literal[LifecycleStatus.ACTIVE, LifecycleStatus.INACTIVE]
     subscriptions: list[str]  # List of application slugs
     created_at: datetime
     updated_at: datetime
+    isolation_mode: TenantIsolationMode = TenantIsolationMode.POOLED_REALM
 
 
 @dataclass(frozen=True)

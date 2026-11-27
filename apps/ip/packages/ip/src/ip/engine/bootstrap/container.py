@@ -37,7 +37,6 @@ from security.ports.cipher_port import CipherPort
 from security.provider import SecurityProvider
 from shttp import HttpClient, HttpRequestAuthenticator
 from sqlalchemy.ext.asyncio import AsyncSession
-from storage.provider import StorageProvider
 from strace.adapters import SqlAlchemyTraceRepository
 from strace.adapters.retention_repository import SqlAlchemyShardedTraceRetentionRepository
 from strace.ports.retention_repository_port import TraceRetentionRepositoryPort
@@ -179,8 +178,8 @@ from ip.engine.adapters.outbound.stitches.stitch_catalog_registry import (
     InMemoryStitchCatalogRegistry,
 )
 from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
-    DEFAULT_IP_PAYLOAD_BUCKET,
     TieredStorageAdapter,
+    create_ip_payload_storage,
 )
 from ip.engine.application.compiler.pipeline_compiler import UniversalPipelineCompiler
 from ip.engine.application.use_cases.connections.discover_catalog_use_case import (
@@ -850,10 +849,7 @@ class Container(containers.DeclarativeContainer):
 
     extractor_registry = providers.Singleton(RecordExtractorRegistry)
 
-    payload_storage = providers.Singleton(
-        StorageProvider.create_payload_storage,
-        bucket=DEFAULT_IP_PAYLOAD_BUCKET,
-    )
+    payload_storage = providers.Singleton(create_ip_payload_storage)
 
     tiered_storage = providers.Singleton(
         TieredStorageAdapter,

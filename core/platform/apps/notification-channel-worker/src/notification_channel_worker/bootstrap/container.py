@@ -35,6 +35,7 @@ class WorkerContainer(containers.DeclarativeContainer):
         handler=email_dispatcher.provided.dispatch_raw,
         region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
+        transport=config.pubsub_transport,
         session_factory=notification_package.session_factory,
         database_url=config.database_url,
         subscribe_topics=(

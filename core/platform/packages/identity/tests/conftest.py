@@ -41,3 +41,10 @@ async def db_session_factory():
     await transaction.rollback()
     await connection.close()
     await provider.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_session(db_session_factory: async_sessionmaker[AsyncSession]):
+    """Provide a single AsyncSession backed by the nested SAVEPOINT transaction."""
+    async with db_session_factory() as session:
+        yield session

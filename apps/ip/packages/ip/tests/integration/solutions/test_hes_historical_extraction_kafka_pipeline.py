@@ -24,7 +24,7 @@ from dependency_injector import providers
 from fastapi import FastAPI, Request
 from httpx import ASGITransport, AsyncClient
 from identity.domain.authorization import StandardRole
-from identity.domain.identity_context import IdentityContext
+from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
     get_cipher,
     get_ip_global_session,
@@ -322,7 +322,7 @@ def _configure_test_container(
     stitch_catalog.register_stitch(
         Stitch(
             id="stch_hes_historical_extraction",
-            tenant_id="*",
+            tenant_id=PLATFORM_TENANT_ID,
             canonical_event_type="command.historical_extract_requests",
             target_workflow_id=_WORKFLOW_ID,
             name="HES Historical Interval Extraction",
