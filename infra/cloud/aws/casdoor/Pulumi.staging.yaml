@@ -1,0 +1,6 @@
+config:
+  casdoor:enable_observability: "true"
+  casdoor:enable_execute_command: "true"
+  casdoor:log_retention_days: "3"
+  casdoor:secret_recovery_window_days: "0"
+encryptionsalt: v1:oVc5PCHI1l0=:v1:ev6Z+FpQeuK0UixG:Yc0pr6r/yhRuTzumCLWdesUDcP8XBQ==

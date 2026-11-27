@@ -9,9 +9,9 @@ inputs:
     description: "Pulumi Config Passphrase for secret encryption"
     required: true
   setup-zitadel:
-    description: "Whether to initialize the Zitadel provider virtual environment"
+    description: "Whether to initialize the optional Zitadel provider virtual environment"
     required: false
-    default: "true"
+    default: "false"
 
 runs:
   using: "composite"
