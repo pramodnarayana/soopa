@@ -19,22 +19,29 @@ if CASDOOR_STACK_DIR not in sys.path:
     sys.path.insert(0, CASDOOR_STACK_DIR)
 
 from constants import CasdoorConstants, resolve_casdoor_version
-from ecs import DB_INIT_SHELL_COMMAND, build_casdoor_container_definitions
+from ecs import DB_INIT_SHELL_COMMAND, build_casdoor_container_definitions, provision_ecs
 from roles import provision_roles
 from secret_resources import build_casdoor_postgres_dsn
 
 
-class _CasdoorRolesMocks(Mocks):
-    """Pulumi runtime mock capturing IAM RolePolicy documents created by provision_roles."""
+class _CasdoorStackMocks(Mocks):
+    """Pulumi runtime mock capturing IAM, ECS Service, and CloudWatch LogGroup resource inputs."""
 
     def __init__(self) -> None:
         self.role_policies: dict[str, dict[str, object]] = {}
+        self.ecs_services: dict[str, dict[str, object]] = {}
+        self.log_groups: dict[str, dict[str, object]] = {}
 
     def new_resource(self, args: MockResourceArgs) -> tuple[str | None, dict[str, object]]:
         if args.typ == "aws:iam/rolePolicy:RolePolicy":
             raw_policy = args.inputs.get("policy")
             if isinstance(raw_policy, str):
                 self.role_policies[args.name] = json.loads(raw_policy)
+        elif args.typ == "aws:ecs/service:Service":
+            self.ecs_services[args.name] = dict(args.inputs)
+        elif args.typ == "aws:cloudwatch/logGroup:LogGroup":
+            log_name = str(args.inputs.get("name", args.name))
+            self.log_groups[log_name] = dict(args.inputs)
         return f"{args.name}-id", dict(args.inputs)
 
     def call(self, args: MockCallArgs) -> tuple[dict[str, object], list[tuple[str, str]] | None]:
@@ -106,6 +113,7 @@ def test_casdoor_container_defs_wire_least_privilege_db_init_and_firelens_sideca
     assert "ON_ERROR_STOP=1" in DB_INIT_SHELL_COMMAND
     assert "\\gexec" in DB_INIT_SHELL_COMMAND
     assert "NOSUPERUSER NOCREATEDB NOCREATEROLE" in DB_INIT_SHELL_COMMAND
+    assert "ALTER ROLE %I WITH LOGIN PASSWORD %L NOCREATEDB NOCREATEROLE" in DB_INIT_SHELL_COMMAND
     assert "GRANT %I TO %I" in DB_INIT_SHELL_COMMAND
     assert "REVOKE CONNECT ON DATABASE" in DB_INIT_SHELL_COMMAND
     assert " -c " not in DB_INIT_SHELL_COMMAND
@@ -149,7 +157,7 @@ def test_casdoor_container_defs_fall_back_to_awslogs_without_firelens() -> None:
 
 
 def test_casdoor_roles_enforce_scoped_logs_least_privilege_secrets_and_optional_exec() -> None:
-    mocks = _CasdoorRolesMocks()
+    mocks = _CasdoorStackMocks()
 
     def _program() -> pulumi.Output[None]:
         _, exec_role = provision_roles(
@@ -199,3 +207,48 @@ def test_casdoor_roles_enforce_scoped_logs_least_privilege_secrets_and_optional_
         "arn:aws:secretsmanager:us-east-1:123456789012:secret:obs-user",
         "arn:aws:secretsmanager:us-east-1:123456789012:secret:obs-pass",
     ]
+
+
+def test_casdoor_ecs_service_enforces_steady_state_circuit_breaker_and_log_groups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CASDOOR_VERSION", "v4.30.0")
+    mocks = _CasdoorStackMocks()
+
+    def _program() -> pulumi.Output[None]:
+        svc = provision_ecs(
+            prefix="staging-",
+            tags={"Environment": "staging"},
+            vpc_id="vpc-123",
+            private_subnets=["subnet-a", "subnet-b"],
+            app_sg_id="sg-123",
+            ecs_cluster_arn="arn:aws:ecs:us-east-1:123456789012:cluster/staging",
+            cloud_map_namespace_id="ns-123",
+            main_listener_arn=(
+                "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/main/1/2"
+            ),
+            staging_domain="staging.flowwolf.io",
+            dsn_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:dsn",
+            db_password_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:db-pwd",
+            global_db_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:global-db",
+            casdoor_ecr_repo_url="123456789012.dkr.ecr.us-east-1.amazonaws.com/staging-casdoor-image",
+            admin_password_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:admin-pwd",
+            ecs_task_role_arn="arn:aws:iam::123456789012:role/task",
+            ecs_execution_role_arn="arn:aws:iam::123456789012:role/exec",
+            region_name="us-east-1",
+            log_retention_days=3,
+            firelens_endpoint="openobserve.staging.local:5080",
+            obs_user_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:obs-user",
+            obs_password_secret_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:obs-pass",
+        )
+        return svc.id.apply(lambda _: None)
+
+    _run_pulumi_test(mocks, _program)
+
+    svc_inputs = mocks.ecs_services["staging-casdoor-svc"]
+    assert svc_inputs["waitForSteadyState"] is True
+    assert svc_inputs["healthCheckGracePeriodSeconds"] == 60
+    assert svc_inputs["deploymentCircuitBreaker"] == {"enable": True, "rollback": True}
+    assert set(mocks.log_groups) == {"/ecs/staging-casdoor", "/ecs/staging-casdoor-firelens"}
+    assert mocks.log_groups["/ecs/staging-casdoor"]["retentionInDays"] == 3
+    assert mocks.log_groups["/ecs/staging-casdoor-firelens"]["retentionInDays"] == 3
