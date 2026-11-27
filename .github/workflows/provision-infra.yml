@@ -100,6 +100,7 @@ jobs:
         with:
           state-bucket: ${{ env.STATE_BUCKET }}
           pulumi-config-passphrase: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          setup-zitadel: "false"
 
       # Step 1: Core Network & Database Foundation
       - name: Deploy Foundation (VPC & Networking)

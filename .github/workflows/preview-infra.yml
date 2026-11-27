@@ -98,6 +98,7 @@ jobs:
         with:
           state-bucket: ${{ env.STATE_BUCKET }}
           pulumi-config-passphrase: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          setup-zitadel: "false"
 
       - name: Preview Foundation (VPC & Networking)
         if: steps.check-fork.outputs.is_fork != 'true'
