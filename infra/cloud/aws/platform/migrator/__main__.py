@@ -10,7 +10,10 @@ import json
 
 import pulumi
 import pulumi_aws as aws
-from infra_seedwork.messaging import build_database_pubsub_env_vars
+from infra_seedwork.messaging import (
+    build_database_pubsub_env_vars,
+    queue_env_vars_to_ecs_format,
+)
 from infra_seedwork.topology import load_topology
 
 _env = pulumi.get_stack()
@@ -32,7 +35,7 @@ identity_stack = pulumi.StackReference(identity_stack_ref)
 pubsub_env_vars = build_database_pubsub_env_vars(
     load_topology(),
     queue_filter={"identity-jobs", "notification-jobs", "ucp-jobs"},
-    topic_filter=set(),
+    topic_filter={"platform-events-topic"},
 )
 
 # ── Infrastructure Inputs ─────────────────────────────────────────────────────
@@ -54,11 +57,8 @@ identity_platform_realm = identity_stack.get_output("platform_realm").apply(
 identity_global_realm = identity_stack.get_output("global_realm").apply(
     lambda value: value or "soopa-global"
 )
+identity_domain = identity_stack.require_output("identity_domain")
 identity_admin_oauth_secret_arn = identity_stack.require_output("admin_oauth_secret_arn")
-
-identity_jobs_queue_url = pubsub_env_vars["SQS_IDENTITY_JOBS_QUEUE_URL"]
-notification_jobs_queue_url = pubsub_env_vars["SQS_NOTIFICATION_JOBS_QUEUE_URL"]
-ucp_jobs_queue_url = pubsub_env_vars["SQS_UCP_JOBS_QUEUE_URL"]
 
 _region = aws.get_region()
 _identity = aws.get_caller_identity()
@@ -84,9 +84,7 @@ migrator_task = aws.ecs.TaskDefinition(
         identity_platform_realm,
         identity_global_realm,
         identity_admin_oauth_secret_arn,
-        identity_jobs_queue_url,
-        notification_jobs_queue_url,
-        ucp_jobs_queue_url,
+        identity_domain,
     ).apply(
         lambda args: json.dumps(
             [
@@ -100,14 +98,15 @@ migrator_task = aws.ecs.TaskDefinition(
                         "python -m platform_migrator migrate --domain platform && python infra/local/scripts/reconcile_schema_drift.py --domain platform --skip-dotenv && python -m platform_migrator seed --domain platform",
                     ],
                     "environment": [
-                        {"name": "PUBSUB_TRANSPORT", "value": pubsub_env_vars["PUBSUB_TRANSPORT"]},
                         {"name": "IDENTITY_PROVIDER", "value": "casdoor"},
+                        {
+                            "name": "IDENTITY_ISSUER",
+                            "value": f"https://{args[5].strip().rstrip('.')}",
+                        },
                         {"name": "IDENTITY_PLATFORM_REALM", "value": args[2]},
                         {"name": "IDENTITY_GLOBAL_REALM", "value": args[3]},
                         {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args[2]},
-                        {"name": "SQS_IDENTITY_JOBS_QUEUE_URL", "value": args[5]},
-                        {"name": "SQS_NOTIFICATION_JOBS_QUEUE_URL", "value": args[6]},
-                        {"name": "SQS_UCP_JOBS_QUEUE_URL", "value": args[7]},
+                        *queue_env_vars_to_ecs_format(pubsub_env_vars, {}),
                     ],
                     "secrets": [
                         {"name": "GLOBAL_DATABASE_URL", "valueFrom": f"{args[1]}:url::"},

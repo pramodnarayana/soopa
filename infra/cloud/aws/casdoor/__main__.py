@@ -2,24 +2,27 @@
 Identity Provider Bounded Context (Casdoor)
 ===========================================
 Provisions the lightweight Apache-2.0 Casdoor OIDC/SSO IdP on AWS ECS Fargate:
-- Secrets Manager entries for Admin Password, PostgreSQL DSN, & M2M Admin OAuth credentials
-- Least-privilege ECS Task & Execution IAM roles
-- Single-container Fargate Task Definition (256 CPU / 512 MB RAM) + Cloud Map `identity`
-- Route53 `identity.<domain>` DNS alias
+- Secrets Manager entries for Admin Password, least-privilege DB Password & DSN, and OAuth M2M creds
+- Scoped least-privilege ECS Task & Execution IAM roles (no wildcard CloudWatch log permissions)
+- Fargate Task Definition (idempotent least-privilege DB init + Casdoor) + Cloud Map `identity`
+- ECS deployment circuit breaker with automatic rollback + Route53 `identity.<domain>` DNS alias
 """
 
 from __future__ import annotations
 
-from secrets import provision_secrets
-
 import pulumi
 import pulumi_aws as aws
+from constants import CasdoorConstants
 from ecs import provision_ecs
+from infra_seedwork.constants import LogRetentionPolicy
 from roles import provision_roles
+from secret_resources import provision_secrets
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"
 _TAGS = {"ManagedBy": "pulumi", "Component": "identity", "Environment": _env}
+_region = aws.get_region()
+_identity = aws.get_caller_identity()
 
 config = pulumi.Config()
 foundation = pulumi.StackReference(
@@ -46,19 +49,29 @@ main_alb_zone_id = platform.require_output("main_alb_zone_id")
 casdoor_ecr_repo_url = platform.require_output("casdoor_ecr_repo_url")
 
 global_db_endpoint = data.require_output("global_db_endpoint")
-global_db_password = data.require_output("global_db_password")
+global_db_secret_arn = data.require_output("global_db_secret_arn")
 
-secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
-_, admin_password_secret, dsn_secret, admin_oauth_secret = provision_secrets(
+# Secure-by-default governance: 30-day secret recovery & 30-day logs unless overridden in stack config
+configured_recovery = config.get_int("secret_recovery_window_days")
+secret_recovery_window_days = (
+    CasdoorConstants.DEFAULT_SECRET_RECOVERY_WINDOW_DAYS
+    if configured_recovery is None
+    else configured_recovery
+)
+configured_retention = config.get_int("log_retention_days")
+log_retention_days = (
+    LogRetentionPolicy.STANDARD.value if configured_retention is None else configured_retention
+)
+cpu = config.get("cpu") or CasdoorConstants.DEFAULT_CPU
+memory = config.get("memory") or CasdoorConstants.DEFAULT_MEMORY
+desired_count = config.get_int("desired_count") or CasdoorConstants.DEFAULT_DESIRED_COUNT
+enable_execute_command = config.get_bool("enable_execute_command") or False
+
+secrets_bundle = provision_secrets(
     _prefix,
     _TAGS,
     global_db_endpoint=global_db_endpoint,
-    global_db_password=global_db_password,
     secret_recovery_window_days=secret_recovery_window_days,
-)
-
-ecs_task_role, ecs_execution_role = provision_roles(
-    _prefix, _TAGS, dsn_secret.arn, admin_password_secret.arn
 )
 
 enable_observability = config.get_bool("enable_observability") or False
@@ -66,6 +79,19 @@ firelens_endpoint = obs.require_output("openobserve_endpoint") if enable_observa
 obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
     obs.require_output("openobserve_password_secret_arn") if enable_observability else None
+)
+
+ecs_task_role, ecs_execution_role = provision_roles(
+    _prefix,
+    _TAGS,
+    dsn_secret_arn=secrets_bundle.dsn_secret.arn,
+    db_password_secret_arn=secrets_bundle.db_password_secret.arn,
+    global_db_secret_arn=global_db_secret_arn,
+    region_name=_region.name,
+    account_id=_identity.account_id,
+    enable_execute_command=enable_execute_command,
+    obs_user_secret_arn=obs_user_arn,
+    obs_password_secret_arn=obs_pass_arn,
 )
 
 casdoor_svc = provision_ecs(
@@ -78,11 +104,18 @@ casdoor_svc = provision_ecs(
     cloud_map_namespace_id=platform.require_output("cloud_map_namespace_id"),
     main_listener_arn=main_listener_arn,
     staging_domain=staging_domain,
-    dsn_secret_arn=dsn_secret.arn,
+    dsn_secret_arn=secrets_bundle.dsn_secret.arn,
+    db_password_secret_arn=secrets_bundle.db_password_secret.arn,
+    global_db_secret_arn=global_db_secret_arn,
     casdoor_ecr_repo_url=casdoor_ecr_repo_url,
-    admin_password_secret_arn=admin_password_secret.arn,
     ecs_task_role_arn=ecs_task_role.arn,
     ecs_execution_role_arn=ecs_execution_role.arn,
+    region_name=_region.name,
+    cpu=cpu,
+    memory=memory,
+    desired_count=desired_count,
+    log_retention_days=log_retention_days,
+    enable_execute_command=enable_execute_command,
     firelens_endpoint=firelens_endpoint,
     obs_user_secret_arn=obs_user_arn,
     obs_password_secret_arn=obs_pass_arn,
@@ -98,15 +131,19 @@ identity_dns_record = aws.route53.Record(
         aws.route53.RecordAliasArgs(
             name=main_alb_dns_name,
             zone_id=main_alb_zone_id,
-            evaluate_target_health=False,
+            evaluate_target_health=True,
         )
     ],
 )
 
 pulumi.export("ecr_repository_url", casdoor_ecr_repo_url)
 pulumi.export("identity_service_name", casdoor_svc.name)
-pulumi.export("admin_password_secret_arn", admin_password_secret.arn)
-pulumi.export("admin_oauth_secret_arn", admin_oauth_secret.arn)
-pulumi.export("platform_realm", "soopa-platform")
-pulumi.export("global_realm", "soopa-global")
+pulumi.export("admin_password_secret_arn", secrets_bundle.admin_password_secret.arn)
+pulumi.export(
+    "platform_admin_password_secret_arn",
+    secrets_bundle.platform_admin_password_secret.arn,
+)
+pulumi.export("admin_oauth_secret_arn", secrets_bundle.admin_oauth_secret.arn)
+pulumi.export("platform_realm", CasdoorConstants.PLATFORM_REALM)
+pulumi.export("global_realm", CasdoorConstants.GLOBAL_REALM)
 pulumi.export("identity_domain", identity_dns_record.name)

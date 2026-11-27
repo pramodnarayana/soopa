@@ -1,3 +1,4 @@
 config:
   api:enable_observability: 'true'
+  api:platform_admin_domains: flowwolf.io
 encryptionsalt: v1:Dgk7/WaiCdU=:v1:ygyq24K2YxvMyyiW:lqAMtj8ZPNHfoIWcdLTycSfXOlF3Lw==

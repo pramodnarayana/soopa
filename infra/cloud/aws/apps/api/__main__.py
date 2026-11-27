@@ -20,6 +20,7 @@ _TAGS = {"ManagedBy": "pulumi", "Component": "api", "Environment": _env}
 config = pulumi.Config()
 edi_environment = config.get("edi_environment") or "T"
 enabled_apps = config.get("enabled_apps") or "edi"
+platform_admin_domains = (config.get("platform_admin_domains") or "").strip()
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
@@ -188,7 +189,10 @@ api_service = provision_fargate_service(
             {"name": "IDENTITY_PLATFORM_REALM", "value": args["plat_realm"]},
             {"name": "IDENTITY_GLOBAL_REALM", "value": args["glob_realm"]},
             {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args["plat_realm"]},
-            {"name": "IDENTITY_PLATFORM_ADMIN_DOMAINS", "value": args["domain"]},
+            {
+                "name": "IDENTITY_PLATFORM_ADMIN_DOMAINS",
+                "value": platform_admin_domains or args["domain"],
+            },
             {"name": "IDENTITY_SHARED_APP_REALM_DELIMITER", "value": "-org-"},
             {"name": "CORS_ALLOWED_ORIGINS", "value": f'["https://dashboard.{args["domain"]}"]'},
             {"name": "S3_BUCKET", "value": args["s3_bucket"]},
@@ -224,7 +228,7 @@ api_service = provision_fargate_service(
         {
             "name": "IDENTITY_AUDIENCE",
             "valueFrom": pulumi.Output.concat(
-                identity_admin_oauth_secret_arn, ":dashboard_client_id::"
+                identity_admin_oauth_secret_arn, ":identity_audience::"
             ),
         },
         {

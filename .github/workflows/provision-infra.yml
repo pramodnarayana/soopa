@@ -100,6 +100,7 @@ jobs:
         with:
           state-bucket: ${{ env.STATE_BUCKET }}
           pulumi-config-passphrase: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          setup-zitadel: "false"
 
       # Step 1: Core Network & Database Foundation
       - name: Deploy Foundation (VPC & Networking)
@@ -179,6 +180,14 @@ jobs:
           stack-dir: infra/cloud/aws/casdoor
           stack-name: ${{ env.TARGET_ENV }}
           refresh: ${{ env.REFRESH_STATE }}
+
+      - name: Bootstrap Casdoor Identity Provider
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          uv run python infra/cloud/aws/casdoor/bootstrap.py \
+            --env "${{ env.TARGET_ENV }}" \
+            --region "${{ env.AWS_REGION }}"
 
       # Step 5: Tools, Dashboard Infra & Global Routing
       - name: Deploy OpenAS2 Partner Server

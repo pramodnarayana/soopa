@@ -463,3 +463,21 @@ def test_config_watch_gateway_foundation_endpoints_and_staging_reconcile_contrac
     assert migrate_idx < reconcile_idx < seed_idx, (
         "deploy.yml must reconcile global_db schema drift after migrate and before seed"
     )
+
+
+def test_platform_migrator_topic_and_api_casdoor_audience_contracts() -> None:
+    """Enforce platform/migrator DB Pub/Sub topic injection and API multi-audience Casdoor wiring."""
+    migrator_source = (AWS_ROOT / "platform" / "migrator" / "__main__.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'topic_filter={"platform-events-topic"}' in migrator_source
+    assert "queue_env_vars_to_ecs_format(pubsub_env_vars, {})" in migrator_source
+    assert '"IDENTITY_ISSUER"' in migrator_source
+    assert 'require_output("identity_domain")' in migrator_source
+
+    api_source = (AWS_ROOT / "apps" / "api" / "__main__.py").read_text(encoding="utf-8")
+    assert ":identity_audience::" in api_source
+    assert "platform_admin_domains" in api_source
+
+    staging_cfg = (AWS_ROOT / "apps" / "api" / "Pulumi.staging.yaml").read_text(encoding="utf-8")
+    assert "api:platform_admin_domains: flowwolf.io" in staging_cfg
