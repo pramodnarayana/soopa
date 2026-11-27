@@ -4,10 +4,9 @@ from dependency_injector import containers, providers
 from notification.bootstrap.container import Container as NotificationContainer
 from notification.domain.constants import (
     NotificationCleanupJobName,
-    NotificationOutboxChannel,
     NotificationOutboxSource,
 )
-from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
+from outbox.adapters.inbound.outbox_drain_relay import OutboxDrainRelay
 from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
     SqlAlchemyGlobalOutboxRepository,
 )
@@ -83,11 +82,10 @@ class WorkerContainer(containers.DeclarativeContainer):
         worker_id="notification_jobs_worker",
     )
 
-    outbox_listener = providers.Singleton(
-        NotifyOutboxRelay,
+    outbox_relay = providers.Singleton(
+        OutboxDrainRelay,
         processor=outbox_processor,
-        database_url=config.database_url,
-        listen_channel=NotificationOutboxChannel.DELIVERY_WAKEUP.value,
+        relay_name=NotificationOutboxSource.NOTIFICATION.value,
     )
 
     outbox_cleaner_use_case = providers.Factory(

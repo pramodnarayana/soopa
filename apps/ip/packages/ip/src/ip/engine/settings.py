@@ -142,9 +142,15 @@ class IpEngineSettings(CleanBaseSettings):
         default=30000,
         validation_alias="IP_OUTBOX_LOCK_LEASE_MS",
     )
-    outbox_fallback_poll_sec: float = Field(
-        default=5.0,
-        validation_alias="IP_OUTBOX_FALLBACK_POLL_SEC",
+    outbox_poll_interval_sec: float = Field(
+        default=0.25,
+        gt=0,
+        validation_alias="IP_OUTBOX_POLL_INTERVAL_SEC",
+    )
+    outbox_max_idle_poll_sec: float = Field(
+        default=1.0,
+        gt=0,
+        validation_alias="IP_OUTBOX_MAX_IDLE_POLL_SEC",
     )
     outbox_sweeper_cron: str = Field(
         default="*/1 * * * *",
@@ -224,6 +230,15 @@ class IpEngineSettings(CleanBaseSettings):
             }
         )
         self.aws_endpoint_url = self.pubsub.effective_aws_endpoint_url(self.aws_endpoint_url)
+        return self
+
+    @model_validator(mode="after")
+    def validate_outbox_polling_bounds(self) -> IpEngineSettings:
+        if self.outbox_max_idle_poll_sec < self.outbox_poll_interval_sec:
+            raise ValueError(
+                "IP_OUTBOX_MAX_IDLE_POLL_SEC must be greater than or equal to "
+                "IP_OUTBOX_POLL_INTERVAL_SEC"
+            )
         return self
 
 

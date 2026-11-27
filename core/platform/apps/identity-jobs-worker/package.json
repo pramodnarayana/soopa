@@ -5,7 +5,8 @@
   "description": "Worker service for handling Identity outbox relay and sweeping",
   "scripts": {
     "start": "PYTHONUNBUFFERED=1 uv run python -m identity_jobs_worker.main",
-    "dev": "PYTHONUNBUFFERED=1 uv run python -m identity_jobs_worker.main"
+    "dev": "PYTHONUNBUFFERED=1 uv run python -m identity_jobs_worker.main",
+    "test": "uv run pytest tests/unit"
   },
   "devDependencies": {
     "@soopa/identity": "workspace:*",

@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
@@ -9,10 +10,20 @@ from seedwork.utils import generate_id
 logger = structlog.get_logger(__name__)
 
 
+@dataclass(frozen=True)
+class OutboxBatchResult:
+    """Structured outcome of a single outbox claim-and-publish batch."""
+
+    claimed_count: int = 0
+    completed_count: int = 0
+    failed_count: int = 0
+    has_more: bool = False
+
+
 class OutboxProcessorUseCase:
     """
     Application Service responsible for claiming outbox events and publishing them.
-    Agnostic to how it is triggered (e.g. Postgres LISTEN/NOTIFY, polling, etc).
+    Agnostic to how it is triggered (e.g. drain relay, sweeper, etc).
     """
 
     def __init__(
@@ -34,13 +45,10 @@ class OutboxProcessorUseCase:
         self.is_running = False
         logger.info("outbox_processor_stopped", worker_id=self.worker_id)
 
-    async def process_pending(self) -> bool:
-        """
-        Polls and processes messages.
-        Returns True if more messages might be available (i.e. we hit max batch size), False otherwise.
-        """
+    async def process_batch(self) -> OutboxBatchResult:
+        """Claims and publishes up to `max_concurrent_events`, returning a structured outcome."""
         if not self.is_running:
-            return False
+            return OutboxBatchResult()
 
         events = await self.repository.claim_next_events(
             worker_id=self.worker_id,
@@ -49,7 +57,7 @@ class OutboxProcessorUseCase:
         )
 
         if not events:
-            return False
+            return OutboxBatchResult()
 
         logger.info("outbox_relay_events_claimed", worker_id=self.worker_id, count=len(events))
 
@@ -80,7 +88,20 @@ class OutboxProcessorUseCase:
 
         await self._update_batch_statuses(completed_ids, failed_ids, batch_failure_reason)
 
-        return len(events) >= self.max_concurrent_events
+        return OutboxBatchResult(
+            claimed_count=len(events),
+            completed_count=len(completed_ids),
+            failed_count=len(failed_ids),
+            has_more=len(events) >= self.max_concurrent_events,
+        )
+
+    async def process_pending(self) -> bool:
+        """
+        Polls and processes messages.
+        Returns True if more messages might be available (i.e. we hit max batch size), False otherwise.
+        """
+        result = await self.process_batch()
+        return result.has_more
 
     async def _update_batch_statuses(
         self,
@@ -105,3 +126,6 @@ class OutboxProcessorUseCase:
             for res in results:
                 if isinstance(res, BaseException):
                     logger.error("outbox_status_update_task_failed", error=str(res))
+
+
+__all__ = ["OutboxBatchResult", "OutboxProcessorUseCase"]

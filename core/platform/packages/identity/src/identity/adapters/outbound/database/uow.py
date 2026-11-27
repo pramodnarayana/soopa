@@ -1,5 +1,4 @@
 from database.uow import BaseSqlAlchemyUnitOfWork
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
@@ -28,7 +27,3 @@ class SqlAlchemyIdentityUnitOfWork(BaseSqlAlchemyUnitOfWork, IdentityUnitOfWorkP
         self.role_repo = role_repo
         self.api_token_repo = api_token_repo
         self.capability_repo = capability_repo
-
-    async def _pre_commit(self) -> None:
-        # Wake up the outbox relay
-        await self.session.execute(text("NOTIFY identity_outbox_wakeup;"))

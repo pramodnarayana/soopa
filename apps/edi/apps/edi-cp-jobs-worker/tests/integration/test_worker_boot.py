@@ -26,7 +26,7 @@ async def test_edi_cp_worker_boots_and_shuts_down_gracefully(
 
     container.wire()
 
-    # Start the worker background tasks (SQS polling, Postgres NOTIFY listening)
+    # Start the worker background tasks (SQS polling, Control Plane outbox drain relay)
     await container.start()
 
     try:

@@ -2,7 +2,7 @@ import structlog
 from database.models.identity import IdentityOutbox
 from database.provider import DatabaseProvider
 from identity.domain.constants import IdentityJobName, IdentityOutboxSource
-from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
+from outbox.adapters.inbound.outbox_drain_relay import OutboxDrainRelay
 from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
     SqlAlchemyGlobalOutboxRepository,
 )
@@ -11,6 +11,7 @@ from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from outbox.ports.outbox_relay_port import OutboxRelayPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
@@ -42,7 +43,7 @@ class WorkerContainer:
         self.aws_region = settings.aws_region
         self.pubsub_transport = settings.pubsub_transport
 
-        self.outbox_relay: NotifyOutboxRelay | None = None
+        self.outbox_relay: OutboxRelayPort | None = None
         self.jobs_consumer: ConsumerManagerPort | None = None
         self.sweeper_job_handler: IdentityOutboxSweeperJobHandler | None = None
         self.outbox_cleanup_job_handler: IdentityOutboxCleanupJobHandler | None = None
@@ -84,10 +85,9 @@ class WorkerContainer:
             repository=outbox_repo,
             publisher=outbox_pub,
         )
-        self.outbox_relay = NotifyOutboxRelay(
+        self.outbox_relay = OutboxDrainRelay(
             processor=outbox_processor,
-            database_url=self.database_url,
-            listen_channel="identity_outbox_wakeup",
+            relay_name=IdentityOutboxSource.IDENTITY.value,
         )
 
     def _wire_jobs_consumer(self) -> None:

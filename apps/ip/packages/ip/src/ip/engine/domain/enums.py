@@ -93,13 +93,6 @@ class IpOutboxSource(StrEnum):
     DATA_PLANE = "soopa.ip.data_plane"
 
 
-class IpOutboxChannel(StrEnum):
-    """PostgreSQL LISTEN/NOTIFY channel names for IP outbox wakeup."""
-
-    CONTROL_PLANE = "ip_cp_outbox_channel"
-    DATA_PLANE = "ip_dp_outbox_channel"
-
-
 class IpJobName(StrEnum):
     """Scheduled background job identifiers for IP Control Plane and Data Plane."""
 
@@ -136,7 +129,6 @@ __all__ = [
     "IpEventType",
     "IpIdPrefix",
     "IpJobName",
-    "IpOutboxChannel",
     "IpOutboxSource",
     "PipelineStage",
 ]

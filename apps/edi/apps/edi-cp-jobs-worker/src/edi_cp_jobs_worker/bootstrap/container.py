@@ -1,9 +1,8 @@
 import structlog
 from database.router import DatabaseRouter
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
-from edi.domain.constants import EdiConstants
 from edi.domain.enums import EdiJobName, EdiOutboxSource
-from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
+from outbox.adapters.inbound.outbox_drain_relay import OutboxDrainRelay
 from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
     SqlAlchemyGlobalOutboxRepository,
 )
@@ -12,6 +11,7 @@ from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from outbox.ports.outbox_relay_port import OutboxRelayPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
@@ -39,7 +39,7 @@ class WorkerContainer:
             shard_overrides=self.settings.database.shard_overrides,
         )
 
-        self.cp_outbox_relay: NotifyOutboxRelay | None = None
+        self.cp_outbox_relay: OutboxRelayPort | None = None
         self.cp_manager: ConsumerManagerPort | None = None
         self.cp_sweeper_job_handler: EdiControlPlaneOutboxSweeperJobHandler | None = None
         self.cp_cleanup_job_handler: EdiControlPlaneOutboxCleanupJobHandler | None = None
@@ -85,10 +85,9 @@ class WorkerContainer:
             repository=cp_repo,
             publisher=cp_pub,
         )
-        self.cp_outbox_relay = NotifyOutboxRelay(
+        self.cp_outbox_relay = OutboxDrainRelay(
             processor=outbox_processor,
-            database_url=self.settings.database.global_url,
-            listen_channel=EdiConstants.OUTBOX_CHANNEL.value,
+            relay_name=EdiOutboxSource.EDI_CONTROL_PLANE.value,
         )
 
     def _wire_jobs_consumers(self) -> None:

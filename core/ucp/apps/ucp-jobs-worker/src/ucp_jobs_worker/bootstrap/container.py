@@ -1,6 +1,6 @@
 import structlog
 from database.provider import DatabaseProvider
-from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
+from outbox.adapters.inbound.outbox_drain_relay import OutboxDrainRelay
 from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
     SqlAlchemyGlobalOutboxRepository,
 )
@@ -9,6 +9,7 @@ from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from outbox.ports.outbox_relay_port import OutboxRelayPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
 from pubsub.ports.consumer_manager_port import ConsumerManagerPort
@@ -49,7 +50,7 @@ class WorkerContainer:
         self.db_provider = DatabaseProvider.from_url(self.settings.database_url)
         self.session_factory = self.db_provider.session_factory
 
-        self.outbox_relay: NotifyOutboxRelay | None = None
+        self.outbox_relay: OutboxRelayPort | None = None
         self.jobs_consumer: ConsumerManagerPort | None = None
 
         self.sweeper_job_handler: UcpOutboxSweeperJobHandler | None = None
@@ -102,10 +103,9 @@ class WorkerContainer:
             repository=outbox_repo,
             publisher=outbox_pub,
         )
-        self.outbox_relay = NotifyOutboxRelay(
+        self.outbox_relay = OutboxDrainRelay(
             processor=outbox_processor,
-            database_url=self.settings.database_url,
-            listen_channel="ucp_outbox_wakeup",
+            relay_name=UcpOutboxSource.UCP.value,
         )
 
     def _wire_jobs_consumer(self) -> None:

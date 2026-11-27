@@ -1,5 +1,8 @@
 import pytest
-from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
+from outbox.application.outbox_processor_use_case import (
+    OutboxBatchResult,
+    OutboxProcessorUseCase,
+)
 from outbox.testing.fakes import FakeOutboxPublisher, FakeOutboxRepository
 from seedwork.events import EventEnvelope
 
@@ -44,8 +47,14 @@ async def test_partial_batch_result_completes_successes_and_retries_remainder():
     publisher = PartialFakePublisher()
     processor = OutboxProcessorUseCase(repository, publisher, worker_id="worker-1")
 
-    await processor.process_pending()
+    batch_result = await processor.process_batch()
 
+    assert batch_result == OutboxBatchResult(
+        claimed_count=2,
+        completed_count=1,
+        failed_count=1,
+        has_more=False,
+    )
     assert len(repository.completed_events) == 1
     assert repository.completed_events[0] == ("event-1", "worker-1")
     assert len(repository.failed_events) == 1

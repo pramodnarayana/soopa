@@ -1,8 +1,6 @@
 from database.uow import BaseSqlAlchemyUnitOfWork
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from notification.domain.constants import NotificationOutboxChannel
 from notification.ports.outbound.notification_outbox_repository_port import (
     NotificationOutboxRepositoryPort,
 )
@@ -41,9 +39,3 @@ class SqlAlchemyNotificationUnitOfWork(BaseSqlAlchemyUnitOfWork, NotificationUni
         self.record_repo = record_repo
         self.route_repo = route_repo
         self.outbox_repo = outbox_repo
-
-    async def _pre_commit(self) -> None:
-        # Wake up the delivery outbox relay
-        await self.session.execute(
-            text(f"NOTIFY {NotificationOutboxChannel.DELIVERY_WAKEUP.value};")
-        )

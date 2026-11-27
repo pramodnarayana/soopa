@@ -4,17 +4,21 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 from database.models import Webhook as DbWebhook
 from database.models.identity import Tenant as DbTenant
+from database.provider import DatabaseProvider
 from identity.domain.constants import TenantIsolationMode
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
+from sqlalchemy import event
 from ucp_models.subscriptions import App as DbApp
 
 from ucp.adapters.outbound.database.app_repository import SqlAlchemyAppRepository
 from ucp.adapters.outbound.database.tenant_query_service import SqlAlchemyTenantQueryService
 from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from ucp.adapters.outbound.database.webhook_repository import SqlAlchemyWebhookRepository
+from ucp.bootstrap.container import create_ucp_uow
 from ucp.domain.constants import LifecycleStatus, UcpIdPrefix
 from ucp.domain.tenant import Tenant, TenantSubscription
 from ucp.domain.webhook import Webhook
@@ -120,3 +124,30 @@ def test_webhook_app_and_tenant_query_mappers() -> None:
     assert read_model.id == tenant_id
     assert read_model.subscriptions == ["edi", "billing"]
     assert read_model.created_at.tzinfo == UTC
+
+
+@pytest.mark.asyncio
+async def test_ucp_uow_pre_commit_emits_no_notify_sql() -> None:
+    provider = DatabaseProvider.from_url("sqlite+aiosqlite:///:memory:")
+    executed_statements: list[str] = []
+
+    def _capture_do_execute(
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+    ) -> bool | None:
+        del cursor, parameters, context
+        executed_statements.append(statement)
+        return None
+
+    event.listen(provider.engine.sync_engine, "do_execute", _capture_do_execute, retval=True)
+    try:
+        async with provider.session_factory() as session:
+            uow = create_ucp_uow(session=session)
+            await uow._pre_commit()
+    finally:
+        event.remove(provider.engine.sync_engine, "do_execute", _capture_do_execute)
+        await provider.engine.dispose()
+
+    assert executed_statements == []
