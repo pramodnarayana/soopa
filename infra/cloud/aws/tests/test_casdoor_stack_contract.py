@@ -31,6 +31,7 @@ class _CasdoorStackMocks(Mocks):
         self.role_policies: dict[str, dict[str, object]] = {}
         self.ecs_services: dict[str, dict[str, object]] = {}
         self.log_groups: dict[str, dict[str, object]] = {}
+        self.target_groups: dict[str, dict[str, object]] = {}
 
     def new_resource(self, args: MockResourceArgs) -> tuple[str | None, dict[str, object]]:
         if args.typ == "aws:iam/rolePolicy:RolePolicy":
@@ -42,6 +43,8 @@ class _CasdoorStackMocks(Mocks):
         elif args.typ == "aws:cloudwatch/logGroup:LogGroup":
             log_name = str(args.inputs.get("name", args.name))
             self.log_groups[log_name] = dict(args.inputs)
+        elif args.typ == "aws:lb/targetGroup:TargetGroup":
+            self.target_groups[args.name] = dict(args.inputs)
         return f"{args.name}-id", dict(args.inputs)
 
     def call(self, args: MockCallArgs) -> tuple[dict[str, object], list[tuple[str, str]] | None]:
@@ -135,6 +138,10 @@ def test_casdoor_container_defs_wire_least_privilege_db_init_and_firelens_sideca
     assert app_c["dependsOn"] == [
         {"containerName": CasdoorConstants.DB_INIT_CONTAINER_NAME, "condition": "SUCCESS"}
     ]
+    assert app_c["portMappings"] == [{"containerPort": 8000, "hostPort": 8000}]
+    app_env = {e["name"]: e["value"] for e in app_c["environment"]}
+    assert app_env["BEEGO_RUNMODE"] == "prod"
+    assert "httpport" not in app_env
     assert {s["name"] for s in app_c["secrets"]} == {"dataSourceName", "initAdminPassword"}
     assert app_c["logConfiguration"]["logDriver"] == "awsfirelens"
 
@@ -249,6 +256,7 @@ def test_casdoor_ecs_service_enforces_steady_state_circuit_breaker_and_log_group
     assert svc_inputs["waitForSteadyState"] is True
     assert svc_inputs["healthCheckGracePeriodSeconds"] == 60
     assert svc_inputs["deploymentCircuitBreaker"] == {"enable": True, "rollback": True}
+    assert mocks.target_groups["staging-casdoor-tg"]["port"] == 8000
     assert set(mocks.log_groups) == {"/ecs/staging-casdoor", "/ecs/staging-casdoor-firelens"}
     assert mocks.log_groups["/ecs/staging-casdoor"]["retentionInDays"] == 3
     assert mocks.log_groups["/ecs/staging-casdoor-firelens"]["retentionInDays"] == 3
