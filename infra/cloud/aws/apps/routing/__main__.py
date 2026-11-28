@@ -6,6 +6,7 @@ Centralized DNS routing and Edge policies for all subdomains.
 
 import pulumi
 import pulumi_aws as aws
+from infra_seedwork.network import provision_route53_alias_record
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"
@@ -28,66 +29,42 @@ dashboard_cloudfront_zone_id = dashboard.require_output("dashboard_cloudfront_zo
 hosted_zone = aws.route53.get_zone_output(name=staging_domain)
 
 # ── 1. API Subdomain ──────────────────────────────────────────────────────────
-api_dns_record = aws.route53.Record(
-    f"{_prefix}api-dns",
+api_dns_record = provision_route53_alias_record(
+    name=f"{_prefix}api-dns",
     zone_id=hosted_zone.id,
-    name=pulumi.Output.concat("api.", staging_domain),
-    type="A",
-    aliases=[
-        aws.route53.RecordAliasArgs(
-            name=main_alb_dns_name,
-            zone_id=main_alb_zone_id,
-            evaluate_target_health=False,
-        )
-    ],
+    record_name=pulumi.Output.concat("api.", staging_domain),
+    alias_target_dns_name=main_alb_dns_name,
+    alias_target_zone_id=main_alb_zone_id,
 )
 
-# ── 2. EDI Subdomain ──────────────────────────────────────────────────────────
-edi_dns_record = aws.route53.Record(
-    f"{_prefix}edi-dns",
+# ── 2. Per-Tenant AS2 Wildcard Subdomain (*.as2.<domain>) ─────────────────────
+as2_wildcard_dns_record = provision_route53_alias_record(
+    name=f"{_prefix}as2-wildcard-dns",
     zone_id=hosted_zone.id,
-    name=pulumi.Output.concat("edi.", staging_domain),
-    type="A",
-    aliases=[
-        aws.route53.RecordAliasArgs(
-            name=main_alb_dns_name,
-            zone_id=main_alb_zone_id,
-            evaluate_target_health=False,
-        )
-    ],
+    record_name=pulumi.Output.concat("*.as2.", staging_domain),
+    alias_target_dns_name=main_alb_dns_name,
+    alias_target_zone_id=main_alb_zone_id,
 )
 
-# ── 3. OpenAS2 Subdomain ──────────────────────────────────────────────────────────
-openas2_dns_record = aws.route53.Record(
-    f"{_prefix}openas2-dns",
+# ── 3. OpenAS2 Subdomain ──────────────────────────────────────────────────────
+openas2_dns_record = provision_route53_alias_record(
+    name=f"{_prefix}openas2-dns",
     zone_id=hosted_zone.id,
-    name=pulumi.Output.concat("openas2.", staging_domain),
-    type="A",
-    aliases=[
-        aws.route53.RecordAliasArgs(
-            name=main_alb_dns_name,
-            zone_id=main_alb_zone_id,
-            evaluate_target_health=False,
-        )
-    ],
+    record_name=pulumi.Output.concat("openas2.", staging_domain),
+    alias_target_dns_name=main_alb_dns_name,
+    alias_target_zone_id=main_alb_zone_id,
 )
 
 # ── 4. Dashboard Subdomain ────────────────────────────────────────────────────
-dashboard_dns_record = aws.route53.Record(
-    f"{_prefix}dashboard-dns",
+dashboard_dns_record = provision_route53_alias_record(
+    name=f"{_prefix}dashboard-dns",
     zone_id=hosted_zone.id,
-    name=pulumi.Output.concat("dashboard.", staging_domain),
-    type="A",
-    aliases=[
-        aws.route53.RecordAliasArgs(
-            name=dashboard_cloudfront_domain,
-            zone_id=dashboard_cloudfront_zone_id,
-            evaluate_target_health=False,
-        )
-    ],
+    record_name=pulumi.Output.concat("dashboard.", staging_domain),
+    alias_target_dns_name=dashboard_cloudfront_domain,
+    alias_target_zone_id=dashboard_cloudfront_zone_id,
 )
 
 pulumi.export("api_domain", api_dns_record.name)
-pulumi.export("edi_domain", edi_dns_record.name)
+pulumi.export("as2_wildcard_domain", as2_wildcard_dns_record.name)
 pulumi.export("openas2_domain", openas2_dns_record.name)
 pulumi.export("dashboard_domain", dashboard_dns_record.name)

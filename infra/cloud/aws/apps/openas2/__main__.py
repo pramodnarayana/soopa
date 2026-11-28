@@ -11,7 +11,7 @@ import pulumi_aws as aws
 from infra_seedwork import ObservabilityDefaults, StackEnvironment
 from infra_seedwork.ecr import attach_ecr_lifecycle_policy
 from infra_seedwork.ecs import provision_fargate_service
-from infra_seedwork.network import provision_target_group_and_rule
+from infra_seedwork.network import provision_target_group_and_rule, validate_dns_label
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"
@@ -166,8 +166,15 @@ aws.s3.BucketLifecycleConfigurationV2(
 
 # ── ECS Service ───────────────────────────────────────────────────────────────
 # The OpenAS2 container needs the FLOWWOLF_AS2_URL injected so the entrypoint
-# can template the partnerships.xml with the correct AWS inbound URL.
-flowwolf_as2_url = pulumi.Output.concat("https://edi.", staging_domain, "/as2/inbox")
+# can template the partnerships.xml with the V1 per-tenant AWS inbound URL.
+raw_test_tenant_slug = config.get("test_tenant_slug")
+test_tenant_slug = validate_dns_label(
+    "staging-test" if raw_test_tenant_slug is None else raw_test_tenant_slug,
+    field_name="test_tenant_slug",
+)
+flowwolf_as2_url = pulumi.Output.concat(
+    "https://", test_tenant_slug, ".as2.", staging_domain, "/inbox"
+)
 
 fargate_service = provision_fargate_service(
     name=f"{_prefix}openas2",
