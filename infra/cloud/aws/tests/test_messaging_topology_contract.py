@@ -21,6 +21,7 @@ from infra_seedwork.messaging import (
     sqs_arns_from_queue_env_vars,
     sqs_url_to_arn,
 )
+from infra_seedwork.stack_ref import resolve_stack_output_value
 from infra_seedwork.topology import load_topology
 from pulumi.runtime import MockCallArgs, MockResourceArgs, Mocks, set_mocks
 from pulumi.runtime.settings import SETTINGS
@@ -586,3 +587,36 @@ def test_platform_and_compute_stacks_provision_and_inject_db_encryption_key() ->
     api_src = (AWS_ROOT / "apps" / "api" / "__main__.py").read_text(encoding="utf-8")
     assert "execution_role_arn=watch_execution_role.arn" in api_src
     assert api_src.count('"DB_ENCRYPTION_KEY"') == 1
+
+
+def test_stack_output_resolver_supports_preview_placeholder_and_fails_closed_on_apply() -> None:
+    placeholder = (
+        "arn:aws:secretsmanager:us-east-1:000000000000:secret:platform/staging-key-preview"
+    )
+    real_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:platform/staging-key-AbCdEf"
+
+    assert (
+        resolve_stack_output_value(
+            real_arn,
+            output_name="db_encryption_key_secret_arn",
+            preview_placeholder=placeholder,
+            is_dry_run=False,
+        )
+        == real_arn
+    )
+    assert (
+        resolve_stack_output_value(
+            None,
+            output_name="db_encryption_key_secret_arn",
+            preview_placeholder=placeholder,
+            is_dry_run=True,
+        )
+        == placeholder
+    )
+    with pytest.raises(KeyError, match="db_encryption_key_secret_arn"):
+        resolve_stack_output_value(
+            None,
+            output_name="db_encryption_key_secret_arn",
+            preview_placeholder=placeholder,
+            is_dry_run=False,
+        )

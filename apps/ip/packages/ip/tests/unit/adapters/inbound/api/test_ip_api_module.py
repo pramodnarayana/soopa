@@ -531,10 +531,12 @@ class _StubIpAuthzRuntime:
         )
 
 
-@pytest.mark.asyncio
-async def test_require_ip_permission_evaluates_local_pdp_entitlements_revocation_and_fail_closed() -> (
-    None
-):
+def _build_ip_pdp_fixture() -> tuple[
+    FastAPI,
+    _StubIpAuthzRuntime,
+    _StubIpEntitlements,
+    datetime,
+]:
     now = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
     old_epoch = datetime(2025, 1, 1, 0, 0, tzinfo=UTC)
     directory = _StubIpAuthzDirectory(
@@ -593,7 +595,12 @@ async def test_require_ip_permission_evaluates_local_pdp_entitlements_revocation
     app = FastAPI()
     app.state.identity_authz = runtime
     app.state.db_provider = _StubIpDbProvider()
+    return app, runtime, entitlements, now
 
+
+@pytest.mark.asyncio
+async def test_require_ip_permission_enforces_local_pdp_app_entitlements() -> None:
+    app, runtime, entitlements, now = _build_ip_pdp_fixture()
     identity = IdentityContext(
         subject="iam_usr_ip",
         claims={},
@@ -609,7 +616,6 @@ async def test_require_ip_permission_evaluates_local_pdp_entitlements_revocation
         token_issued_at=now,
     )
 
-    # 1. Unsubscribed tenant -> 403 DENIED_APP_NOT_SUBSCRIBED
     with pytest.raises(HTTPException) as unsub_exc:
         await require_flows_read(request=req, identity=identity, tenant_id="ten_01")
     assert unsub_exc.value.status_code == 403
@@ -618,13 +624,16 @@ async def test_require_ip_permission_evaluates_local_pdp_entitlements_revocation
         "obligations": [],
     }
 
-    # 2. Subscribe tenant to "ip" and evict cache -> allowed!
     entitlements.enabled_by_tenant["ten_01"] = frozenset({IP_APP_SLUG})
     await runtime.principal_cache.evict_enabled_apps("ten_01")
     allowed = await require_flows_read(request=req, identity=identity, tenant_id="ten_01")
     assert allowed.subject == "iam_usr_ip"
 
-    # 3. Revoked token -> 401 DENIED_TOKEN_REVOKED with WWW-Authenticate: Bearer
+
+@pytest.mark.asyncio
+async def test_require_ip_permission_rejects_revoked_token_with_bearer_challenge() -> None:
+    app, _, entitlements, now = _build_ip_pdp_fixture()
+    entitlements.enabled_by_tenant["ten_01"] = frozenset({IP_APP_SLUG})
     revoked_identity = IdentityContext(
         subject="iam_usr_revoked",
         claims={},
@@ -639,6 +648,7 @@ async def test_require_ip_permission_evaluates_local_pdp_entitlements_revocation
         actor_type=ActorType.HUMAN,
         token_issued_at=now,
     )
+
     with pytest.raises(HTTPException) as revoked_exc:
         await require_flows_read(request=revoked_req, identity=revoked_identity, tenant_id="ten_01")
     assert revoked_exc.value.status_code == 401
@@ -648,8 +658,26 @@ async def test_require_ip_permission_evaluates_local_pdp_entitlements_revocation
         "obligations": [],
     }
 
-    # 4. Incomplete runtime (identity_authz set, db_provider missing) -> 503 fail-closed
+
+@pytest.mark.asyncio
+async def test_require_ip_permission_fails_closed_when_pdp_runtime_incomplete() -> None:
+    app, _, _, now = _build_ip_pdp_fixture()
     app.state.db_provider = None
+    identity = IdentityContext(
+        subject="iam_usr_ip",
+        claims={},
+        tenant_id="ten_01",
+        authorized_tenants={"ten_01"},
+    )
+    req = _make_request(app, identity=identity)
+    req.state.principal = PrincipalContext(
+        user_id="iam_usr_ip",
+        idp_issuer="https://idp.example",
+        idp_subject="ip-user",
+        actor_type=ActorType.HUMAN,
+        token_issued_at=now,
+    )
+
     with pytest.raises(HTTPException) as incomplete_exc:
         await require_flows_read(request=req, identity=identity, tenant_id="ten_01")
     assert incomplete_exc.value.status_code == 503
