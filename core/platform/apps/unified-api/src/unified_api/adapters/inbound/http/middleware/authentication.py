@@ -77,8 +77,21 @@ def _to_principal_context(identity: IdentityContext) -> PrincipalContext:
     jti_raw = claims.get("jti")
     jti = jti_raw if isinstance(jti_raw, str) and jti_raw else None
 
-    is_machine = not idp_issuer and identity.tenant_id is not None
+    is_machine = bool(claims.get("is_m2m")) or (not idp_issuer and identity.tenant_id is not None)
     actor_type = ActorType.MACHINE if is_machine else ActorType.HUMAN
+
+    token_scopes: frozenset[str] | None = None
+    if is_machine:
+        combined_scopes: set[str] = set(identity.capabilities) | set(identity.permissions)
+        raw_scopes = claims.get("scopes")
+        if isinstance(raw_scopes, (list, tuple, set)):
+            combined_scopes.update(
+                scope.strip() for scope in raw_scopes if isinstance(scope, str) and scope.strip()
+            )
+        raw_scope = claims.get("scope")
+        if isinstance(raw_scope, str) and raw_scope.strip():
+            combined_scopes.update(raw_scope.split())
+        token_scopes = frozenset(combined_scopes) if combined_scopes else None
 
     return PrincipalContext(
         user_id=identity.subject,
@@ -92,6 +105,7 @@ def _to_principal_context(identity: IdentityContext) -> PrincipalContext:
         email_verified=email_verified,
         idp_realm=idp_realm,
         bound_tenant_id=identity.tenant_id if is_machine else None,
+        token_scopes=token_scopes,
         jti=jti,
     )
 

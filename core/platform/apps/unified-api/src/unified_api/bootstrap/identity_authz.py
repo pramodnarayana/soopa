@@ -54,7 +54,10 @@ from identity.domain.dtos import (
     TrustedIssuerDTO,
 )
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from identity.ports.outbound.authorization_engine_port import AuthorizationEnginePort
+from identity.ports.outbound.authorization_engine_port import (
+    AuthorizationEnginePort,
+    AuthzRuntimePort,
+)
 from identity.ports.outbound.tenant_entitlement_port import TenantEntitlementPort
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
 from sqlalchemy import select
@@ -126,7 +129,7 @@ def build_home_realm_use_case(
 
 
 @dataclass(frozen=True)
-class IdentityAuthzRuntime:
+class IdentityAuthzRuntime(AuthzRuntimePort[AsyncSession]):
     """In-process Gold-Standard Identity & Authorization runtime attached to `app.state`."""
 
     global_catalog: InMemoryGlobalAuthzCatalog
@@ -140,14 +143,30 @@ class IdentityAuthzRuntime:
         """Assemble the request-scoped TenantEntitlementPort adapter via the Composition Root."""
         return SqlAlchemyTenantEntitlementRepository(session)
 
-    def build_engine(self, session: AsyncSession) -> AuthorizationEnginePort:
-        """Assemble a request-scoped 4-Layer Local PDP sharing the bounded L1 cache & global catalog."""
+    def _build_local_pdp(self, session: AsyncSession) -> HybridLocalAuthorizationEngine:
         return HybridLocalAuthorizationEngine(
             directory=SqlAlchemyAuthzDirectoryRepository(session),
             global_catalog=self.global_catalog,
             entitlements=SqlAlchemyTenantEntitlementRepository(session),
             cache=self.principal_cache,
             resource_grants=SqlAlchemyResourceGrantRepository(session),
+        )
+
+    def build_engine(self, session: AsyncSession) -> AuthorizationEnginePort:
+        """Assemble a request-scoped 4-Layer Local PDP sharing the bounded L1 cache & global catalog."""
+        return self._build_local_pdp(session)
+
+    async def has_hierarchical_tenant_access(
+        self,
+        *,
+        session: AsyncSession,
+        user_id: str,
+        target_tenant_id: str,
+    ) -> bool:
+        """Delegate hierarchical `ltree` & tenant-health check to the shared 4-Layer Local PDP."""
+        return await self._build_local_pdp(session).has_active_tenant_access(
+            user_id=user_id,
+            target_tenant_id=target_tenant_id,
         )
 
 

@@ -50,6 +50,7 @@ ecr_repository_url = platform.require_output("ecr_repository_url")
 main_alb_listener_arn = platform.require_output("main_alb_listener_arn")
 staging_domain = platform.require_output("staging_domain")
 namespace_name = platform.require_output("cloud_map_namespace_name")
+db_encryption_key_secret_arn = platform.require_output("db_encryption_key_secret_arn")
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
@@ -103,7 +104,11 @@ aws.iam.RolePolicy(
     f"{_prefix}as2-ecs-exec-role-secrets-policy",
     role=execution_role.id,
     policy=pulumi.Output.all(
-        edi_shard_db_secret_arn, global_db_secret_arn, obs_user_arn, obs_pass_arn
+        edi_shard_db_secret_arn,
+        global_db_secret_arn,
+        db_encryption_key_secret_arn,
+        obs_user_arn,
+        obs_pass_arn,
     ).apply(
         lambda args: json.dumps(
             {
@@ -112,7 +117,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [arn for arn in [args[0], args[1], args[2], args[3]] if arn],
+                        "Resource": [arn for arn in args if arn],
                     },
                     {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
                 ],
@@ -216,6 +221,10 @@ as2_server = provision_fargate_service(
         {
             "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
+        },
+        {
+            "name": "DB_ENCRYPTION_KEY",
+            "valueFrom": db_encryption_key_secret_arn,
         },
     ],
     extra_task_policy_statements=[

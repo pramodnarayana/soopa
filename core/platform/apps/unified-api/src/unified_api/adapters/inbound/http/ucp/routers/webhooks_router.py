@@ -3,6 +3,7 @@ from typing import Annotated
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Header, status
+from identity.domain.authorization import Capability
 from identity.domain.identity_context import IdentityContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.application.use_cases.webhooks import (
@@ -15,6 +16,7 @@ from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
 from ucp.domain.webhook import Webhook
 
+from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
 from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
 from unified_api.adapters.inbound.http.ucp.dtos.webhook_dtos import (
     CreateWebhookRequest,
@@ -37,7 +39,12 @@ def _webhook_response(webhook: Webhook, tenant_id: str) -> WebhookResponse:
     )
 
 
-@router.get("", response_model=list[WebhookResponse], status_code=status.HTTP_200_OK)
+@router.get(
+    "",
+    response_model=list[WebhookResponse],
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RequireCapability(Capability.WEBHOOKS_READ))],
+)
 @inject
 async def list_webhooks(
     tenant_id: str,
@@ -53,7 +60,12 @@ async def list_webhooks(
     return [_webhook_response(p, tenant_id) for p in webhooks]
 
 
-@router.post("", response_model=WebhookResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=WebhookResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RequireCapability(Capability.WEBHOOKS_WRITE))],
+)
 @inject
 async def create_webhook(
     tenant_id: str,
@@ -79,7 +91,12 @@ async def create_webhook(
     return _webhook_response(res.unwrap(), tenant_id)
 
 
-@router.patch("/{webhook_id}", response_model=WebhookResponse, status_code=status.HTTP_200_OK)
+@router.patch(
+    "/{webhook_id}",
+    response_model=WebhookResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RequireCapability(Capability.WEBHOOKS_WRITE))],
+)
 @inject
 async def update_webhook(
     tenant_id: str,
@@ -107,7 +124,11 @@ async def update_webhook(
     return _webhook_response(res.unwrap(), tenant_id)
 
 
-@router.delete("/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{webhook_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(RequireCapability(Capability.WEBHOOKS_WRITE))],
+)
 @inject
 async def delete_webhook(
     tenant_id: str,

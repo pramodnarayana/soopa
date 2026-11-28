@@ -3,6 +3,7 @@ from typing import Annotated
 
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, status
+from identity.domain.authorization import Capability
 from identity.domain.identity_context import IdentityContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.application.use_cases.api_tokens import (
@@ -16,6 +17,7 @@ from ucp.application.use_cases.api_tokens.update_api_token_use_case import Updat
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
 
+from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
 from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
 from unified_api.adapters.inbound.http.identity.dtos.api_token_dtos import (
     ApiTokenCreatedResponse,
@@ -29,7 +31,12 @@ from unified_api.adapters.inbound.http.ucp.error_mapper import raise_http_for_uc
 router = APIRouter(tags=["API Tokens"])
 
 
-@router.get("", response_model=list[ApiTokenResponse], status_code=status.HTTP_200_OK)
+@router.get(
+    "",
+    response_model=list[ApiTokenResponse],
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RequireCapability(Capability.API_KEYS_READ))],
+)
 @inject
 async def list_tokens(
     tenant_id: str,
@@ -45,7 +52,12 @@ async def list_tokens(
     return [ApiTokenResponse.model_validate(t) for t in tokens]
 
 
-@router.post("", response_model=ApiTokenCreatedResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ApiTokenCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RequireCapability(Capability.API_KEYS_WRITE))],
+)
 @inject
 async def create_token(
     tenant_id: str,
@@ -78,7 +90,12 @@ async def create_token(
     )
 
 
-@router.patch("/{token_id}", response_model=ApiTokenResponse, status_code=status.HTTP_200_OK)
+@router.patch(
+    "/{token_id}",
+    response_model=ApiTokenResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RequireCapability(Capability.API_KEYS_WRITE))],
+)
 @inject
 async def update_token(
     tenant_id: str,
@@ -99,7 +116,11 @@ async def update_token(
     return ApiTokenResponse.model_validate(res.unwrap())
 
 
-@router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{token_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(RequireCapability(Capability.API_KEYS_WRITE))],
+)
 @inject
 async def delete_token(
     tenant_id: str,

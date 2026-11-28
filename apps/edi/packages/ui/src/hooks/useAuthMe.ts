@@ -2,7 +2,7 @@
  * Fetches the current user's canonical platform identity from the UCP /auth/me endpoint.
  *
  * This provides the resolved canonical `usr_...` ID and must be used in preference to
- * `auth.user?.profile.sub` (the raw Zitadel IDP numeric ID) for all internal platform
+ * `auth.user?.profile.sub` (the raw external IdP subject ID) for all internal platform
  * operations. This enforces the architectural decision that all internal operations use
  * canonical platform IDs, not external IDP identifiers.
  *

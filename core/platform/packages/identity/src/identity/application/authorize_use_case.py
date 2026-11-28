@@ -21,6 +21,7 @@ from identity.domain.constants import (
     AuthzEffect,
     AuthzObligation,
     AuthzReasonCode,
+    CoreControlPlaneAppSlug,
     UserStatus,
 )
 from identity.domain.dtos import (
@@ -33,10 +34,12 @@ from identity.domain.dtos import (
     TenantNodeDTO,
 )
 from identity.domain.hierarchy import (
+    parse_ancestor_ids,
     resolve_effective_role_ids,
     resolve_effective_tenant_scopes,
     resolve_inheritable_ancestors,
 )
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.ports.outbound.authorization_engine_port import AuthorizationEnginePort
 from identity.ports.outbound.policy_rule_repository_port import CasbinRuleEvaluatorPort
 from identity.ports.outbound.principal_cache_port import PrincipalCachePort
@@ -49,7 +52,13 @@ from identity.ports.outbound.tenant_hierarchy_port import (
 
 logger = structlog.get_logger(__name__)
 
-_CORE_CONTROL_PLANE_APPS: frozenset[str] = frozenset({"ucp", "platform", "identity"})
+_CORE_CONTROL_PLANE_APPS: frozenset[str] = frozenset(
+    {
+        CoreControlPlaneAppSlug.UCP.value,
+        CoreControlPlaneAppSlug.PLATFORM.value,
+        CoreControlPlaneAppSlug.IDENTITY.value,
+    }
+)
 
 # Relation -> permitted action verb suffixes for fine-grained ReBAC resource grants
 _RELATION_ACTION_VERBS: dict[str, frozenset[str]] = {
@@ -384,8 +393,12 @@ class HybridLocalAuthorizationEngine(AuthorizationEnginePort):
             if action in role.deny_capabilities or "*" in role.deny_capabilities:
                 deny_caps.add(action)
                 matched_deny_role = role.id
+            has_wildcard_allow = "*" in role.capabilities and (
+                action != Capability.PLATFORM_ADMIN.value or role.tenant_id == PLATFORM_TENANT_ID
+            )
             if (
                 action in role.capabilities
+                or has_wildcard_allow
                 or Capability.PLATFORM_ADMIN.value in role.capabilities
                 or (
                     Capability.TENANT_ADMIN.value in role.capabilities
@@ -454,6 +467,37 @@ class HybridLocalAuthorizationEngine(AuthorizationEnginePort):
             )
         return None
 
+    async def has_active_tenant_access(
+        self,
+        *,
+        user_id: str,
+        target_tenant_id: str,
+        now: datetime | None = None,
+    ) -> bool:
+        """Verify active user status, active tenant chain health, and ltree membership access."""
+        snapshot = await self._load_principal_snapshot(user_id)
+        if snapshot is None or snapshot.status != UserStatus.ACTIVE:
+            return False
+
+        tenant_chain = await self._load_tenant_chain(target_tenant_id)
+        if not tenant_chain:
+            return False
+        if any(node.status.lower() != "active" for node in tenant_chain):
+            return False
+
+        nodes_by_id = {node.id: node for node in tenant_chain}
+        inheritable_chain = resolve_inheritable_ancestors(
+            nodes_by_id=nodes_by_id,
+            target_tenant_id=target_tenant_id,
+        )
+        effective_tenants = resolve_effective_tenant_scopes(
+            memberships=snapshot.memberships,
+            inheritable_chain=inheritable_chain,
+            target_tenant_id=target_tenant_id,
+            now=now or datetime.now(UTC),
+        )
+        return bool(effective_tenants)
+
     async def _load_principal_snapshot(self, user_id: str) -> PrincipalSnapshotDTO | None:
         if self._cache is not None:
             cached = await self._cache.get_principal(user_id)
@@ -467,8 +511,19 @@ class HybridLocalAuthorizationEngine(AuthorizationEnginePort):
     async def _load_tenant_chain(self, tenant_id: str) -> tuple[TenantNodeDTO, ...]:
         if self._cache is not None:
             cached_leaf = await self._cache.get_tenant_node(tenant_id)
-            if cached_leaf is not None and cached_leaf.parent_tenant_id is None:
-                return (cached_leaf,)
+            if cached_leaf is not None:
+                ancestor_ids = parse_ancestor_ids(cached_leaf.hierarchy_path) or (tenant_id,)
+                cached_nodes: list[TenantNodeDTO] = []
+                for aid in ancestor_ids:
+                    node = (
+                        cached_leaf if aid == tenant_id else await self._cache.get_tenant_node(aid)
+                    )
+                    if node is None:
+                        cached_nodes = []
+                        break
+                    cached_nodes.append(node)
+                if cached_nodes:
+                    return tuple(cached_nodes)
         chain = await self._directory.get_tenant_ancestor_chain(tenant_id=tenant_id)
         if chain and self._cache is not None:
             for node in chain:

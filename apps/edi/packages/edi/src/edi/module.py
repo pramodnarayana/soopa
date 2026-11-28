@@ -272,6 +272,10 @@ class EdiApiModule:
             raise ValueError("Host FastAPI shell must attach settings to app.state.settings")
         _register_edi_domain_exception_handlers(app)
         edi_app = create_edi_app(settings=host_settings)
+        try:
+            edi_app.state.identity_authz = app.state.identity_authz
+        except AttributeError:
+            edi_app.state.identity_authz = None
         self._edi_app = edi_app
         app.state.edi_app = edi_app
         app.mount("/", edi_app)
@@ -284,6 +288,11 @@ class EdiApiModule:
             return
         if app.state.db_provider is not None:
             edi_app.state.db_provider = app.state.db_provider
+        try:
+            if app.state.identity_authz is not None:
+                edi_app.state.identity_authz = app.state.identity_authz
+        except AttributeError:
+            logger.debug("edi_startup_host_identity_authz_absent")
         await startup(edi_app, db_router=db_router)
 
     async def shutdown(self, app: FastAPI) -> None:

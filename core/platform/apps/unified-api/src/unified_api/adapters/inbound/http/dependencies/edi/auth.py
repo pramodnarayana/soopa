@@ -9,6 +9,9 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from seedwork.domain.types import JsonDict
 
 from unified_api.adapters.inbound.http.dependencies.edi.services import get_tenant_repo
+from unified_api.adapters.inbound.http.guards.platform_auth_guard import (
+    require_platform_admin as require_platform_admin_identity,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -79,16 +82,12 @@ async def get_current_tenant_id(
     return str(tenant_id)
 
 
-def require_platform_admin(identity: IdentityContext = Depends(get_identity_context)) -> str:
-    """Enforce that the caller holds Platform Admin privileges."""
-    is_platform_admin = (
-        "PlatformAdmin" in identity.roles or PLATFORM_TENANT_ID in identity.authorized_tenants
-    )
-    if not is_platform_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden. This action requires Platform Admin privileges.",
-        )
+async def require_platform_admin(
+    request: Request,
+    _identity: IdentityContext = Depends(get_identity_context),
+) -> str:
+    """Enforce Platform Admin privileges through the shared 4-Layer Local PDP guard."""
+    await require_platform_admin_identity(request)
     return PLATFORM_TENANT_ID
 
 

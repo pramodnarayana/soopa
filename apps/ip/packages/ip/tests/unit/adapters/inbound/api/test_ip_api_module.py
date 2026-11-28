@@ -2,13 +2,40 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from database.router import DatabaseRouter
 from fastapi import FastAPI, HTTPException
 from fastapi.routing import APIRoute
+from identity.adapters.outbound.cache.in_memory_global_authz_catalog import (
+    InMemoryGlobalAuthzCatalog,
+)
+from identity.adapters.outbound.cache.l1_lru_principal_cache import L1LruPrincipalCache
+from identity.application.authorize_use_case import HybridLocalAuthorizationEngine
+from identity.domain.constants import (
+    ActorType,
+    AuthzReasonCode,
+    TenantIsolationMode,
+    TenantTierType,
+    UserStatus,
+)
+from identity.domain.dtos import (
+    MembershipDTO,
+    PrincipalContext,
+    PrincipalSnapshotDTO,
+    RoleDefinitionDTO,
+    TenantNodeDTO,
+    UserRoleAssignmentDTO,
+)
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
+from identity.ports.outbound.authorization_engine_port import AuthorizationEnginePort
+from identity.ports.outbound.tenant_entitlement_port import TenantEntitlementPort
+from identity.ports.outbound.tenant_hierarchy_port import AuthzDirectoryPort
 from ip.engine.adapters.inbound.api.dependencies import (
     get_catalog_registry,
     get_cipher,
@@ -36,7 +63,7 @@ from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     from_ip_error,
     to_error_response,
 )
-from ip.engine.domain.authorization import IpPermission, IpRole, TenantSummary
+from ip.engine.domain.authorization import IP_APP_SLUG, IpPermission, IpRole, TenantSummary
 from ip.engine.domain.exceptions import ConnectorNotFoundError
 from ip.engine.module import IpApiModule
 from ip.engine.ports.outbound.tenant_repository_port import TenantRepositoryPort
@@ -249,12 +276,16 @@ async def test_require_tenant_member_validates_federated_tenant_scope() -> None:
     )
     assert effective_id == "ten_01"
 
-    flows_read_ctx = await require_flows_read(identity=resolved, tenant_id=effective_id)
+    flows_read_ctx = await require_flows_read(
+        request=member_req, identity=resolved, tenant_id=effective_id
+    )
     assert flows_read_ctx.subject == "usr_01"
-    sync_ctx = await require_sync_trigger(identity=resolved, tenant_id=effective_id)
+    sync_ctx = await require_sync_trigger(
+        request=member_req, identity=resolved, tenant_id=effective_id
+    )
     assert sync_ctx.subject == "usr_01"
     with pytest.raises(HTTPException) as support_write_exc:
-        await require_flows_write(identity=resolved, tenant_id=effective_id)
+        await require_flows_write(request=member_req, identity=resolved, tenant_id=effective_id)
     assert support_write_exc.value.status_code == 403
 
     other_req = _make_request(app, identity=member_identity)
@@ -270,6 +301,7 @@ async def test_require_tenant_member_validates_federated_tenant_scope() -> None:
 
 @pytest.mark.asyncio
 async def test_ip_permission_rbac_enforcement() -> None:
+    app = FastAPI()
     support_identity = IdentityContext(
         subject="usr_support",
         claims={},
@@ -278,10 +310,15 @@ async def test_ip_permission_rbac_enforcement() -> None:
         roles=(IpRole.CUSTOMER_SUPPORT.value,),
         tenant_roles={"ten_01": (IpRole.CUSTOMER_SUPPORT.value,)},
     )
-    res_canon = await require_canonical_records_read(identity=support_identity, tenant_id="ten_01")
+    support_req = _make_request(app, identity=support_identity)
+    res_canon = await require_canonical_records_read(
+        request=support_req, identity=support_identity, tenant_id="ten_01"
+    )
     assert res_canon.subject == "usr_support"
 
-    res_raw = await require_raw_records_read(identity=support_identity, tenant_id="ten_01")
+    res_raw = await require_raw_records_read(
+        request=support_req, identity=support_identity, tenant_id="ten_01"
+    )
     assert res_raw.subject == "usr_support"
 
     customer_identity = IdentityContext(
@@ -292,22 +329,29 @@ async def test_ip_permission_rbac_enforcement() -> None:
         roles=(IpRole.CUSTOMER.value,),
         tenant_roles={"ten_01": (IpRole.CUSTOMER.value,)},
     )
+    customer_req = _make_request(app, identity=customer_identity)
     customer_canon = await require_canonical_records_read(
-        identity=customer_identity, tenant_id="ten_01"
+        request=customer_req, identity=customer_identity, tenant_id="ten_01"
     )
     assert customer_canon.subject == "usr_customer"
 
     with pytest.raises(HTTPException) as exc_info:
-        await require_raw_records_read(identity=customer_identity, tenant_id="ten_01")
+        await require_raw_records_read(
+            request=customer_req, identity=customer_identity, tenant_id="ten_01"
+        )
     assert exc_info.value.status_code == 403
     assert IpPermission.IP_RECORDS_RAW_READ.value in exc_info.value.detail
 
     with pytest.raises(HTTPException) as sync_exc:
-        await require_sync_trigger(identity=customer_identity, tenant_id="ten_01")
+        await require_sync_trigger(
+            request=customer_req, identity=customer_identity, tenant_id="ten_01"
+        )
     assert sync_exc.value.status_code == 403
 
     with pytest.raises(HTTPException) as cross_exc:
-        await require_canonical_records_read(identity=customer_identity, tenant_id="ten_other")
+        await require_canonical_records_read(
+            request=customer_req, identity=customer_identity, tenant_id="ten_other"
+        )
     assert cross_exc.value.status_code == 403
 
     direct_perm_identity = IdentityContext(
@@ -317,7 +361,10 @@ async def test_ip_permission_rbac_enforcement() -> None:
         authorized_tenants={"ten_01"},
         permissions=(IpPermission.IP_RECORDS_RAW_READ.value,),
     )
-    direct_res = await require_raw_records_read(identity=direct_perm_identity, tenant_id="ten_01")
+    direct_req = _make_request(app, identity=direct_perm_identity)
+    direct_res = await require_raw_records_read(
+        request=direct_req, identity=direct_perm_identity, tenant_id="ten_01"
+    )
     assert direct_res.subject == "usr_custom_agent"
 
 
@@ -413,3 +460,196 @@ async def test_resolve_tenant_id_by_slug_enforces_lookup_isolation() -> None:
             tenant_slug="acme-tenant",
         )
     assert cross_exc.value.status_code == 403
+
+
+@dataclass
+class _StubIpAuthzDirectory(AuthzDirectoryPort):
+    principals: dict[str, PrincipalSnapshotDTO] = field(default_factory=dict)
+    tenants: dict[str, TenantNodeDTO] = field(default_factory=dict)
+    roles: dict[str, RoleDefinitionDTO] = field(default_factory=dict)
+
+    async def get_principal_snapshot(self, *, user_id: str) -> PrincipalSnapshotDTO | None:
+        return self.principals.get(user_id)
+
+    async def get_tenant_ancestor_chain(self, *, tenant_id: str) -> tuple[TenantNodeDTO, ...]:
+        node = self.tenants.get(tenant_id)
+        return (node,) if node is not None else ()
+
+    async def get_roles_by_ids(self, *, role_ids: Sequence[str]) -> dict[str, RoleDefinitionDTO]:
+        return {rid: self.roles[rid] for rid in role_ids if rid in self.roles}
+
+
+@dataclass
+class _StubIpEntitlements(TenantEntitlementPort):
+    enabled_by_tenant: dict[str, frozenset[str]] = field(default_factory=dict)
+
+    async def get_enabled_app_slugs(self, *, tenant_id: str) -> frozenset[str]:
+        return self.enabled_by_tenant.get(tenant_id, frozenset())
+
+
+class _StubIpDbProvider:
+    @contextlib.asynccontextmanager
+    async def session(self) -> AsyncIterator[None]:
+        yield None
+
+
+@dataclass
+class _StubIpAuthzRuntime:
+    directory: _StubIpAuthzDirectory
+    entitlements: _StubIpEntitlements
+    global_catalog: InMemoryGlobalAuthzCatalog = field(default_factory=InMemoryGlobalAuthzCatalog)
+    principal_cache: L1LruPrincipalCache = field(
+        default_factory=lambda: L1LruPrincipalCache(max_principals=100, ttl_seconds=60.0)
+    )
+
+    def build_engine(self, session: object) -> AuthorizationEnginePort:
+        _ = session
+        return HybridLocalAuthorizationEngine(
+            directory=self.directory,
+            global_catalog=self.global_catalog,
+            entitlements=self.entitlements,
+            cache=self.principal_cache,
+        )
+
+    async def has_hierarchical_tenant_access(
+        self,
+        *,
+        session: object,
+        user_id: str,
+        target_tenant_id: str,
+    ) -> bool:
+        _ = session
+        engine = HybridLocalAuthorizationEngine(
+            directory=self.directory,
+            global_catalog=self.global_catalog,
+            entitlements=self.entitlements,
+            cache=self.principal_cache,
+        )
+        return await engine.has_active_tenant_access(
+            user_id=user_id,
+            target_tenant_id=target_tenant_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_require_ip_permission_evaluates_local_pdp_entitlements_revocation_and_fail_closed() -> (
+    None
+):
+    now = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
+    old_epoch = datetime(2025, 1, 1, 0, 0, tzinfo=UTC)
+    directory = _StubIpAuthzDirectory(
+        principals={
+            "iam_usr_ip": PrincipalSnapshotDTO(
+                user_id="iam_usr_ip",
+                status=UserStatus.ACTIVE,
+                tokens_valid_after=old_epoch,
+                memberships=(MembershipDTO(user_id="iam_usr_ip", tenant_id="ten_01"),),
+                role_assignments=(
+                    UserRoleAssignmentDTO(
+                        tenant_id="ten_01",
+                        user_id="iam_usr_ip",
+                        role_id="rol_ip_reader",
+                    ),
+                ),
+            ),
+            "iam_usr_revoked": PrincipalSnapshotDTO(
+                user_id="iam_usr_revoked",
+                status=UserStatus.ACTIVE,
+                tokens_valid_after=now + timedelta(minutes=5),
+                memberships=(MembershipDTO(user_id="iam_usr_revoked", tenant_id="ten_01"),),
+                role_assignments=(
+                    UserRoleAssignmentDTO(
+                        tenant_id="ten_01",
+                        user_id="iam_usr_revoked",
+                        role_id="rol_ip_reader",
+                    ),
+                ),
+            ),
+        },
+        tenants={
+            "ten_01": TenantNodeDTO(
+                id="ten_01",
+                parent_tenant_id=None,
+                hierarchy_path="ten_01",
+                tier_type=TenantTierType.ORGANIZATION,
+                isolation_mode=TenantIsolationMode.POOLED_REALM,
+                status="active",
+                block_parent_inheritance=False,
+                tokens_valid_after=old_epoch,
+            )
+        },
+        roles={
+            "rol_ip_reader": RoleDefinitionDTO(
+                id="rol_ip_reader",
+                tenant_id="ten_01",
+                name="IpReader",
+                capabilities=frozenset({IpPermission.IP_FLOWS_READ.value}),
+            )
+        },
+    )
+    entitlements = _StubIpEntitlements(enabled_by_tenant={"ten_01": frozenset()})
+    runtime = _StubIpAuthzRuntime(directory=directory, entitlements=entitlements)
+
+    app = FastAPI()
+    app.state.identity_authz = runtime
+    app.state.db_provider = _StubIpDbProvider()
+
+    identity = IdentityContext(
+        subject="iam_usr_ip",
+        claims={},
+        tenant_id="ten_01",
+        authorized_tenants={"ten_01"},
+    )
+    req = _make_request(app, identity=identity)
+    req.state.principal = PrincipalContext(
+        user_id="iam_usr_ip",
+        idp_issuer="https://idp.example",
+        idp_subject="ip-user",
+        actor_type=ActorType.HUMAN,
+        token_issued_at=now,
+    )
+
+    # 1. Unsubscribed tenant -> 403 DENIED_APP_NOT_SUBSCRIBED
+    with pytest.raises(HTTPException) as unsub_exc:
+        await require_flows_read(request=req, identity=identity, tenant_id="ten_01")
+    assert unsub_exc.value.status_code == 403
+    assert unsub_exc.value.detail == {
+        "code": AuthzReasonCode.DENIED_APP_NOT_SUBSCRIBED.value,
+        "obligations": [],
+    }
+
+    # 2. Subscribe tenant to "ip" and evict cache -> allowed!
+    entitlements.enabled_by_tenant["ten_01"] = frozenset({IP_APP_SLUG})
+    await runtime.principal_cache.evict_enabled_apps("ten_01")
+    allowed = await require_flows_read(request=req, identity=identity, tenant_id="ten_01")
+    assert allowed.subject == "iam_usr_ip"
+
+    # 3. Revoked token -> 401 DENIED_TOKEN_REVOKED with WWW-Authenticate: Bearer
+    revoked_identity = IdentityContext(
+        subject="iam_usr_revoked",
+        claims={},
+        tenant_id="ten_01",
+        authorized_tenants={"ten_01"},
+    )
+    revoked_req = _make_request(app, identity=revoked_identity)
+    revoked_req.state.principal = PrincipalContext(
+        user_id="iam_usr_revoked",
+        idp_issuer="https://idp.example",
+        idp_subject="revoked-user",
+        actor_type=ActorType.HUMAN,
+        token_issued_at=now,
+    )
+    with pytest.raises(HTTPException) as revoked_exc:
+        await require_flows_read(request=revoked_req, identity=revoked_identity, tenant_id="ten_01")
+    assert revoked_exc.value.status_code == 401
+    assert revoked_exc.value.headers == {"WWW-Authenticate": "Bearer"}
+    assert revoked_exc.value.detail == {
+        "code": AuthzReasonCode.DENIED_TOKEN_REVOKED.value,
+        "obligations": [],
+    }
+
+    # 4. Incomplete runtime (identity_authz set, db_provider missing) -> 503 fail-closed
+    app.state.db_provider = None
+    with pytest.raises(HTTPException) as incomplete_exc:
+        await require_flows_read(request=req, identity=identity, tenant_id="ten_01")
+    assert incomplete_exc.value.status_code == 503

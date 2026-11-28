@@ -1,20 +1,15 @@
-"""Enterprise Zitadel alignment verification, safe tenant cleanup, and self-healing platform bootstrap."""
+"""IdP-agnostic platform control-plane bootstrap and tenant cleanup utilities."""
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
-import time
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import Protocol, TypedDict, cast
 
-import httpx
 import structlog
 from database.models.identity import ExternalIdentity, Role, Tenant, TenantUser, User, UserRole
-from identity.adapters.outbound.zitadel import ZitadelMachineAuthenticationError
 from identity.domain.constants import (
     IdentityIdPrefix,
     MembershipScope,
@@ -30,58 +25,7 @@ from ucp.domain.constants import LifecycleStatus, UcpIdPrefix
 
 logger = structlog.get_logger(__name__)
 
-IDENTITY_SYSTEM_ORG_NAME = "ZITADEL"
 PLATFORM_ADMIN_ROLE_NAME = "PlatformAdmin"
-
-
-class ZitadelOrgDict(TypedDict, total=False):
-    id: str
-    name: str
-
-
-class AccessTokenProviderPort(Protocol):
-    """Port for exchanging machine credentials for a short-lived IdP access token."""
-
-    async def get_access_token(self) -> str: ...
-
-
-class AsyncSessionFactoryPort(Protocol):
-    """Callable returning an async session context manager."""
-
-    def __call__(self) -> AbstractAsyncContextManager[AsyncSession]: ...
-
-
-class ZitadelDriftReason(StrEnum):
-    """Structured failure reasons when local .env state drifts from live Zitadel."""
-
-    MISSING_CREDENTIALS = "missing_credentials"
-    UNREACHABLE = "unreachable"
-    MACHINE_AUTH_FAILED = "machine_auth_failed"
-    PLATFORM_ORG_MISSING = "platform_org_missing"
-    PLATFORM_ADMIN_MISSING = "platform_admin_missing"
-    UCP_PROJECT_MISSING = "ucp_project_missing"
-
-
-@dataclass(frozen=True)
-class ZitadelIdentityConfig:
-    """Expected Zitadel identity coordinates read from the repository environment."""
-
-    zitadel_url: str
-    machine_key: str
-    platform_org_id: str
-    platform_admin_id: str
-    ucp_project_id: str
-
-
-@dataclass(frozen=True)
-class ZitadelAlignmentResult:
-    """First-class result of verifying .env identity coordinates against live Zitadel."""
-
-    aligned: bool
-    reason: ZitadelDriftReason | None = None
-    detail: str | None = None
-    access_token: str | None = None
-    all_orgs: tuple[ZitadelOrgDict, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -143,246 +87,6 @@ _CANONICAL_PLATFORM_ROLES: tuple[_CanonicalRoleSpec, ...] = (
         ),
     ),
 )
-
-
-async def wait_for_zitadel_ready(
-    http_client: httpx.AsyncClient,
-    zitadel_url: str,
-    *,
-    timeout_seconds: float = 30.0,
-    poll_interval_seconds: float = 0.5,
-) -> bool:
-    """Poll Zitadel /debug/ready until HTTP 200 or timeout."""
-    ready_url = f"{zitadel_url.rstrip('/')}/debug/ready"
-    deadline = time.monotonic() + max(timeout_seconds, 0.0)
-
-    while True:
-        try:
-            resp = await http_client.get(ready_url, timeout=3.0)
-            if resp.status_code == 200:
-                return True
-        except httpx.HTTPError:
-            pass
-
-        if time.monotonic() >= deadline:
-            return False
-        await asyncio.sleep(poll_interval_seconds)
-
-
-async def _list_all_orgs(
-    http_client: httpx.AsyncClient,
-    zitadel_url: str,
-    access_token: str,
-) -> list[ZitadelOrgDict]:
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
-    response = await http_client.post(
-        f"{zitadel_url.rstrip('/')}/admin/v1/orgs/_search",
-        headers=headers,
-        json={"query": {"offset": "0", "limit": 500}},
-        timeout=15.0,
-    )
-    response.raise_for_status()
-    payload: object = response.json()
-    if not isinstance(payload, dict):
-        return []
-    raw_result = payload.get("result", [])
-    if not isinstance(raw_result, list):
-        return []
-    return cast("list[ZitadelOrgDict]", raw_result)
-
-
-async def verify_zitadel_platform_alignment(
-    *,
-    config: ZitadelIdentityConfig,
-    token_provider: AccessTokenProviderPort,
-    http_client: httpx.AsyncClient,
-    ready_timeout_seconds: float = 30.0,
-) -> ZitadelAlignmentResult:
-    """Verify .env machine key, platform org, admin user, and UCP project match live Zitadel."""
-    missing_fields = [
-        name
-        for name, val in (
-            ("IDENTITY_MACHINE_KEY", config.machine_key),
-            ("IDENTITY_PLATFORM_ORG_ID", config.platform_org_id),
-            ("IDENTITY_PLATFORM_ADMIN_ID", config.platform_admin_id),
-            ("IDENTITY_UCP_PROJECT_ID", config.ucp_project_id),
-        )
-        if not val.strip()
-    ]
-    if missing_fields:
-        return ZitadelAlignmentResult(
-            aligned=False,
-            reason=ZitadelDriftReason.MISSING_CREDENTIALS,
-            detail=f"Missing required Zitadel identity variables: {', '.join(missing_fields)}",
-        )
-
-    is_ready = await wait_for_zitadel_ready(
-        http_client,
-        config.zitadel_url,
-        timeout_seconds=ready_timeout_seconds,
-    )
-    if not is_ready:
-        return ZitadelAlignmentResult(
-            aligned=False,
-            reason=ZitadelDriftReason.UNREACHABLE,
-            detail=f"Zitadel did not become ready at {config.zitadel_url}",
-        )
-
-    try:
-        access_token = await token_provider.get_access_token()
-    except (ZitadelMachineAuthenticationError, ValueError) as exc:
-        return ZitadelAlignmentResult(
-            aligned=False,
-            reason=ZitadelDriftReason.MACHINE_AUTH_FAILED,
-            detail=str(exc),
-        )
-
-    base_url = config.zitadel_url.rstrip("/")
-    try:
-        all_orgs = await _list_all_orgs(http_client, base_url, access_token)
-    except httpx.HTTPError as exc:
-        return ZitadelAlignmentResult(
-            aligned=False,
-            reason=ZitadelDriftReason.MACHINE_AUTH_FAILED,
-            detail=f"Failed to query Zitadel organizations: {exc}",
-        )
-
-    if not any(org.get("id") == config.platform_org_id for org in all_orgs):
-        return ZitadelAlignmentResult(
-            aligned=False,
-            reason=ZitadelDriftReason.PLATFORM_ORG_MISSING,
-            detail=(
-                f"IDENTITY_PLATFORM_ORG_ID={config.platform_org_id} was not found in live Zitadel"
-            ),
-        )
-
-    scoped_headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-        "x-zitadel-orgid": config.platform_org_id,
-    }
-
-    try:
-        admin_resp = await http_client.get(
-            f"{base_url}/management/v1/users/{config.platform_admin_id}",
-            headers=scoped_headers,
-            timeout=15.0,
-        )
-    except httpx.HTTPError as exc:
-        return ZitadelAlignmentResult(
-            aligned=False,
-            reason=ZitadelDriftReason.PLATFORM_ADMIN_MISSING,
-            detail=f"Failed to verify IDENTITY_PLATFORM_ADMIN_ID in Zitadel: {exc}",
-        )
-    if admin_resp.status_code != 200:
-        return ZitadelAlignmentResult(
-            aligned=False,
-            reason=ZitadelDriftReason.PLATFORM_ADMIN_MISSING,
-            detail=(
-                f"IDENTITY_PLATFORM_ADMIN_ID={config.platform_admin_id} returned HTTP "
-                f"{admin_resp.status_code} in Zitadel"
-            ),
-        )
-
-    try:
-        proj_resp = await http_client.get(
-            f"{base_url}/management/v1/projects/{config.ucp_project_id}",
-            headers=scoped_headers,
-            timeout=15.0,
-        )
-    except httpx.HTTPError as exc:
-        return ZitadelAlignmentResult(
-            aligned=False,
-            reason=ZitadelDriftReason.UCP_PROJECT_MISSING,
-            detail=f"Failed to verify IDENTITY_UCP_PROJECT_ID in Zitadel: {exc}",
-        )
-    if proj_resp.status_code != 200:
-        return ZitadelAlignmentResult(
-            aligned=False,
-            reason=ZitadelDriftReason.UCP_PROJECT_MISSING,
-            detail=(
-                f"IDENTITY_UCP_PROJECT_ID={config.ucp_project_id} returned HTTP "
-                f"{proj_resp.status_code} in Zitadel"
-            ),
-        )
-
-    return ZitadelAlignmentResult(
-        aligned=True,
-        access_token=access_token,
-        all_orgs=tuple(all_orgs),
-    )
-
-
-async def cleanup_non_platform_zitadel_orgs(
-    *,
-    http_client: httpx.AsyncClient,
-    zitadel_url: str,
-    access_token: str,
-    platform_org_id: str,
-    all_orgs: tuple[ZitadelOrgDict, ...],
-) -> int:
-    """Rename and delete all non-platform, non-system Zitadel organizations."""
-    base_url = zitadel_url.rstrip("/")
-    tenant_orgs = [
-        org
-        for org in all_orgs
-        if org.get("id")
-        and org.get("id") != platform_org_id
-        and org.get("name") != IDENTITY_SYSTEM_ORG_NAME
-    ]
-    if not tenant_orgs:
-        logger.info("zitadel_no_tenant_orgs_to_delete")
-        return 0
-
-    deleted = 0
-    for org in tenant_orgs:
-        org_id = org["id"]
-        org_name = org.get("name", "unknown")
-        rename_headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-            "x-zitadel-orgid": org_id,
-        }
-        rename_resp = await http_client.put(
-            f"{base_url}/management/v1/orgs/me",
-            headers=rename_headers,
-            json={"name": f"DELETED-{org_id}"},
-            timeout=15.0,
-        )
-        if rename_resp.status_code >= 400:
-            logger.info(
-                "zitadel_org_rename_before_delete_skipped",
-                org_id=org_id,
-                org_name=org_name,
-                status_code=rename_resp.status_code,
-            )
-
-        delete_headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
-        del_resp = await http_client.delete(
-            f"{base_url}/admin/v1/orgs/{org_id}",
-            headers=delete_headers,
-            timeout=15.0,
-        )
-        if del_resp.status_code == 404:
-            continue
-        if del_resp.status_code >= 400:
-            logger.error(
-                "zitadel_org_delete_failed",
-                org_id=org_id,
-                org_name=org_name,
-                status_code=del_resp.status_code,
-            )
-            continue
-        deleted += 1
-        logger.info("zitadel_org_deleted", org_id=org_id, org_name=org_name)
-
-    return deleted
 
 
 async def purge_non_platform_tenants(
@@ -632,3 +336,11 @@ async def seed_platform_bootstrap(
             idp_issuer=config.idp_issuer,
         )
         await session.commit()
+
+
+__all__ = [
+    "PLATFORM_ADMIN_ROLE_NAME",
+    "PlatformSeedConfig",
+    "purge_non_platform_tenants",
+    "seed_platform_bootstrap",
+]

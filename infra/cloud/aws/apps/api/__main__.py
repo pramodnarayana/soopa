@@ -3,6 +3,7 @@ Application Layer (Layer 3) - Unified API
 """
 
 import json
+from collections.abc import Sequence
 
 import pulumi
 import pulumi_aws as aws
@@ -50,6 +51,7 @@ main_alb_listener_arn = platform.require_output("main_alb_listener_arn")
 staging_domain = platform.require_output("staging_domain")
 namespace_name = platform.require_output("cloud_map_namespace_name")
 app_defaults_secret_arn = platform.require_output("app_defaults_secret_arn")
+db_encryption_key_secret_arn = platform.require_output("db_encryption_key_secret_arn")
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
@@ -77,57 +79,88 @@ obs_pass_arn = (
 )
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
-execution_role = aws.iam.Role(
-    f"{_prefix}ecs-execution-role",
-    assume_role_policy=json.dumps(
-        {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Principal": {"Service": "ecs-tasks.amazonaws.com"},
-                    "Action": "sts:AssumeRole",
-                }
-            ],
-        }
-    ),
-    tags=_TAGS,
-)
 
-aws.iam.RolePolicy(
-    f"{_prefix}ecs-exec-role-secrets-policy",
-    role=execution_role.id,
-    policy=pulumi.Output.all(
-        edi_shard_db_secret_arn,
-        global_db_secret_arn,
-        app_defaults_secret_arn,
-        identity_admin_oauth_secret_arn,
-        obs_user_arn,
-        obs_pass_arn,
-    ).apply(
-        lambda args: json.dumps(
+def _create_ecs_execution_role(
+    *,
+    role_name: str,
+    policy_name: str,
+    attach_name: str,
+    secret_arns: Sequence[pulumi.Input[str] | None],
+) -> aws.iam.Role:
+    role = aws.iam.Role(
+        role_name,
+        assume_role_policy=json.dumps(
             {
                 "Version": "2012-10-17",
                 "Statement": [
                     {
                         "Effect": "Allow",
-                        "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [arn for arn in args if arn],
-                    },
-                    {
-                        "Effect": "Allow",
-                        "Action": ["logs:CreateLogGroup"],
-                        "Resource": "*",
-                    },
+                        "Principal": {"Service": "ecs-tasks.amazonaws.com"},
+                        "Action": "sts:AssumeRole",
+                    }
                 ],
             }
-        )
+        ),
+        tags=_TAGS,
+    )
+    aws.iam.RolePolicy(
+        policy_name,
+        role=role.id,
+        policy=pulumi.Output.all(*secret_arns).apply(
+            lambda args: json.dumps(
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": ["secretsmanager:GetSecretValue"],
+                            "Resource": [arn for arn in args if arn],
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": ["logs:CreateLogGroup"],
+                            "Resource": "*",
+                        },
+                    ],
+                }
+            )
+        ),
+    )
+    aws.iam.RolePolicyAttachment(
+        attach_name,
+        role=role.name,
+        policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+    )
+    return role
+
+
+execution_role = _create_ecs_execution_role(
+    role_name=f"{_prefix}ecs-execution-role",
+    policy_name=f"{_prefix}ecs-exec-role-secrets-policy",
+    attach_name=f"{_prefix}ecs-exec-role-attach",
+    secret_arns=(
+        edi_shard_db_secret_arn,
+        global_db_secret_arn,
+        app_defaults_secret_arn,
+        db_encryption_key_secret_arn,
+        identity_admin_oauth_secret_arn,
+        obs_user_arn,
+        obs_pass_arn,
     ),
 )
-aws.iam.RolePolicyAttachment(
-    f"{_prefix}ecs-exec-role-attach",
-    role=execution_role.name,
-    policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+
+# Dedicated least-privilege execution role for config-watch-gateway (zero access to
+# db_encryption_key_secret_arn, edi_shard_db_secret_arn, or identity_admin_oauth_secret_arn).
+watch_execution_role = _create_ecs_execution_role(
+    role_name=f"{_prefix}watch-ecs-execution-role",
+    policy_name=f"{_prefix}watch-ecs-exec-role-secrets-policy",
+    attach_name=f"{_prefix}watch-ecs-exec-role-attach",
+    secret_arns=(
+        global_db_secret_arn,
+        app_defaults_secret_arn,
+        obs_user_arn,
+        obs_pass_arn,
+    ),
 )
 
 # API routes to /* (catch all) but we'll use priority 500 (lower priority than EDI /as2/*)
@@ -237,6 +270,10 @@ api_service = provision_fargate_service(
                 app_defaults_secret_arn, ":config_sync_internal_token::"
             ),
         },
+        {
+            "name": "DB_ENCRYPTION_KEY",
+            "valueFrom": db_encryption_key_secret_arn,
+        },
     ],
     extra_task_policy_statements=[
         {
@@ -286,7 +323,7 @@ config_watch_service = provision_fargate_service(
     name=f"{_prefix}config-watch-gateway",
     command=["uvicorn", "unified_api.watch_gateway:app", "--host", "0.0.0.0", "--port", "8081"],  # noqa: S104 - Fargate container must bind to all interfaces to receive ALB traffic
     cluster_arn=ecs_cluster_arn,
-    execution_role_arn=execution_role.arn,
+    execution_role_arn=watch_execution_role.arn,
     ecr_image_uri=placeholder_image,
     subnets=private_subnets,
     security_group_id=app_sg_id,
