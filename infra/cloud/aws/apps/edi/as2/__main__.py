@@ -12,10 +12,7 @@ import json
 
 import pulumi
 import pulumi_aws as aws
-from infra_seedwork import (
-    load_autoscaling_config_from_pulumi,
-    require_stack_output_or_preview_placeholder,
-)
+from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
 from infra_seedwork.env import queue_env_vars_to_ecs_format
 from infra_seedwork.messaging import build_database_pubsub_env_vars
@@ -53,13 +50,7 @@ ecr_repository_url = platform.require_output("ecr_repository_url")
 main_alb_listener_arn = platform.require_output("main_alb_listener_arn")
 staging_domain = platform.require_output("staging_domain")
 namespace_name = platform.require_output("cloud_map_namespace_name")
-db_encryption_key_secret_arn = require_stack_output_or_preview_placeholder(
-    platform,
-    "db_encryption_key_secret_arn",
-    preview_placeholder=(
-        f"arn:aws:secretsmanager:us-east-1:000000000000:secret:platform/{_env}-db-encryption-key-preview"
-    ),
-)
+db_encryption_key_secret_arn = platform.require_output("db_encryption_key_secret_arn")
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")

@@ -121,35 +121,6 @@ aws.secretsmanager.SecretVersion(
     ),
 )
 
-# ── Dedicated Database Field Encryption Key (Isolated Blast Radius) ──────────
-# Cryptographically secure 32-byte (64-char hex) key for SecurityProvider (AES-256-GCM / Fernet).
-# Stored in its own dedicated secret with retain_on_delete=True and a minimum 7-day
-# recovery window (30 days in production) so accidental stack deletion never renders
-# encrypted customer credentials unreadable.
-db_encryption_key = random.RandomBytes(
-    f"{_prefix}db-encryption-key",
-    length=32,
-    opts=pulumi.ResourceOptions(
-        additional_secret_outputs=["hex", "base64"],
-        retain_on_delete=True,
-    ),
-)
-db_encryption_key_recovery_days = 30 if _env == "production" else 7
-db_encryption_key_secret = aws.secretsmanager.Secret(
-    f"{_prefix}db-encryption-key",
-    name=f"platform/{_prefix}db-encryption-key",
-    description="Dedicated 32-byte field-level DB encryption key (AES-256-GCM / Fernet).",
-    recovery_window_in_days=db_encryption_key_recovery_days,
-    tags=_TAGS,
-    opts=pulumi.ResourceOptions(retain_on_delete=True),
-)
-aws.secretsmanager.SecretVersion(
-    f"{_prefix}db-encryption-key-version",
-    secret_id=db_encryption_key_secret.id,
-    secret_string=pulumi.Output.secret(db_encryption_key.hex),
-    opts=pulumi.ResourceOptions(retain_on_delete=True),
-)
-
 # ── Shared Platform ECS Task Execution Role ──────────────────────────────────
 # Used by the Amazon ECS container agent across all compute stacks in the cluster.
 # Grants permissions to pull images from ECR, stream logs to CloudWatch, and
@@ -233,6 +204,5 @@ pulumi.export("ecr_repository_url", app_ecr_repo.repository_url)
 pulumi.export("openobserve_ecr_repo_url", openobserve_ecr_repo.repository_url)
 
 pulumi.export("app_defaults_secret_arn", app_defaults_secret.arn)
-pulumi.export("db_encryption_key_secret_arn", db_encryption_key_secret.arn)
 pulumi.export("ecs_execution_role_arn", ecs_execution_role.arn)
 pulumi.export("ecs_execution_role_name", ecs_execution_role.name)

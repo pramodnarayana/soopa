@@ -34,10 +34,6 @@ from infra_seedwork.ecs import (
 from infra_seedwork.env import (
     StackEnvironment,
 )
-from infra_seedwork.stack_ref import (
-    require_stack_output_or_preview_placeholder,
-    resolve_stack_output_value,
-)
 from infra_seedwork.storage import (
     attach_bucket_lifecycle_configuration,
     build_account_scoped_bucket_name,
@@ -72,7 +68,5 @@ __all__ = [
     "configure_ecs_service_autoscaling",
     "load_autoscaling_config_from_pulumi",
     "provision_secure_bucket",
-    "require_stack_output_or_preview_placeholder",
-    "resolve_stack_output_value",
     "validate_log_retention",
 ]
