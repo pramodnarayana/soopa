@@ -160,6 +160,13 @@ main_alb_sg = aws.ec2.SecurityGroup(
             cidr_blocks=["10.0.0.0/16"],
         ),
         aws.ec2.SecurityGroupEgressArgs(
+            description="Forward to ECS containers on app port 8081 (Config Watch Gateway)",
+            from_port=8081,
+            to_port=8081,
+            protocol="tcp",
+            cidr_blocks=["10.0.0.0/16"],
+        ),
+        aws.ec2.SecurityGroupEgressArgs(
             description="Forward to ECS containers on app port 8001 (AS2)",
             from_port=8001,
             to_port=8001,
@@ -216,6 +223,13 @@ app_sg = aws.ec2.SecurityGroup(
             to_port=5080,
             protocol="tcp",
             self=True,
+        ),
+        aws.ec2.SecurityGroupIngressArgs(
+            description="Traffic from ALB only (Config Watch Gateway)",
+            from_port=8081,
+            to_port=8081,
+            protocol="tcp",
+            security_groups=[main_alb_sg.id],
         ),
         aws.ec2.SecurityGroupIngressArgs(
             description="Traffic from ALB only (AS2)",

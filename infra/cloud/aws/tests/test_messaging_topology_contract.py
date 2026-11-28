@@ -527,6 +527,46 @@ def test_all_aws_stacks_import_existing_infra_seedwork_symbols() -> None:
                 )
 
 
+def test_foundation_security_groups_allow_config_watch_gateway_port_8081() -> None:
+    """ALB egress and app_sg ingress must both permit port 8081 for config-watch-gateway."""
+    foundation_src = (AWS_ROOT / "foundation" / "__main__.py").read_text(encoding="utf-8")
+    tree = ast.parse(foundation_src, filename="foundation/__main__.py")
+
+    egress_ports: set[int] = set()
+    ingress_ports: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr not in {"SecurityGroupEgressArgs", "SecurityGroupIngressArgs"}:
+            continue
+        for kw in node.keywords:
+            if (
+                kw.arg == "from_port"
+                and isinstance(kw.value, ast.Constant)
+                and isinstance(kw.value.value, int)
+            ):
+                if node.func.attr == "SecurityGroupEgressArgs":
+                    egress_ports.add(kw.value.value)
+                else:
+                    ingress_ports.add(kw.value.value)
+
+    assert 8081 in egress_ports, "main_alb_sg egress missing port 8081 for config-watch-gateway"
+    assert 8081 in ingress_ports, "app_sg ingress missing port 8081 for config-watch-gateway"
+
+
+def test_platform_provisions_isolated_deletion_protected_db_encryption_key() -> None:
+    """Platform provisions an isolated, deletion-protected secret key outside app-defaults."""
+    platform_src = (AWS_ROOT / "platform" / "__main__.py").read_text(encoding="utf-8")
+    assert "random.RandomBytes(" in platform_src
+    assert 'additional_secret_outputs=["hex", "base64"]' in platform_src
+    assert "retain_on_delete=True" in platform_src
+    assert "pulumi.Output.secret(db_encryption_key.hex)" in platform_src
+    assert 'pulumi.export("db_encryption_key_secret_arn", db_encryption_key_secret.arn)' in (
+        platform_src
+    )
+    assert '"db_encryption_key"' not in platform_src
+
+
 def test_compute_stacks_inject_db_encryption_key_and_isolate_watch_role() -> None:
     """Authorized compute stacks inject dedicated db_encryption_key_secret_arn while watch stays isolated."""
     compute_stacks = [
