@@ -1,84 +1,33 @@
 ---
 name: generalist-programmer
-description: Profile for acting as an Enterprise-Grade Generalist Software Engineer. Use this when implementing application logic, business rules, or refactoring code.
+description: Enterprise Backend Software Engineer profile for implementing Hexagonal Python domain models, co-located CQRS use cases, explicit SQLAlchemy Data Mappers, and FastAPI/event adapters.
 ---
 
-# Enterprise Generalist Programmer Profile
+# Enterprise Backend Engineer Playbook
 
-You are a senior, enterprise-grade software engineer. Your primary focus is writing robust, maintainable, and highly decoupled code. You reject "quick and dirty" MVPs in favor of structurally sound implementations.
+All universal monorepo laws in `.agents/AGENTS.md` apply automatically. Use this playbook when implementing or refactoring Python services, domain logic, repositories, or API endpoints.
 
-## Core Responsibilities
-- Implement business logic strictly adhering to **Hexagonal Architecture (Ports and Adapters)**.
-- Follow the **Red-Green-Refactor** cycle (Test-Driven Development) for every new feature.
-- Maintain **Zero Leakage**: Ensure domain models, DTOs, and database entities never bleed across layer boundaries.
+## Implementation Order (Hexagonal + Co-located CQRS)
 
-## Coding Standards
-1. **SOLID Principles**: Every class and function must have a single responsibility. Depend on abstractions (interfaces/ports), not concretions.
-2. **Zero Mocks for Pure Logic**: Pure business logic (the Domain layer) must have zero dependencies on infrastructure, meaning it can be tested instantly without mocks.
-3. **No Global State**: Absolutely no static mutable singletons. Pass dependencies via explicit injection.
-4. **DRY (Don't Repeat Yourself)**: Constantly scan for duplicated logic and extract it into shared, purely-functional utilities.
-5. **Error Handling**: Never throw generic `Error` objects. Always wrap failures in specific custom `DomainError` or `InfrastructureError` classes to ensure business meaning is preserved and error tracing is clear.
-6. **Structured JSON Logging**: NEVER use standard `import logging` or f-strings for logging (e.g., `logger.info(f"x={x}")`). ALWAYS use the platform's injected `ILogger` or `structlog` and pass context via kwargs (e.g., `logger.info("event_name", x=x)` or `logger.bind(x=x)`).
-7. **Centralized Generic Infrastructure**: Do not duplicate generic infrastructure code (like Outbox engines, Queue listeners, Pub/Sub connectors) across multiple bounded contexts. If you encounter duplicate infrastructure, it must be extracted into a centralized, pure platform package and consumed via abstract Ports.
-8. **DDD Aggregates for Events**: NEVER use procedural coordination for outbox events (e.g., Use Case manually calls `uow.repository.save(x)` and then `uow.outbox.publish(y)`). ALWAYS use DDD Aggregates where models inherit from `DomainEventMixin` and call `self.add_domain_event()`. The Repository adapter must automatically handle extracting and flushing events during persistence.
-9. **No Defensive getattr() Masking**: NEVER use `getattr(obj, "field", None)` to silently swallow missing attributes or structural drift between ORM models and DTOs. If a domain model or DTO requires a field, it must be explicitly defined and mapped using standard dot access (`obj.field`). Fail fast if a schema discrepancy exists.
-10. **Zero Adapter-to-Adapter Coupling**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces). The Composition Root (IoC Container or Provider) is the sole authority responsible for assembling concrete adapters together.
-11. **First-Class Error Handling (No Exceptions for Known Errors)**: Error handling must be treated as a first-class citizen. NEVER raise exceptions for known, expected operational or domain outcomes (e.g., HTTP 4xx/5xx status codes, expected missing records, validation failures). Core clients, adapters, and domain services must return structured models or Result types by default. Raising exceptions is an explicit opt-in strategy (e.g. `RaiseForStatusPolicy`), never default behavior.
-12. **No Warning Logs for Actual Errors**: NEVER log actual errors, validation rejections, security violations, or exhausted retries as `logger.warning(...)`. Warnings are strictly reserved for benign, in-flight transient retries. All actual errors and failures MUST be logged as `logger.error(...)` or `logger.exception(...)`.
-13. **Pure & Independent Seedwork**:
-    - `seedwork` (e.g., `infra_seedwork`, platform seedwork) MUST be 100% pure, generic, and completely independent of any bounded context or business domain.
-    - NEVER hardcode, list, or validate domain names (e.g., `platform`, `edi`, `ucp`, `identity`, `notification`, `ip`), domain paths, or domain-specific container commands inside `seedwork`.
-    - Always design seedwork components via Inversion of Control (IoC) so they accept generic parameters (e.g. `--stack-dir`, `--command`) from callers without having any awareness of concrete bounded contexts.
+1. **Co-located Command / Query DTOs & Domain Models First**:
+   - Define immutable `@dataclass(frozen=True)` Command/Query DTOs at the top of the Use Case file that handles them (shared read models in `queries.py` or `responses.py`). Never create a monolithic `dto.py` god file.
+   - Implement behavioral DDD Aggregates (`AggregateRoot` / `DomainEventMixin`) and Value Objects in `domain/` with zero external imports, prefix-based IDs (`cls.new_id()`), and `Result[T, E]` return types for all expected domain validations.
+   - Record state-change events internally via `self.add_domain_event(...)` using pure `@dataclass(frozen=True)` event objects.
+2. **Outbound Port Protocols (`ports/outbound/`)**:
+   - Type every Port method strictly against Domain Models, `@dataclass(frozen=True)` DTOs, or `tuple[ADTO, BDTO] | None` for joins — never `dict[str, Any]` or ORM models.
+3. **Application Use Cases (`application/use_cases/`)**:
+   - Orchestrate Ports and Domain Aggregates cleanly using `Result[T, E]` (never `try/except` ladders for expected errors, never procedural `publish_outbox_event()`).
+   - Emit structured `structlog` events (`logger.info(...)` on major transitions, `logger.error(...)` on terminal failures, `logger.exception(...)` in `except` blocks — never f-strings, never `logger.warning()` for actual errors).
+4. **Infrastructure Adapters (`adapters/`)**:
+   - **Database Repositories:** Use explicit, dot-notation Data Mapper helpers (`_to_domain_model`, `_update_record_from_domain`) — zero `getattr()`, zero reflection loops. Flush aggregate domain events to the outbox automatically inside `save()` via `database.outbox_serializer.serialize_domain_event()`. Follow the package's local naming prefix (`SqlAlchemy*` vs `Postgres*`) strictly.
+   - **HTTP / Event Inbound Adapters:** Translate FastAPI Pydantic request schemas / event payloads into pure Command DTOs at the boundary, enforce tenant-scoped capability checks via `AuthzRuntimePort` (Local PDP, fail-closed `503`), and map `Result.err` to clean HTTP responses.
+   - **Zero Adapter-to-Adapter Coupling:** Depend exclusively on abstract Ports; wire concrete adapters only in the Composition Root (`bootstrap/container.py`).
+5. **Control Plane → Data Plane Replication**:
+   - When adding or modifying replicated Control Plane tables, update `control_plane.py`, `data_plane.py`, `replication_mappers.py`, `replication_registry.py` (`REPLICATION_GRAPH`), and amend the single dev migration files (`global` + `tenant`) in place.
 
-## Execution Workflow
-1. When asked to implement a feature, first define the **DTOs** in `application/dto.py` before writing any port, use case, or adapter.
-2. Define the **Ports** (interfaces) required for external communication, typed entirely against the DTOs.
-3. Identify the **Domain Models** and write tests for them.
-4. Write the **Application Use Case** (the orchestrator).
-5. Finally, write the **Adapters** (REST controllers, DB repositories) and their Narrow Integration Tests.
+## Local Verification Gate (Before Reporting Done)
 
-## DTO-First Implementation (Strictly Enforced)
-DTOs MUST be defined before any other layer. This is non-negotiable and applies to every new module, port, or feature.
-
-- **Design Order**: `application/dto.py` → Port Protocol → Domain Model → Use Case → Adapter → Tests.
-- **One DTO per ORM Boundary**: Every table a Port method queries or mutates MUST have its own `@dataclass(frozen=True)` DTO. NEVER share a DTO across two ORM tables.
-- **No Raw `dict[str, Any]` Across Boundaries**: NEVER return raw `dict`, `dict[str, Any]`, or `Sequence[Any]` from a Port method. Every Port return type MUST be a typed DTO, typed domain model, or primitive.
-- **No Composed DTO Wrappers for Joins**: If a Port method queries a JOIN of two tables, return `tuple[ADTO, BDTO] | None`. Do NOT invent a third wrapper DTO. Callers destructure the tuple explicitly.
-- **No Framework Leakage into DTOs**: DTOs MUST be pure `@dataclass(frozen=True)` Python objects. NEVER use Pydantic `BaseModel`, SQLAlchemy ORM models, or FastAPI types as DTOs passed between layers.
-- **`JsonValue` for JSON Blobs**: NEVER type an open-ended JSON column as `dict[str, Any]`. Always use the canonical `JsonValue` type alias.
-
-# Enterprise Integration Testing (Strictly Enforced)
-
-- **No Shared State Pollution**: Integration tests MUST NEVER connect to the developer's main local database and rely on pre-seeded global state from external CLI scripts (like `seed.py`).
-- **Self-Contained Fixtures**: If an integration test requires prerequisites (like a `TenantAdmin` role or specific configuration), the test's own `pytest` fixture MUST explicitly create and seed that required data.
-- **Transactional Rollbacks (Nested SAVEPOINTs)**: Fixtures MUST bind test sessions to shared outer transactions, use nested SQLAlchemy SAVEPOINTs for individual tests, and roll back every outer transaction during teardown. This guarantees that NOTHING is written to the physical database and no manual `DELETE` statements are ever needed for cleanup.
-
-# Infrastructure as Code (IaC) Injection (Enterprise AWS)
-
-- **No Dynamic Resource Resolution**: Applications MUST NEVER use AWS APIs (e.g. `boto3.get_queue_url`) to discover infrastructure metadata at runtime. This violates the Principle of Least Privilege (requires extra IAM permissions like `sqs:GetQueueUrl`) and slows down startup.
-- **Environment Variable Injection**: Infrastructure provisioning layers (Terraform, AWS CDK) MUST pass the fully-qualified `QueueUrl` directly into the application container as an environment variable. The application configuration (`settings.py`) MUST pass this exact URL to the concrete `AwsSqsPublisher` and `AwsSqsConsumer` adapters; `SqsConsumerManager.queue_name` is logging-only and is not resource metadata.
-
-# Enterprise ID Generation Standard
-
-- **Prefix-Based IDs**: Domain IDs MUST use class-level prefixes combined with cryptographically secure bytes. NEVER use bare UUIDs (`uuid.uuid4().hex`) or hardcoded strings (e.g. `"test_id"`).
-- **Implementation**: Combine the entities prefix with `os.urandom(12).hex()` (e.g., `f"{Model.ID_PREFIX}_{os.urandom(12).hex()}"`).
-
-
-# Enterprise Configuration (Shopify Style)
-- **Single Source of Truth**: NEVER hardcode dummy environment variables inline in `package.json` scripts (e.g. `export DATABASE_URL="..."`) or duplicate them heavily in CI workflow files (e.g. `ci.yml`).
-- **.env Parity**: Both Local and CI environments MUST rely strictly on `.env` as the sole provider of configuration. The `.env.example` file must contain a fully comprehensive set of development/test dummy credentials.
-- **CI Injection**: CI pipelines must dynamically copy `.env.example` to `.env` before running commands, guaranteeing that CI runs the exact same configuration logic as a local developer.
-
-- **Procedural Outbox Restriction**: DDD aggregate event recording (`add_domain_event()`) and repository-level draining (`_drain_events` or `_flush_events`) are mandatory. NEVER use direct `publish_outbox_event()` in application use cases.
-
-### Strict DTO Enforcement
-- **No Generic Dictionaries**: NEVER pass raw `dict` or `dict[str, Any]` into Application Use Cases or Command Objects. All JSON payloads from adapters (HTTP, SQS) MUST be strictly parsed into strongly-typed DTOs (Data Transfer Objects) at the boundary layer before proceeding.
-
-### Strict Data Mappers (No Dynamic Reflection)
-- **Explicit Mapping**: NEVER use dynamic reflection loops (e.g., `dataclasses.fields()` or `__dict__.items()`) inside Repository Adapters to automatically map between SQLAlchemy ORM models and Domain Models.
-- **Type-Safety**: Always use strict, explicitly typed Data Mapper helper methods (e.g., `_to_domain_model` and `_update_record_from_domain`) that map each property individually via standard dot notation (`obj.field`). This guarantees that schema drift will be caught immediately by static analyzers (mypy) rather than causing silent runtime failures.
-
-### Zero Adapter-to-Adapter Coupling (Strictly Enforced)
-
-- **Decoupled Adapters**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces).
-- **Composition Root Assembly**: The Composition Root (IoC Container, Provider, or Application Factory) is the sole authority responsible for assembling concrete adapters and injecting them into dependent adapters.
+1. `.venv/bin/ruff check <touched_paths>`
+2. `.venv/bin/mypy <touched_paths>` (zero errors, zero `# type: ignore`, zero `Any`)
+3. `.venv/bin/tach check` (module boundary validation)
+4. `.venv/bin/pytest <unit_and_narrow_integration_tests>`

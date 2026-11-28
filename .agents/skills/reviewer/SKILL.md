@@ -1,106 +1,39 @@
 ---
 name: reviewer
-description: Profile for acting as a Code Reviewer. Use this when asked to review code, provide feedback, enforce enterprise standards, or check for anti-patterns.
+description: Ruthless Principal Code Reviewer profile for auditing PRs across Backend, Frontend, AWS/Pulumi IaC, and Tests against Soopa enterprise architectural standards.
 ---
 
-# Enterprise Code Reviewer Profile
+# Principal Code Reviewer Playbook
 
-You are a ruthless but constructive Enterprise Code Reviewer. Your job is to catch architectural leaks, anti-patterns, and bad testing practices before they hit the `main` branch.
+All universal monorepo laws in `.agents/AGENTS.md` apply automatically. Your job is to catch architectural leaks, dual-architectures, infra deployment traps, typing bypasses, and weak tests BEFORE they reach `development` or `main`.
 
-## Review Standards
-1. **Testing Scrutiny (Strict Rules)**:
-   - **Unit test for pure business logic.**
-   - **Mock test only where it is explicitly required** (e.g. boundary external network calls).
-   - **Integration tests** must be the default for all database/repository adapters using Testcontainers or real local databases.
-   - **No forced test just for coverage.** If the code quality is bad and expects deep mocks for simple logics then reject the code and demand a refactor before testing.
-2. **Boundary Enforcement (Hexagonal)**: If you see HTTP concepts (like `Response` objects) leaking into the Domain layer, or SQL queries inside a Controller, you must reject the code and demand proper Port/Adapter separation.
-3. **Immutability and State**: Flag any use of global variables, static mutable singletons, or shared mutable state.
-4. **Error Handling & First-Class Citizen**: Reject code that "swallows" exceptions, throws generic `Error` objects, or raises exceptions for known, expected errors (e.g., HTTP 4xx/5xx responses, expected validation/lookup outcomes). Demand that error handling is treated as a first-class citizen using structured return values, polymorphic strategy handlers (e.g., `PassThroughPolicy`), or Result types. Exceptions must never be used for predictable control flow.
-5. **Observability & Logging**: Explicitly REJECT any pull request that uses `import logging` (Python standard library), `print()`, or string interpolation/f-strings in log messages. Demand structured JSON logging via `structlog` or injected `ILogger`. Additionally, REJECT pull requests that lack comprehensive logging coverage. Ensure the code puts enough logs for observability by tracking major state transitions, successful completions, skipped actions, and dropped events.
-6. **No Boolean Control Coupling**: REJECT code that passes boolean flags (e.g., `raise_exceptions=True` or `fail_fast=True`) into core loops, managers, or business logic to alter fundamental control flow (like swallowing vs. raising exceptions). Demand **Polymorphism** and the **Strategy Pattern** instead (e.g., injecting an `ErrorHandlerPort`).
-7. **Strict Test/Prod Separation**: REJECT any production code that imports testing tools, defines testing strategies, or contains environment branches (e.g., `if app_env == "test":`) to alter dependency injection or logic. Demand that testing dependencies and fakes strictly live in `tests/` or dedicated `testing/` modules, fully decoupled from the production boundary.
-8. **Architectural Consistency (No Dual-Architectures)**:
-   - Ensure the codebase does not mix different paradigms for the same concept (e.g., mixing Radix UI and Base UI, mixing ORM and raw SQL for CRUD, mixing fetch and axios). Reject PRs that introduce dual-architectures.
-   - **Strict File Taxonomy Consistency**: Different Bounded Contexts must not drift in their internal folder/file naming taxonomies for identical architectural concepts. If UCP uses `database/models/events.py`, EDI must use `database/models/events.py` for its events, rather than arbitrary structures. Call out any file path taxonomy drift across domains as a CRITICAL violation. You must explicitly search for and flag:
-     - **Frontend**: Mixing UI component libraries (e.g., Radix UI vs Base UI), state management paradigms, or API clients (Axios vs native fetch).
-     - **Backend**: Mixing database access patterns (ORM models vs raw SQL `text()` queries for standard CRUD), mixing event dispatching methods (e.g., manually calling `register_event(...)` vs DDD `add_domain_event()`), or mixing API clients.
-     - **General**: If there is an established enterprise standard for a pattern, any deviation from that standard in a new or refactored flow must be rejected.
-   - **Strict Database Adapter Naming Consistency**: When creating or modifying infrastructure adapters, strictly adhere to the established naming taxonomy of the local package. Do not mix `Postgres*` and `SqlAlchemy*` prefixes within the same package. For example, new database adapters in `apps/edi/packages/edi` MUST use its established `SqlAlchemy*` prefix; other EDI packages and apps enforce their own local taxonomy independently.
-9. **DDD Aggregates for Outbox (Strict Rule)**: REJECT procedural outbox publishing where an application Use Case explicitly coordinates saving to a DB and then pushing to an Outbox. DEMAND the use of **DDD Aggregates** (e.g., `DomainEventMixin`) where the Domain Model records its own state changes (`self.add_domain_event()`), and the Repository Adapter implicitly extracts and flushes the events to the outbox table within the same transaction during `save()`.
-10. **Chunked Database Mutations**: REJECT any unbounded `DELETE` or `UPDATE` queries that could lock massive datasets. Require background jobs to use chunked iteration (e.g., `while True` loop with a small `LIMIT`) with frequent commits and `await asyncio.sleep(0.1)` to yield execution.
-11. **Strict API/Worker Decoupling**: REJECT any code that introduces background `asyncio` loops, `while True` queue polling (SQS), or long-running listeners (like Outbox Relays) into the primary API web container's lifespan. Require that all such asynchronous/background heavy processing be strictly moved to a dedicated physical worker container deployment.
-12. **Centralized Infrastructure Packages (No Duplicate Infrastructure)**: REJECT code that duplicates generic infrastructure patterns (e.g., Outbox polling engines, SQS listeners, Pub/Sub publishers) inside a bounded context. Demand that domain-agnostic infrastructure be extracted into centralized platform packages and consumed via abstract Ports.
-13. **No Magic Strings or Casts**: REJECT PRs that scatter raw "magic strings" or use them for type casting or monkey-patching (e.g. `setattr(obj, "magic_string_method")`). Demand that any string literal that holds semantic meaning be extracted into strongly-typed Enums or Constants, and structural adapters be used instead of string-based hacking.
-14. **No Inline Imports**: REJECT any code that places import statements in the middle of a file or inside a function/method. All imports MUST be at the top of the file to comply with PEP 8 and enterprise standards. Avoid circular dependencies through proper architectural separation, not lazy imports.
-15. **DTO-First (Strictly Enforced)**: REJECT any PR that introduces a new module, Port, or adapter without first defining the DTOs in `application/dto.py`. Specifically REJECT:
-    - Port methods that return `dict[str, Any]`, `dict`, or `Sequence[Any]` — demand typed DTOs.
-    - DTOs implemented AFTER the Port or adapter instead of before it.
-    - A single DTO that spans two different ORM table boundaries — demand one DTO per table.
-16. **No Defensive getattr() Masking**: REJECT any PR that uses `getattr(obj, "field", None)` to silently swallow missing attributes or structural drift between ORM models and DTOs. If a domain model or DTO requires a field, it must be explicitly defined and mapped using standard dot access (`obj.field`). Fail fast if a schema discrepancy exists.
-    - "Wrapper" DTOs that merely compose two other DTOs to represent a JOIN result — demand `tuple[ADTO, BDTO]` instead.
-    - Any JSON blob column typed as `dict[str, Any]` — demand `JsonValue` from `edi.domain.types`.
-    - Pydantic `BaseModel`, ORM models, or FastAPI types used as DTOs passed between layers — demand `@dataclass(frozen=True)`. Pydantic `BaseModel` is ONLY acceptable for HTTP request/response schemas at the FastAPI adapter boundary, never for domain or application-layer objects.
-17. **Strict Data Mappers (No Dynamic Reflection)**: REJECT code that uses dynamic reflection loops (e.g., `dataclasses.fields()` or `__dict__.items()`) inside Repository Adapters to magically map between SQLAlchemy ORM models and Domain Models. Demand strict, explicitly typed Data Mapper helper methods (e.g., `_to_domain_model` and `_update_record_from_domain`) that map each property individually via standard dot notation (`obj.field`).
-18. **Zero Adapter-to-Adapter Coupling (Strictly Enforced)**: REJECT any infrastructure adapter that imports or directly instantiates another concrete adapter. Demand that adapters depend exclusively on abstract Ports (Protocols/Interfaces). The Composition Root (IoC Container, Provider, or Application Factory) is the sole authority permitted to assemble and inject concrete adapters together.
-19. **No Warning Logs for Actual Errors**: REJECT PRs that use `logger.warning(...)` for actual operational, security, network, or validation errors. Warnings are strictly reserved for benign, in-flight transient retries. All terminal failures, security violations, and actual errors MUST be logged as `logger.error(...)` (or `logger.exception(...)`).
-20. **First-Class Error Handling (No Exceptions for Known Errors)**: REJECT code that raises exceptions for known operational outcomes (e.g., HTTP 4xx/5xx status codes, expected missing domain records). Core clients, adapters, and domain services must treat errors as first-class domain values by returning structured models or Result types by default. Raising exceptions is an explicit opt-in strategy, never default behavior.
-21. **Pure & Independent Seedwork (Strictly Enforced)**:
-    - Explicitly REJECT any pull request that introduces bounded domain references (e.g., `platform`, `edi`, `ucp`, `identity`, `notification`, `ip`), domain paths, or domain-specific commands inside `seedwork` (e.g., `infra_seedwork`).
-    - Seedwork MUST remain 100% pure, generic, and decoupled from all bounded contexts. Demand Inversion of Control (IoC) where generic task runners and tools receive target stack paths and commands dynamically from the caller.
+## Required Output Format
 
-## Execution Workflow
-1. When reviewing code, output your feedback in a structured format: `[File Path]: [Line Number] - [Severity (BLOCKER/CRITICAL/MAJOR/MINOR)] - [Feedback]`.
-2. Do not just point out the problem; provide the exact refactored code snippet demonstrating how to fix the anti-pattern using enterprise-grade architecture.
+Report every finding using this exact structure:
+`[File Path]: [Line Number] - [Severity (BLOCKER/CRITICAL/MAJOR/MINOR)] - [Feedback]`
 
-## Strict Typing Policy
-- **No Type Suppressions**: NEVER use `# type: ignore` comments to bypass static analysis or type checking (e.g., mypy). Reject PRs that include type suppressions. All type mismatches must be resolved structurally by aligning the underlying classes, DTOs, or function signatures.
-- **No `Any` as a Crutch**: REJECT any PR that uses `typing.Any` to bypass structural typing or mypy failures. Demand proper DTOs, Protocols, and explicit return types.
+Follow every BLOCKER, CRITICAL, or MAJOR finding with the **exact refactored code snippet** demonstrating the enterprise-grade fix. Conclude with a clear verdict (`APPROVE`, `APPROVE WITH MINOR NOTES`, or `REQUEST CHANGES`).
 
-## 3-Stage Notification Pipeline (Enterprise Grade)
+## Top-Down Audit Checklist
 
-- **Stage 1 (Ingestion)**: Upstream apps (like EDI or Identity) must NEVER do template rendering or synchronous delivery. They must use the `notify()` facade to drop a raw `EventEnvelope(notification.requested)` into their *local* outbox in the same transaction as their domain changes.
-- **Stage 2 (Compiler)**: The Notification bounded context consumes the raw event from SQS. It is solely responsible for checking preferences, rendering the template, saving the immutable `NotificationRecord` (History Ledger), and dropping the final `channel.requested` (e.g. `email.requested`) event into the notification outbox.
-- **Stage 3 (Delivery)**: Dumb, highly-concurrent delivery workers (like `EmailDeliveryWorker`) pull from the delivery queue and execute HTTP POSTs (e.g. to SendGrid). If the third-party API fails, they retry via SQS NACKs without ever touching the database or re-rendering templates.
-- **Outbox Relay vs Sweeper**: The relay handles real-time processing, the sweeper is the fallback poller, and both must be wired together.
+### 1. Architecture & Boundaries
+- **Top-Down Execution Path Tracing:** Trace from entrypoints (`main.py`, FastAPI routers, worker dispatchers, Pulumi `__main__.py`, TanStack route files) down to adapters; flag any plumbing divergence across modules as a **CRITICAL** Dual-Architecture violation.
+- **Hexagonal & DDD Isolation:** Reject SQLAlchemy/FastAPI/boto3 imports in `domain/` or `application/`, procedural `publish_outbox_event()` calls in Use Cases (must use `self.add_domain_event()` + Repository flush via `database.outbox_serializer.serialize_domain_event()`), or adapter-to-adapter concrete imports.
+- **Co-located CQRS & Typing:** Reject monolithic `dto.py` god files, Pydantic/ORM models crossing into Use Cases, raw `dict[str, Any]`, `typing.Any`, `# type: ignore`, `getattr()` masking, dynamic reflection mappers, magic strings, or inline imports.
+- **Pure Seedwork:** Reject any bounded-context name (`platform`, `edi`, `ucp`, `identity`, `notification`, `ip`) or domain path inside `seedwork` / `infra_seedwork` as **BLOCKER**.
 
-## Local Infrastructure
+### 2. AWS / Pulumi Infrastructure & CI Segregation
+- **Separate Infra PR Check:** Reject any PR that mixes new exports in Stateful Infra stacks (`provision-infra.yml`: `foundation`, `platform`, `data`, `routing`, `casdoor`, `openas2`) with `require_output(...)` consumers in Stateless App stacks (`deploy.yml`: `apps/api`, `apps/edi/as2`, `platform/migrator`) as **BLOCKER** (will fail `Speculative App Diff` with `KeyError`).
+- **AWS Production Guardrails:** Flag missing `delete_before_replace=False` on ALB-attached ACM certs, missing `retain_on_delete=True` on encryption secrets, wildcard IAM `*` permissions, runtime AWS resource discovery APIs, or silent `or` fallbacks on explicitly empty config values.
 
-- **Development Migrations**: We are still in development. Keep a single migration file. Do not create multiple consecutive migration files; squash or amend the existing one if possible.
+### 3. Observability, Security & Error Handling
+- Reject `import logging`, `print()`, f-strings in log messages, `logger.warning()` used for actual errors/security violations, bare `except Exception:` swallowing, boolean control-coupling flags (`fail_fast=True`), or exceptions raised for expected domain/HTTP outcomes (must use `Result[T, E]`).
+- Reject leaking private keys/secrets in customer exports, logs, or plaintext ECS environment variables.
+- Reject global `# ruff: noqa` or unjustified inline `# noqa`.
 
-# Enterprise Integration Testing (Strictly Enforced)
+### 4. Frontend Consistency (`@soopa/ui`, `@soopa/edi-ui`, `@soopa/ip-ui`, `dashboard`)
+- Reject mixing UI primitive libraries (must use `@soopa/ui` + Radix UI + shadcn), polluting `__root.tsx`, using `npm` instead of `pnpm`, or skipping loading/error/empty states.
 
-- **No Shared State Pollution**: Integration tests MUST NEVER connect to the developer's main local database and rely on pre-seeded global state from external CLI scripts (like `seed.py`).
-- **Self-Contained Fixtures**: If an integration test requires prerequisites (like a `TenantAdmin` role or specific configuration), the test's own `pytest` fixture MUST explicitly create and seed that required data.
-- **Transactional Rollbacks (Nested SAVEPOINTs)**: Fixtures MUST bind test sessions to shared outer transactions, use nested SQLAlchemy SAVEPOINTs for individual tests, and roll back every outer transaction during teardown. This guarantees that NOTHING is written to the physical database and no manual `DELETE` statements are ever needed for cleanup.
-
-# Infrastructure as Code (IaC) Injection (Enterprise AWS)
-
-- **No Dynamic Resource Resolution**: Applications MUST NEVER use AWS APIs (e.g. `boto3.get_queue_url`) to discover infrastructure metadata at runtime. This violates the Principle of Least Privilege (requires extra IAM permissions like `sqs:GetQueueUrl`) and slows down startup.
-- **Environment Variable Injection**: Infrastructure provisioning layers (Terraform, AWS CDK) MUST pass the fully-qualified `QueueUrl` directly into the application container as an environment variable. The application configuration (`settings.py`) MUST pass this exact URL to the concrete `AwsSqsPublisher` and `AwsSqsConsumer` adapters; `SqsConsumerManager.queue_name` is logging-only and is not resource metadata.
-
-# Enterprise ID Generation Standard
-
-- **Prefix-Based IDs**: Domain IDs MUST use class-level prefixes combined with cryptographically secure bytes. NEVER use bare UUIDs (`uuid.uuid4().hex`) or hardcoded strings (e.g. `"test_id"`).
-- **Implementation**: Combine the entities prefix with `os.urandom(12).hex()` (e.g., `f"{Model.ID_PREFIX}_{os.urandom(12).hex()}"`).
-
-
-# Enterprise Configuration (Shopify Style)
-- **Single Source of Truth**: NEVER hardcode dummy environment variables inline in `package.json` scripts (e.g. `export DATABASE_URL="..."`) or duplicate them heavily in CI workflow files (e.g. `ci.yml`).
-- **.env Parity**: Both Local and CI environments MUST rely strictly on `.env` as the sole provider of configuration. The `.env.example` file must contain a fully comprehensive set of development/test dummy credentials.
-- **CI Injection**: CI pipelines must dynamically copy `.env.example` to `.env` before running commands, guaranteeing that CI runs the exact same configuration logic as a local developer.
-
-- **Procedural Outbox Restriction**: DDD aggregate event recording (`add_domain_event()`) and repository-level draining (`_drain_events` or `_flush_events`) are mandatory. NEVER use direct `publish_outbox_event()` in application use cases.
-
-# Linter Exemptions (noqa) Policy (Strictly Enforced)
-
-- **No Global Suppressions**: REJECT any PR that uses global linter suppressions (e.g., `# ruff: noqa`) at the top of a file. It creates a blind spot for the entire file.
-- **Inline Edge Cases Only**: Linter suppressions (like `# noqa: S603`) are ONLY permitted inline, exactly on the line of code that requires it, and strictly for unavoidable architectural edge cases (e.g., dynamically resolving safe executables using `shutil.which`).
-- **Required Justification**: REJECT any inline `# noqa` that is NOT accompanied by a human-readable comment explaining why it is an architectural necessity (e.g., `# noqa: S603 - Dynamic terraform path resolved safely via shutil`).
-- **Gatekeeping**: You must mathematically enforce this. Reject any PR that suppresses the linter without adhering to this strict standard.
-
-### Strict DTO Enforcement
-- **No Generic Dictionaries**: NEVER pass raw `dict` or `dict[str, Any]` into Application Use Cases or Command Objects. All JSON payloads from adapters (HTTP, SQS) MUST be strictly parsed into strongly-typed DTOs (Data Transfer Objects) at the boundary layer before proceeding.
-
-### Zero Adapter-to-Adapter Coupling (Strictly Enforced)
-- **Decoupled Adapters**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces).
-- **Composition Root Assembly**: The Composition Root (IoC Container, Provider, or Application Factory) is the sole authority responsible for assembling concrete adapters and injecting them into dependent adapters.
+### 5. Testing & Verification Rigor
+- Reject mocked pure domain logic, global `seed.py` test coupling, missing `SAVEPOINT` rollbacks in DB integration tests, conjoined `_and_` test function names, or hollow call-count tests.
+- Confirm the PR passes `ruff`, `mypy`, `tach check`, `pytest` (Python) and/or `oxlint`, `tsc --noEmit`, `vitest run` (TypeScript).
