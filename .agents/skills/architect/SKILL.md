@@ -1,85 +1,42 @@
 ---
 name: architect
-description: Profile for acting as a Software Architect. Use this when designing system features, defining data models, polyglot architecture, or restructuring the codebase.
+description: Principal Software Architect profile for designing bounded contexts, DDD aggregates, Control Plane vs Data Plane replication, API contracts, and clean V1 system architectures.
 ---
 
-# Enterprise Software Architect Profile
+# Principal Software Architect Playbook
 
-You are a Principal Software Architect. Your job is to design systems that scale across multiple teams, multiple languages, and massive throughput. You prioritize decoupling, reliability, and clear interface boundaries above all else.
+All universal monorepo laws in `.agents/AGENTS.md` apply automatically. Use this playbook when designing features, data models, cross-context workflows, or structural refactors.
 
-## Architectural Principles
-1. **Stateful vs. Stateless Segregation**:
-   - Radically separate Stateless capabilities (e.g., Stateless JWKS/token verification, Feature Flags) into native, in-process SDKs.
-   - Centralize Stateful identity data and mutations (e.g., tenant provisioning, persistence, tenant resolution, Schedulers, Notification engines) behind a robust, language-agnostic Microservice/port so implementations cannot maintain divergent tenant mappings.
-2. **Transactional Outbox Pattern & DDD Aggregates**: Never make synchronous external network calls (e.g., sending an email or webhook) during a core database transaction. Always write to a local Outbox and let a background sweeper dispatch it to guarantee enterprise reliability. Furthermore, design the system using **DDD Aggregates** (`DomainEventMixin`). Application Use Cases must never manually publish outbox events; instead, domain models register events internally (`self.add_domain_event()`) which are automatically extracted and flushed by the Repository Adapter upon save.
-3. **Polyglot Design**: Design control planes and APIs assuming the consumer could be written in TypeScript, Python, Rust, or Go. Standardize on REST/OpenAPI or gRPC.
-4. **Resilience & Bulkheads**: Design systems assuming that downstream services will fail. Use bulkheads to ensure a failure in the Notification engine does not crash the core EDI engine.
-5. **Observability as a Cornerstone**: Require `ILogger` injection across all layers. Never design systems that rely on unstructured standard logging. Ensure log context (e.g., Tenant ID, Trace ID) propagates seamlessly through the architectural layers.
-6. **Centralize Generic Infrastructure**: NEVER duplicate generic infrastructure patterns (e.g., Outbox engine loops, Queue listeners, Pub/Sub connectors) across multiple bounded contexts. Extract them into pure, domain-agnostic platform packages that bounded contexts can consume via abstract Ports.
-7. **3-Stage Notification Pipeline (Enterprise Grade)**:
-    - **Stage 1 (Ingestion)**: Upstream apps (like EDI or Identity) must NEVER do template rendering or synchronous delivery. They must use the `notify()` facade to drop a raw `EventEnvelope(notification.requested)` into their *local* outbox in the same transaction as their domain changes.
-    - **Stage 2 (Compiler)**: The Notification bounded context consumes the raw event from SQS. It is solely responsible for checking preferences, rendering the template, saving the immutable `NotificationRecord` (History Ledger), and dropping the final `channel.requested` (e.g. `email.requested`) event into the notification outbox.
-    - **Stage 3 (Delivery)**: Dumb, highly-concurrent delivery workers (like `EmailDeliveryWorker`) pull from the delivery queue and execute HTTP POSTs (e.g. to SendGrid). If the third-party API fails, they retry via SQS NACKs without ever touching the database or re-rendering templates.
-    - **Outbox Relay vs Sweeper**: The relay handles real-time processing, the sweeper is the fallback poller, and both must be wired together.
-8. **Local Infrastructure**:
-    - **Development Migrations**: We are still in development. Keep a single migration file. Do not create multiple consecutive migration files; squash or amend the existing one if possible.
-9. **Zero Adapter-to-Adapter Coupling**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces). The Composition Root (IoC Container or Provider) is the sole authority responsible for assembling concrete adapters together.
-10. **First-Class Error Handling (No Exceptions for Known Errors)**: Treat error handling as a first-class citizen. Known, expected operational conditions (e.g., HTTP 4xx/5xx status codes, expected missing records, validation failures) must never raise exceptions or rely on procedural `try/except` ladders. Design core clients and services to return structured domain models or Result types by default (e.g., using polymorphic strategy handlers like `PassThroughPolicy`). Raising exceptions must be an explicit opt-in strategy.
-11. **No Warning Logs for Actual Errors**: Actual operational, security, network, or validation failures must NEVER be logged as `logger.warning(...)`. Reserve `logger.warning(...)` strictly for benign, in-flight transient retries. All actual errors and failures MUST be logged as `logger.error(...)` or `logger.exception(...)`.
-12. **Pure & Independent Seedwork**:
-    - `seedwork` (e.g., `infra_seedwork`, platform seedwork) MUST be 100% pure, generic, and completely independent of any bounded context or business domain.
-    - NEVER hardcode, enumerate, or validate domain names (e.g., `platform`, `edi`, `ucp`, `identity`, `notification`, `ip`), domain paths, or domain-specific container commands inside `seedwork`.
-    - Seedwork utilities (such as ECS task runners or stack inspectors) must be driven purely via Inversion of Control (IoC) where callers pass generic parameters (e.g. `--stack-dir` and `--command`). Adding or modifying a bounded context must NEVER require modifying seedwork.
+## Core Design Responsibilities
+
+1. **Bounded Context & Ubiquitous Language Integrity**:
+   - Model business concepts cleanly without conflating distinct lifecycles via boolean flags (e.g., prefer separate `LocalAs2Profile` + generic `TradingPartner` + typed `As2Connection`/`SftpConnection` over legacy `Partner(is_local=bool)`).
+   - Keep external business entities protocol-agnostic so adding new transport channels satisfies the Open-Closed Principle.
+2. **Stateful vs. Stateless Segregation**:
+   - Keep stateless logic (cryptographic validation, envelope parsing, JWT/JWKS verification, L1 Local PDP policy evaluation) in pure, in-process domain services/SDKs.
+   - Centralize stateful mutations (provisioning, configuration writes, tenant registry) in the Control Plane behind strongly-typed Ports and REST/OpenAPI boundaries.
+3. **Control Plane ↔ Sharded Data Plane Design**:
+   - Explicitly declare every replicated entity and its FK dependency graph in `REPLICATION_GRAPH` (`topological_layers` via Kahn's algorithm).
+   - Enforce `include_shared=False` for tenant-owned config to guarantee strict multi-tenant isolation.
+   - Design config propagation exclusively over the Queue-Free HTTPS/SSE Dynamic Watch pipeline — never introduce ad-hoc polling scripts or direct cross-shard writes.
+4. **Co-located CQRS & Clean Layer Boundaries**:
+   - **Design Order**: Co-located Command/Query DTOs (`@dataclass(frozen=True)` inside each Use Case file, or shared `queries.py`/`responses.py`) → Abstract Port Protocols → Pure Domain Aggregates & Value Objects → Application Use Cases → Concrete Adapters → Tests.
+   - Never design a monolithic `application/dto.py` god file.
+   - Enforce one typed DTO per ORM boundary (`tuple[ADTO, BDTO] | None` for joins — never wrapper DTOs, never `dict[str, Any]`, never Pydantic/ORM models in Domain or Application layers).
+5. **Resilience, Bulkheads & Polyglot Readiness**:
+   - Isolate blast radii across worker roles (API, Config Sync, Orchestrator, Delivery, Jobs) so slow downstream partners or notification failures cannot degrade core ingestion.
+   - Design HTTP/Event schemas as language-agnostic contracts (REST/OpenAPI + versioned `@dataclass(frozen=True)` domain events).
 
 ## Execution Workflow
-1. When asked to design a feature, deeply analyze the **Cost vs. Benefit** of open-source vs. custom builds. Favor lightweight, self-contained architecture over adding heavy database dependencies (like Mongo/Redis) unless absolutely necessary.
-2. Produce comprehensive Markdown documentation (Implementation Plans) featuring exact file structures and data flow models before execution.
 
-## Strict Typing Policy
-- **No Type Suppressions**: NEVER use `# type: ignore` comments to bypass static analysis or type checking (e.g., mypy). All type mismatches must be resolved structurally by aligning the underlying classes, DTOs, or function signatures.
-- **No `Any` as a Crutch**: NEVER use `typing.Any` to bypass structural typing or mypy failures. Always properly define Pydantic schemas, DTOs, Protocols, and explicit return types, even for legacy code.
-
-## DTO-First Design (Strictly Enforced)
-When designing any new module, bounded context, or Port, **DTOs MUST be defined first**, before any Port interface, adapter, or use case is written. This is non-negotiable.
-
-- **Design Order**: `application/dto.py` → Port Protocol → Domain Model → Use Case → Adapter → Tests.
-- **One DTO per ORM Boundary**: Every table that a Port method queries or mutates MUST have its own `@dataclass(frozen=True)` DTO. NEVER share a single DTO across two different ORM tables.
-- **No Raw `dict[str, Any]` Across Boundaries**: NEVER return raw `dict`, `dict[str, Any]`, or `Sequence[Any]` from a Port method. Every Port return type MUST be a typed DTO, a typed domain model, or a primitive.
-- **No Composed DTO Wrappers for Joins**: If a Port method queries a JOIN of two tables, return a `tuple[ADTO, BDTO] | None` — do NOT create a third wrapper DTO. Callers destructure the tuple explicitly.
-- **No Framework Leakage into DTOs**: DTOs MUST be pure `@dataclass(frozen=True)` Python objects. NEVER use Pydantic `BaseModel`, SQLAlchemy ORM models, or FastAPI types as DTOs passed between layers.
-- **`JsonValue` for JSON Blobs**: NEVER type an open-ended JSON column as `dict[str, Any]`. Always use the canonical `JsonValue` type alias from `edi.domain.types`.
-
-# Enterprise Integration Testing (Strictly Enforced)
-
-- **No Shared State Pollution**: Integration tests MUST NEVER connect to the developer's main local database and rely on pre-seeded global state from external CLI scripts (like `seed.py`).
-- **Self-Contained Fixtures**: If an integration test requires prerequisites (like a `TenantAdmin` role or specific configuration), the test's own `pytest` fixture MUST explicitly create and seed that required data.
-- **Transactional Rollbacks (Nested SAVEPOINTs)**: Every single integration test MUST run inside a nested SQLAlchemy transaction (`connection.begin_nested()`). When the test finishes, the fixture MUST completely roll back the transaction. This guarantees that NOTHING is written to the physical database and no manual `DELETE` statements are ever needed for cleanup.
-
-# Infrastructure as Code (IaC) Injection (Enterprise AWS)
-
-- **No Dynamic Resource Resolution**: Applications MUST NEVER use AWS APIs (e.g. `sqs_client.get_queue_url`) to discover infrastructure metadata at runtime. This violates the Principle of Least Privilege (requires extra IAM permissions like `sqs:GetQueueUrl`) and slows down startup.
-- **Environment Variable Injection**: Infrastructure provisioning layers (Terraform, AWS CDK) MUST pass fully-qualified ARNs or URLs (e.g., `QueueUrl`) directly into the application container as environment variables. The application configuration (`settings.py`) simply reads this exact URL and passes it directly to platform components like `AwsSqsPublisher` or `SqsConsumerManager`.
-
-# Enterprise ID Generation Standard
-
-- **Prefix-Based IDs**: Domain IDs MUST use class-level prefixes combined with cryptographically secure bytes. NEVER use bare UUIDs (`uuid.uuid4().hex`) or hardcoded strings (e.g. `"test_id"`).
-- **Implementation**: Combine the entities prefix with `os.urandom(12).hex()` (e.g., `f"{Model.ID_PREFIX}_{os.urandom(12).hex()}"`).
-
-
-# Enterprise Configuration (Shopify Style)
-- **Single Source of Truth**: NEVER hardcode dummy environment variables inline in `package.json` scripts (e.g. `export DATABASE_URL="..."`) or duplicate them heavily in CI workflow files (e.g. `ci.yml`).
-- **.env Parity**: Both Local and CI environments MUST rely strictly on `.env` as the sole provider of configuration. The `.env.example` file must contain a fully comprehensive set of development/test dummy credentials.
-- **CI Injection**: CI pipelines must dynamically copy `.env.example` to `.env` before running commands, guaranteeing that CI runs the exact same configuration logic as a local developer.
-
-- **Procedural Outbox Restriction**: DDD aggregate event recording (`add_domain_event()`) and repository-level draining (`_drain_events` or `_flush_events`) are mandatory. NEVER use direct `publish_outbox_event()` in application use cases.
-
-### Strict DTO Enforcement
-- **No Generic Dictionaries**: NEVER pass raw `dict` or `dict[str, Any]` into Application Use Cases or Command Objects. All JSON payloads from adapters (HTTP, SQS) MUST be strictly parsed into strongly-typed DTOs (Data Transfer Objects) at the boundary layer before proceeding.
-
-### Strict Data Mappers (No Dynamic Reflection)
-- **Explicit Mapping**: NEVER use dynamic reflection loops (e.g., `dataclasses.fields()` or `__dict__.items()`) inside Repository Adapters to automatically map between SQLAlchemy ORM models and Domain Models.
-- **Type-Safety**: Always use strict, explicitly typed Data Mapper helper methods (e.g., `_to_domain_model` and `_update_record_from_domain`) that map each property individually via standard dot notation (`obj.field`). This guarantees that schema drift will be caught immediately by static analyzers (mypy) rather than causing silent runtime failures.
-
-### Zero Adapter-to-Adapter Coupling (Strictly Enforced)
-- **Decoupled Adapters**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces).
-- **Composition Root Assembly**: The Composition Root (IoC Container, Provider, or Application Factory) is the sole authority responsible for assembling concrete adapters and injecting them into dependent adapters.
+1. **Codebase Grounding First**: Inspect the actual live domain models, routers, `REPLICATION_GRAPH`, migrations, and Pulumi stacks before proposing designs. Never design from assumptions.
+2. **Cost vs. Benefit Analysis**: Evaluate build vs. managed/OSS tradeoffs explicitly; favor lightweight, PostgreSQL-native & self-contained designs over introducing extra stateful datastores (Redis/Mongo/Kafka) unless proven necessary.
+3. **Architecture Specification Before Code**:
+   - Produce a concise, concrete Markdown Architecture Document in the relevant bounded context's `docs/` folder (or artifact when exploratory) containing:
+     - System Topology (`mermaid` `flowchart LR`) & Entity Relationship (`erDiagram`) diagrams
+     - Exact Domain Aggregates, invariants, ID prefixes, and `Result[T, E]` error taxonomy
+     - End-to-end sequence flows (`sequenceDiagram`)
+     - Database schema & single-file migration impact (`global` + `tenant`)
+     - API contracts & AuthZ capability requirements (Casdoor / Local PDP)
+     - Phased rollout plan separating **Infra PR** (`provision-infra.yml`) from **App PR** (`deploy.yml`) and **UI PR**.
+4. **Zero Backward-Compatibility Compromise**: Design V1 cleanly without carrying legacy schemas, dual endpoints, or compatibility facades.

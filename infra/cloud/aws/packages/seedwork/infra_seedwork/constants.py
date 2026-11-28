@@ -49,6 +49,14 @@ class S3Constants:
     SSE_AWS_KMS: str = "aws:kms"
 
 
+@dataclass(frozen=True)
+class NetworkConstants:
+    ACM_VALIDATION_METHOD_DNS: str = "DNS"
+    ROUTE53_RECORD_TYPE_A: str = "A"
+    DEFAULT_DNS_VALIDATION_TTL: int = 60
+    MAX_FQDN_LENGTH: int = 253
+
+
 def validate_log_retention(days: int) -> int:
     """
     Enforces enterprise retention policy governance.

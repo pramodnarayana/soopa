@@ -15,6 +15,7 @@ import pulumi_random as random
 from alb import provision_load_balancer
 from ecr import provision_ecr
 from ecs_cluster import provision_cluster
+from infra_seedwork.network import provision_dns_validated_sni_certificate
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"
@@ -52,12 +53,32 @@ staging_domain = config.require("staging_domain")
 cert = aws.acm.get_certificate(domain=root_domain, most_recent=True, statuses=["ISSUED"])
 
 # ── Application Load Balancer ─────────────────────────────────────────────────
-main_alb, main_listener, obs_listener = provision_load_balancer(
+alb_resources = provision_load_balancer(
     prefix=_prefix,
     subnets=public_subnets,
     sg_id=main_alb_sg_id,
     tags=_TAGS,
     cert_arn=cert.arn,
+)
+main_alb = alb_resources.load_balancer
+main_listener = alb_resources.app_listener
+main_http_listener = alb_resources.http_listener
+obs_listener = alb_resources.observability_listener
+
+# ── Per-Tenant AS2 Wildcard SNI Certificate (*.as2.<domain>) ──────────────────
+# Standard *.staging.flowwolf.io wildcard TLS only matches one DNS label and does
+# not cover <tenant-slug>.as2.<domain>. Provision a dedicated DNS-validated ACM
+# certificate and attach it to the HTTPS ALB listener via SNI.
+hosted_zone = aws.route53.get_zone_output(name=staging_domain)
+as2_base_domain = f"as2.{staging_domain}"
+as2_wildcard_domain = f"*.{as2_base_domain}"
+
+as2_sni_cert = provision_dns_validated_sni_certificate(
+    name=f"{_prefix}as2-wildcard",
+    domain_name=as2_wildcard_domain,
+    hosted_zone_id=hosted_zone.id,
+    listener_arn=main_listener.arn,
+    tags=_TAGS,
 )
 
 # ── ECS Cluster ───────────────────────────────────────────────────────────────
@@ -220,10 +241,14 @@ pulumi.export("cloud_map_namespace_id", cloud_map_namespace.id)
 pulumi.export("cloud_map_namespace_arn", cloud_map_namespace.arn)
 pulumi.export("cloud_map_namespace_name", cloud_map_namespace.name)
 pulumi.export("main_alb_listener_arn", main_listener.arn)
+pulumi.export("main_alb_http_listener_arn", main_http_listener.arn)
 pulumi.export("main_alb_obs_listener_arn", obs_listener.arn)
 pulumi.export("main_alb_dns_name", main_alb.dns_name)
 pulumi.export("main_alb_zone_id", main_alb.zone_id)
 pulumi.export("staging_domain", staging_domain)
+pulumi.export("as2_base_domain", as2_base_domain)
+pulumi.export("as2_wildcard_domain", as2_wildcard_domain)
+pulumi.export("as2_wildcard_cert_arn", as2_sni_cert.certificate_arn)
 
 pulumi.export("pubsub_platform_events_topic_uri", platform_events_topic_uri)
 pulumi.export("sns_platform_events_topic_arn", platform_events_topic_uri)
