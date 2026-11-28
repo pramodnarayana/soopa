@@ -11,7 +11,11 @@ from database.olap.provider import OlapProvider
 from database.provider import DatabaseProvider
 from database.router import DatabaseRouterPort
 from fastapi import Depends, HTTPException, Path, Request, status
+from identity.adapters.inbound.http.require_authorization import http_status_for_authz_reason
+from identity.domain.constants import CANONICAL_TENANT_ID_PREFIXES, AuthzReasonCode
+from identity.domain.dtos import AuthzRequest, PrincipalContext
 from identity.domain.identity_context import IdentityContext
+from identity.ports.outbound.authorization_engine_port import AuthzRuntimePort
 from ip.engine.application.api_provider_port import IpApiProviderPort
 from ip.engine.application.use_cases.connections.connection_entity_use_cases import (
     AddConnectionEntityUseCase,
@@ -40,7 +44,7 @@ from ip.engine.application.use_cases.ingestion.sync_run_control_plane_use_cases 
     TriggerSyncRunUseCase,
 )
 from ip.engine.application.use_cases.replay.stage_replay_processor import StageReplayProcessorPort
-from ip.engine.domain.authorization import IpPermission, has_ip_permission
+from ip.engine.domain.authorization import IP_APP_SLUG, IpPermission, has_ip_permission
 from ip.engine.domain.enums import PipelineStage
 from ip.engine.ports.outbound.catalog_registry_port import (
     CatalogConnectorMapping,
@@ -143,6 +147,35 @@ def get_ip_data_plane_uow_provider(request: Request) -> IpDataPlaneUnitOfWorkPro
     return uow_provider
 
 
+def _resolve_ip_authz_runtime(
+    request: Request,
+) -> tuple[AuthzRuntimePort[AsyncSession] | None, DatabaseProvider | None]:
+    try:
+        app = request.app
+    except KeyError:
+        return None, None
+    try:
+        runtime: AuthzRuntimePort[AsyncSession] | None = app.state.identity_authz
+    except AttributeError:
+        runtime = None
+    try:
+        db_provider: DatabaseProvider | None = app.state.db_provider
+    except AttributeError:
+        db_provider = None
+    return runtime, db_provider
+
+
+def _resolve_principal(request: Request) -> PrincipalContext | None:
+    try:
+        principal: object = request.state.principal
+    except AttributeError:
+        principal = None
+    if isinstance(principal, PrincipalContext):
+        return principal
+    scoped = request.scope.get("principal")
+    return scoped if isinstance(scoped, PrincipalContext) else None
+
+
 async def require_tenant_member(
     request: Request,
     tenant_repo: Annotated[TenantRepositoryPort, Depends(get_tenant_repository)],
@@ -162,8 +195,14 @@ async def require_tenant_member(
         )
 
     if identity.is_platform_admin:
-        tenant_summary = await tenant_repo.get_by_idp_realm(tenant_id)
-        canonical_tenant_id = tenant_summary.id if tenant_summary is not None else tenant_id
+        mapped = identity.tenant_mapping.get(tenant_id)
+        if mapped:
+            canonical_tenant_id = str(mapped)
+        elif tenant_id.startswith(CANONICAL_TENANT_ID_PREFIXES):
+            canonical_tenant_id = tenant_id
+        else:
+            tenant_summary = await tenant_repo.get_by_idp_realm(tenant_id)
+            canonical_tenant_id = tenant_summary.id if tenant_summary is not None else tenant_id
         request.state.identity = identity
         request.state.ucp_tenant_id = canonical_tenant_id
         return identity
@@ -173,6 +212,19 @@ async def require_tenant_member(
         request.state.identity = identity
         request.state.ucp_tenant_id = canonical_tenant_id
         return identity
+
+    canonical_tenant_id = str(identity.tenant_mapping.get(tenant_id, tenant_id))
+    authz_runtime, db_provider = _resolve_ip_authz_runtime(request)
+    if authz_runtime is not None and db_provider is not None:
+        async with db_provider.session() as session:
+            if await authz_runtime.has_hierarchical_tenant_access(
+                session=session,
+                user_id=identity.subject,
+                target_tenant_id=canonical_tenant_id,
+            ):
+                request.state.identity = identity
+                request.state.ucp_tenant_id = canonical_tenant_id
+                return identity
 
     logger.error(
         "ip_tenant_authorization_failed",
@@ -254,18 +306,89 @@ async def resolve_tenant_id_by_slug(
 
 def require_ip_permission(
     permission: IpPermission,
-) -> Callable[[IdentityContext, str], Awaitable[IdentityContext]]:
-    """FastAPI dependency factory enforcing a specific discrete IP resource permission."""
+) -> Callable[[Request, IdentityContext, str], Awaitable[IdentityContext]]:
+    """FastAPI dependency factory enforcing a specific discrete IP resource permission.
+
+    Delegates to the host shell's 4-Layer Local PDP (`app_slug="ip"`) when available,
+    enforcing IP app subscription gating, token revocation, hierarchical ltree RBAC,
+    explicit DENY, Step-Up MFA, ABAC, and ReBAC. Falls back to pure `has_ip_permission`
+    in isolated router tests without a host authz runtime.
+    """
 
     async def _dependency(
+        request: Request,
         identity: Annotated[IdentityContext, Depends(require_tenant_member)],
         tenant_id: str,
     ) -> IdentityContext:
-        if not has_ip_permission(identity, permission, tenant_id=tenant_id):
+        try:
+            resolved_tid: object = request.state.ucp_tenant_id
+        except AttributeError:
+            resolved_tid = None
+        canonical_tenant_id = (
+            resolved_tid.strip()
+            if isinstance(resolved_tid, str) and resolved_tid.strip()
+            else tenant_id
+        )
+
+        authz_runtime, db_provider = _resolve_ip_authz_runtime(request)
+        principal = _resolve_principal(request)
+        if authz_runtime is not None:
+            if db_provider is None or principal is None:
+                logger.error(
+                    "ip_authz_pdp_runtime_incomplete",
+                    path=request.url.path,
+                    tenant_id=canonical_tenant_id,
+                    required_permission=permission.value,
+                    has_db_provider=db_provider is not None,
+                    has_principal=principal is not None,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail={
+                        "code": AuthzReasonCode.DENIED_UNAUTHENTICATED.value,
+                        "obligations": [],
+                    },
+                )
+            client_ip = request.client.host if request.client is not None else None
+            async with db_provider.session() as session:
+                engine = authz_runtime.build_engine(session)
+                decision = await engine.evaluate(
+                    AuthzRequest(
+                        principal=principal,
+                        app_slug=IP_APP_SLUG,
+                        action=permission.value,
+                        tenant_id=canonical_tenant_id,
+                        client_ip=client_ip,
+                    )
+                )
+            if not decision.is_allowed:
+                status_code = http_status_for_authz_reason(decision.reason_code)
+                headers = (
+                    {"WWW-Authenticate": "Bearer"}
+                    if status_code == status.HTTP_401_UNAUTHORIZED
+                    else None
+                )
+                raise HTTPException(
+                    status_code=status_code,
+                    detail={
+                        "code": decision.reason_code.value,
+                        "obligations": [ob.value for ob in decision.obligations],
+                    },
+                    headers=headers,
+                )
+            return identity
+
+        logger.debug(
+            "ip_authz_standalone_fallback",
+            tenant_id=canonical_tenant_id,
+            required_permission=permission.value,
+        )
+
+        if not has_ip_permission(identity, permission, tenant_id=canonical_tenant_id):
             logger.error(
                 "ip_permission_denied",
                 subject=identity.subject,
-                tenant_id=tenant_id,
+                tenant_id=canonical_tenant_id,
                 required_permission=permission.value,
                 roles=list(identity.roles),
             )

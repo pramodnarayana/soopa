@@ -114,6 +114,27 @@ async def get_roles(
     ]
 
 
+async def _evict_local_tenant_cache(request: Request, tenant_id: str) -> None:
+    """Evict local L1 tenant & entitlement cache entries immediately after tenant lifecycle mutations."""
+    try:
+        authz_runtime = request.app.state.identity_authz
+    except AttributeError:
+        authz_runtime = None
+    if authz_runtime is not None:
+        await authz_runtime.principal_cache.evict_tenant(tenant_id)
+        await authz_runtime.principal_cache.evict_enabled_apps(tenant_id)
+
+
+async def _evict_local_entitlement_cache(request: Request, tenant_id: str) -> None:
+    """Evict local L1 enabled-apps entitlement cache immediately after subscription mutations."""
+    try:
+        authz_runtime = request.app.state.identity_authz
+    except AttributeError:
+        authz_runtime = None
+    if authz_runtime is not None:
+        await authz_runtime.principal_cache.evict_enabled_apps(tenant_id)
+
+
 async def resolve_tenant(id: str, tenant_repo: TenantRepositoryPort) -> Tenant:
     tenant = await tenant_repo.find_by_id(id)
     if not tenant:
@@ -251,6 +272,7 @@ async def update_status(
     if res.is_err:
         raise_http_for_ucp_error(res.unwrap_err())
 
+    await _evict_local_tenant_cache(request, tenant_id)
     tenant_rm = await query_service.get_tenant_by_id(tenant_id)
     assert tenant_rm is not None
     return TenantResponse.from_read_model(tenant_rm)
@@ -283,6 +305,7 @@ async def remove(
     res = await use_case.execute(tenant.id, idempotency_key)
     if res.is_err:
         raise_http_for_ucp_error(res.unwrap_err())
+    await _evict_local_tenant_cache(request, tenant.id)
     return None
 
 
@@ -351,6 +374,7 @@ async def subscribe_app(
     if res.is_err:
         raise_http_for_ucp_error(res.unwrap_err())
 
+    await _evict_local_entitlement_cache(request, tenant.id)
     return SubscriptionResponse(
         id=f"{tenant.id}_{dto.appId}",
         appId=dto.appId,
@@ -387,4 +411,5 @@ async def unsubscribe_app(
     if res.is_err:
         raise_http_for_ucp_error(res.unwrap_err())
 
+    await _evict_local_entitlement_cache(request, tenant.id)
     return {"success": True}

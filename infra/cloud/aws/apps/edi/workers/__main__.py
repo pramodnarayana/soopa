@@ -57,6 +57,7 @@ ecr_repository_url = platform.require_output("ecr_repository_url")
 staging_domain = platform.require_output("staging_domain")
 namespace_name = platform.require_output("cloud_map_namespace_name")
 app_defaults_secret_arn = platform.require_output("app_defaults_secret_arn")
+db_encryption_key_secret_arn = platform.require_output("db_encryption_key_secret_arn")
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
@@ -113,6 +114,7 @@ aws.iam.RolePolicy(
         edi_shard_db_secret_arn,
         global_db_secret_arn,
         app_defaults_secret_arn,
+        db_encryption_key_secret_arn,
         obs_user_arn,
         obs_pass_arn,
     ).apply(
@@ -123,9 +125,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [
-                            arn for arn in [args[0], args[1], args[2], args[3], args[4]] if arn
-                        ],
+                        "Resource": [arn for arn in args if arn],
                     },
                     {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
                 ],
@@ -228,6 +228,10 @@ provision_fargate_service(
             "valueFrom": pulumi.Output.concat(
                 app_defaults_secret_arn, ":config_sync_internal_token::"
             ),
+        },
+        {
+            "name": "DB_ENCRYPTION_KEY",
+            "valueFrom": db_encryption_key_secret_arn,
         },
     ],
     extra_task_policy_statements=[

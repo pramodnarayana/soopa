@@ -4,7 +4,7 @@ pytestmark = pytest.mark.integration
 
 import httpx
 import pytest
-from identity.domain.identity_context import IdentityContext
+from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 
 
 @pytest.mark.asyncio
@@ -97,10 +97,10 @@ async def test_provision_tenant_missing_identity_subject(
 
     fake_identity = IdentityContext(
         subject="",  # Missing subject
-        tenant_id="some-tenant",
+        tenant_id=PLATFORM_TENANT_ID,
         organization_id=None,
-        authorized_tenants={"some-tenant", "ten_000000000000000000000000"},
-        tenant_roles={"ten_000000000000000000000000": ["admin"]},
+        authorized_tenants={"some-tenant", PLATFORM_TENANT_ID},
+        tenant_roles={PLATFORM_TENANT_ID: ["admin"]},
         roles=("platform_admin",),
         permissions=(),
         claims={"is_m2m": True},

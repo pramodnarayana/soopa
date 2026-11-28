@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from identity.domain.authorization import Capability, StandardRole
 from identity.domain.identity_context import IdentityContext
 
+IP_APP_SLUG = "ip"
 IpPermission = Capability
 IpRole = StandardRole
 
@@ -127,6 +128,7 @@ has_ip_permission = has_ip_capability
 
 
 __all__ = [
+    "IP_APP_SLUG",
     "IP_ROLE_CAPABILITIES",
     "Capability",
     "IpPermission",

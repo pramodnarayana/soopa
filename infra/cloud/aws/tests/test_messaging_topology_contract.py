@@ -565,3 +565,26 @@ def test_platform_provisions_isolated_deletion_protected_db_encryption_key() -> 
         platform_src
     )
     assert '"db_encryption_key"' not in platform_src
+
+
+def test_compute_stacks_inject_db_encryption_key_and_isolate_watch_role() -> None:
+    """Authorized compute stacks inject dedicated db_encryption_key_secret_arn while watch stays isolated."""
+    compute_stacks = [
+        AWS_ROOT / "apps" / "api" / "__main__.py",
+        AWS_ROOT / "apps" / "edi" / "workers" / "__main__.py",
+        AWS_ROOT / "apps" / "ucp" / "workers" / "__main__.py",
+        AWS_ROOT / "apps" / "edi" / "as2" / "__main__.py",
+    ]
+    for stack_path in compute_stacks:
+        src = stack_path.read_text(encoding="utf-8")
+        assert '"DB_ENCRYPTION_KEY"' in src, (
+            f"{stack_path.relative_to(AWS_ROOT)} missing DB_ENCRYPTION_KEY"
+        )
+        assert '"valueFrom": db_encryption_key_secret_arn' in src, (
+            f"{stack_path.relative_to(AWS_ROOT)} must inject dedicated db_encryption_key_secret_arn"
+        )
+
+    # config-watch-gateway must have its own least-privilege role without DB_ENCRYPTION_KEY
+    api_src = (AWS_ROOT / "apps" / "api" / "__main__.py").read_text(encoding="utf-8")
+    assert "execution_role_arn=watch_execution_role.arn" in api_src
+    assert api_src.count('"DB_ENCRYPTION_KEY"') == 1

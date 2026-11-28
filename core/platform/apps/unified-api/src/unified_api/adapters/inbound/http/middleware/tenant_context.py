@@ -3,12 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import structlog
+from database.provider import DatabaseProvider
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.routing import Match, Mount, Router
 from starlette.types import ASGIApp, Scope
+
+from unified_api.bootstrap.identity_authz import IdentityAuthzRuntime
 
 logger = structlog.get_logger(__name__)
 
@@ -103,6 +106,27 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
                 return state_identity
         return None
 
+    @staticmethod
+    async def _has_hierarchical_access(
+        *,
+        request: Request,
+        user_id: str,
+        target_tenant_id: str,
+    ) -> bool:
+        try:
+            authz_runtime: IdentityAuthzRuntime | None = request.app.state.identity_authz
+            db_provider: DatabaseProvider | None = request.app.state.db_provider
+        except AttributeError:
+            return False
+        if authz_runtime is None or db_provider is None:
+            return False
+        async with db_provider.session() as session:
+            return await authz_runtime.has_hierarchical_tenant_access(
+                session=session,
+                user_id=user_id,
+                target_tenant_id=target_tenant_id,
+            )
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request.state.tenant_id = None
 
@@ -131,11 +155,7 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             or identity.tenant_id
         )
 
-        is_platform_admin = (
-            "PlatformAdmin" in identity.roles
-            or PLATFORM_TENANT_ID in identity.authorized_tenants
-            or identity.is_platform_admin
-        )
+        is_platform_admin = identity.is_platform_admin
 
         # For platform administrators performing global platform management where no specific
         # tenant is targeted in the path, query, or headers, default to the Sentinel Platform Tenant.
@@ -164,21 +184,30 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Tenant ID missing from request."},
             )
 
-        # 2. Validate Authorization
-        if (
-            not is_platform_admin
-            and active_tenant_id not in identity.authorized_tenants
-            and not is_exempt
-        ):
-            logger.error(
-                "tenant_context_unauthorized_tenant",
-                identity_subject=identity.subject,
-                active_tenant_id=active_tenant_id,
+        # 2. Validate Authorization (direct membership or L1-cached ltree subtree inheritance)
+        canonical_target = str(identity.tenant_mapping.get(active_tenant_id, active_tenant_id))
+        has_direct_access = (
+            active_tenant_id in identity.authorized_tenants
+            or canonical_target in identity.authorized_tenants
+        )
+        if not is_platform_admin and not has_direct_access and not is_exempt:
+            has_inherited_access = await self._has_hierarchical_access(
+                request=request,
+                user_id=identity.subject,
+                target_tenant_id=canonical_target,
             )
-            return JSONResponse(
-                status_code=403,
-                content={"detail": f"Token does not grant access to tenant {active_tenant_id}."},
-            )
+            if not has_inherited_access:
+                logger.error(
+                    "tenant_context_unauthorized_tenant",
+                    identity_subject=identity.subject,
+                    active_tenant_id=active_tenant_id,
+                )
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": f"Token does not grant access to tenant {active_tenant_id}."
+                    },
+                )
 
         # 3. Inject Context
         logger.debug(

@@ -17,7 +17,7 @@ class ToggleUserAction(StrEnum):
 class UserStateResponse(StrEnum):
     """External API state representation for a user.
 
-    Maps internal domain UserStatus to the Zitadel-compatible state strings
+    Maps internal domain UserStatus to the canonical API state strings
     exposed in the HTTP response contract.
     """
 

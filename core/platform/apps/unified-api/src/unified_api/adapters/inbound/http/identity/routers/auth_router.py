@@ -113,11 +113,16 @@ async def get_me(request: Request) -> AuthMeResponse:
         db_provider = None
         authz_runtime = None
 
-    if active_tenant_id and db_provider is not None and authz_runtime is not None:
-        async with db_provider.session() as session:
-            entitlements = authz_runtime.build_entitlements(session)
-            apps = await entitlements.get_enabled_app_slugs(tenant_id=active_tenant_id)
-            subscribed_apps = sorted(apps)
+    if active_tenant_id and authz_runtime is not None:
+        cached_apps = await authz_runtime.principal_cache.get_enabled_apps(active_tenant_id)
+        if cached_apps is not None:
+            subscribed_apps = sorted(cached_apps)
+        elif db_provider is not None:
+            async with db_provider.session() as session:
+                entitlements = authz_runtime.build_entitlements(session)
+                apps = await entitlements.get_enabled_app_slugs(tenant_id=active_tenant_id)
+                await authz_runtime.principal_cache.set_enabled_apps(active_tenant_id, apps)
+                subscribed_apps = sorted(apps)
 
     raw_amr = identity.claims.get("amr")
     amr_values = (

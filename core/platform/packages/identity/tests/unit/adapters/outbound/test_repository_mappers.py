@@ -10,7 +10,6 @@ from database.models.identity import Capability as OrmCapability
 from database.models.identity import Role as OrmRole
 from database.models.identity import User as DbUser
 from database.provider import DatabaseProvider
-from seedwork.domain.types import JsonDict
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import event, text
@@ -22,9 +21,6 @@ from identity.adapters.outbound.database.capability_repository import (
 from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
 from identity.adapters.outbound.database.uow import SqlAlchemyIdentityUnitOfWork
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
-from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
-    ZitadelTokenVerifierAdapter,
-)
 from identity.domain.api_token import ApiToken
 from identity.domain.authorization import Role as DomainRole
 from identity.domain.constants import IdentityIdPrefix, UserStatus
@@ -132,38 +128,6 @@ def test_api_token_repository_bidirectional_mappers() -> None:
     assert mapped.tenant_id == tenant_id
     assert mapped.name == "ERP Production Key"
     assert mapped.client_id == client_id
-
-
-def test_jwks_token_verifier_explicit_token_claims_mapper() -> None:
-    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
-    subject_id = generate_id(IdentityIdPrefix.USER.value)
-    org_id = generate_id(SystemIdPrefix.GENERIC.value)
-
-    raw_claims: JsonDict = {
-        "sub": subject_id,
-        "iss": "https://auth.soopa.test",
-        "aud": ["soopa-api"],
-        "exp": 1999999999,
-        "iat": 1700000000,
-        "unexpected_vendor_claim": "ignored_cleanly",
-    }
-    payload: dict[str, object] = {
-        **raw_claims,
-        "tenant_id": tenant_id,
-        "organization_id": org_id,
-        "authorized_tenants": {tenant_id},
-        "roles": ["TenantAdmin"],
-        "permissions": ["users:read"],
-        "tenant_roles": {tenant_id: ["TenantAdmin"]},
-    }
-    claims = ZitadelTokenVerifierAdapter._to_token_claims(payload, raw_claims)
-    assert claims.sub == subject_id
-    assert claims.tenant_id == tenant_id
-    assert claims.organization_id == org_id
-    assert claims.authorized_tenants == {tenant_id}
-    assert claims.roles == ["TenantAdmin"]
-    assert claims.tenant_roles == {tenant_id: ["TenantAdmin"]}
-    assert claims.raw_claims["unexpected_vendor_claim"] == "ignored_cleanly"
 
 
 @pytest.mark.asyncio

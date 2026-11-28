@@ -79,7 +79,7 @@
     "db:seed:notification": "cd core/platform/apps/notification-jobs-worker && uv run python scripts/seed_jobs.py",
     "db:seed:edi": "uv run python -m platform_migrator seed --domain edi",
     "db:seed:ip": "uv run python -m platform_migrator seed --domain ip",
-    "infra:clean-identity-org": "cd core/ucp/packages/ucp && uv run python scripts/clear_zitadel.py",
+    "infra:clean-identity-org": "uv run python infra/local/identity/bootstrap.py --reset",
     "infra:bootstrap": "pnpm openas2:clean && docker compose --env-file .env --env-file versions.env down -v && pnpm infra:bootstrap-identity && pnpm infra:up && pnpm openas2:start && pnpm infra:init-edi && pnpm credentials",
     "infra:bootstrap:edi": "pnpm openas2:clean && docker compose --env-file .env --env-file versions.env down -v && pnpm infra:bootstrap-identity && pnpm infra:up:edi && pnpm openas2:start && pnpm infra:init-edi && pnpm credentials",
     "infra:bootstrap:ip": "docker compose --env-file .env --env-file versions.env down -v && pnpm infra:bootstrap-identity && pnpm infra:up:ip && pnpm credentials",

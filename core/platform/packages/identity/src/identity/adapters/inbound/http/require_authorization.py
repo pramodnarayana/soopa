@@ -27,7 +27,7 @@ def _default_tenant_resolver(request: Request) -> str | None:
     return None
 
 
-def _http_status_for_reason(reason: AuthzReasonCode) -> int:
+def http_status_for_authz_reason(reason: AuthzReasonCode) -> int:
     if reason in (
         AuthzReasonCode.DENIED_UNAUTHENTICATED,
         AuthzReasonCode.DENIED_UNTRUSTED_ISSUER,
@@ -35,6 +35,9 @@ def _http_status_for_reason(reason: AuthzReasonCode) -> int:
     ):
         return status.HTTP_401_UNAUTHORIZED
     return status.HTTP_403_FORBIDDEN
+
+
+_http_status_for_reason = http_status_for_authz_reason
 
 
 class RequireAuthorization:
@@ -107,4 +110,9 @@ class RequireAuthorization:
         return raw_principal
 
 
-__all__ = ["RequireAuthorization", "ResourceResolver", "TenantResolver"]
+__all__ = [
+    "RequireAuthorization",
+    "ResourceResolver",
+    "TenantResolver",
+    "http_status_for_authz_reason",
+]

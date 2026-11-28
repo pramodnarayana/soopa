@@ -1,3 +1,0 @@
-name: zitadel
-runtime: python
-description: Layer 2 Shared Platform Infrastructure (ECS Cluster, Global RDS, ECR, Zitadel).

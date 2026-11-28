@@ -17,7 +17,7 @@ async def test_user_role_payload_accepts_missing_idp_mapping():
     assert payload.idp_user_id is None
 
 
-async def test_zitadel_default_password_is_required(monkeypatch):
+async def test_idp_default_password_is_required(monkeypatch):
     monkeypatch.setenv("SOOPA_ENV_FILE", "/dev/null")
     monkeypatch.delenv("IDENTITY_DEFAULT_USER_PASSWORD", raising=False)
 
@@ -40,7 +40,7 @@ async def test_worker_container_requires_database_url(monkeypatch):
     get_settings.cache_clear()
 
 
-async def test_zitadel_settings_require_platform_org_id():
+async def test_idp_settings_require_platform_org_id():
 
     with pytest.raises(ValidationError, match="platform_org_id"):
         AppSettings(

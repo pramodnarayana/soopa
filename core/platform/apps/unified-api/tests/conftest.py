@@ -4,6 +4,7 @@ import hashlib
 import os
 import secrets
 import tempfile
+import time
 
 import database.provider
 import edi.bootstrap.lifespan
@@ -17,10 +18,13 @@ import pytest_asyncio
 from database.models import Role as OrmRole
 from database.models.identity import ApiToken as ApiTokenORM
 from database.models.identity import Tenant as TenantORM
+from database.models.identity import TenantUser as TenantUserORM
+from database.models.identity import User as UserORM
+from database.models.identity import UserRole as UserRoleORM
 from database.provider import get_async_engine
 from edi.adapters.outbound.database.models.data_plane import TenantBase
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
-from identity.domain.constants import IdentityIdPrefix
+from identity.domain.constants import IdentityIdPrefix, MembershipScope, MembershipStatus
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase, IpTenantBase
 from orchestration.adapters.outbound.database.models import WorkflowBase
@@ -348,6 +352,46 @@ async def seeded_api_token(db_session_factory):
                 capabilities=["*"],
             )
             session.add(admin_role)
+            await session.flush()
+
+        platform_admin_user = await session.get(UserORM, "usr_platform_admin_123")
+        if not platform_admin_user:
+            platform_admin_user = UserORM(
+                id="usr_platform_admin_123",
+                email="platform.admin@example.com",
+                name="Platform Admin",
+                status=LifecycleStatus.ACTIVE,
+            )
+            session.add(platform_admin_user)
+            await session.flush()
+
+        existing_membership = await session.get(
+            TenantUserORM,
+            ("usr_platform_admin_123", PLATFORM_TENANT_ID),
+        )
+        if not existing_membership:
+            session.add(
+                TenantUserORM(
+                    user_id="usr_platform_admin_123",
+                    tenant_id=PLATFORM_TENANT_ID,
+                    scope=MembershipScope.SUBTREE.value,
+                    status=MembershipStatus.ACTIVE.value,
+                    active=True,
+                )
+            )
+            await session.flush()
+
+        existing_user_role = await session.get(UserRoleORM, "uro_platform_admin_123")
+        if not existing_user_role:
+            session.add(
+                UserRoleORM(
+                    id="uro_platform_admin_123",
+                    tenant_id=PLATFORM_TENANT_ID,
+                    user_id="usr_platform_admin_123",
+                    role_id="role_admin",
+                )
+            )
+            await session.flush()
 
         tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
         tenant = await session.get(TenantORM, tenant_id)
@@ -413,11 +457,18 @@ async def seeded_api_token(db_session_factory):
 @pytest_asyncio.fixture(scope="function")
 async def auth_client(app, seeded_api_token, monkeypatch):
     """
-    Authenticated test client using a valid API token.
-    Patches the token verifier to grant the PLATFORM_ADMIN capability
-    since API Tokens natively lack that global capability in the DB.
+    Authenticated test client backed by a real seeded PlatformAdmin principal
+    evaluated through the live 4-Layer Local PDP (`HybridLocalAuthorizationEngine`).
     """
     transport = httpx.ASGITransport(app=app)
+    try:
+        authz_runtime = app.state.identity_authz
+    except AttributeError:
+        authz_runtime = None
+    if authz_runtime is not None:
+        await authz_runtime.principal_cache.evict_principal("usr_platform_admin_123")
+        await authz_runtime.principal_cache.evict_tenant(seeded_api_token["tenant_id"])
+        await authz_runtime.principal_cache.evict_enabled_apps(seeded_api_token["tenant_id"])
 
     fake_identity = IdentityContext(
         subject="usr_platform_admin_123",
@@ -427,8 +478,12 @@ async def auth_client(app, seeded_api_token, monkeypatch):
         tenant_roles={PLATFORM_TENANT_ID: ["admin"]},
         roles=("platform_admin",),
         permissions=(),
-        claims={"is_m2m": True},
-        capabilities={"*"},
+        claims={
+            "iss": "https://test.identity.local",
+            "sub": "usr_platform_admin_123",
+            "iat": int(time.time()),
+        },
+        capabilities={"*", "platform:admin"},
     )
 
     async def fake_authenticate_api_key(*args, **kwargs):

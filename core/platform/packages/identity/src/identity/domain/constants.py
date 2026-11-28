@@ -158,6 +158,14 @@ class IdentityOutboxSource(StrEnum):
     IDENTITY = "soopa.identity"
 
 
+class CoreControlPlaneAppSlug(StrEnum):
+    """Canonical core control-plane application slugs (domain-agnostic; zero business app leakage)."""
+
+    PLATFORM = "platform"
+    UCP = "ucp"
+    IDENTITY = "identity"
+
+
 class IdentityIdPrefix(StrEnum):
     """Domain-specific ID prefixes for the Identity bounded context."""
 
@@ -173,7 +181,11 @@ class IdentityIdPrefix(StrEnum):
     POLICY_RULE = "iam_pol"
 
 
+CANONICAL_TENANT_ID_PREFIXES: tuple[str, ...] = ("ten_", f"{IdentityIdPrefix.TENANT.value}_")
+
+
 __all__ = [
+    "CANONICAL_TENANT_ID_PREFIXES",
     "IDENTITY_CONFIG_APP_ID",
     "MAX_IMPERSONATION_TTL_SECONDS",
     "MFA_AMR_VALUES",
@@ -182,6 +194,7 @@ __all__ = [
     "AuthzEffect",
     "AuthzObligation",
     "AuthzReasonCode",
+    "CoreControlPlaneAppSlug",
     "IdentityConfigEntityType",
     "IdentityEventType",
     "IdentityIdPrefix",
